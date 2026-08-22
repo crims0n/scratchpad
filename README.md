@@ -1,89 +1,140 @@
 # Scratchpad
 
-An opinionated, cross-platform, high-efficiency desktop text editor designed to be the ultimate developer scratchpad. Built with **Tauri v2** and vanilla HTML/CSS/JS, it has a near-zero memory footprint and starts instantly.
----
+Scratchpad is a fast, local-first desktop editor for notes, snippets, and Markdown. It is built with Tauri v2 and a vanilla HTML, CSS, and JavaScript frontend, with no account or cloud service required.
 
-## ✨ Features
+## Features
 
-- 💾 **Instant Auto-Save**: Never lose a thought. Every keystroke is saved automatically to local storage, debounced to maintain maximum system efficiency.
-- 🗄️ **SQLite DB Workspace Mode**: Connect to a local SQLite database file (`.db` or `.sqlite`) to save, sync, and persist your notes list natively. Automatically seeds new database files with your current LocalStorage drafts.
-- ◫ **Dual-Note Split View**: View and edit two distinct scratchpads simultaneously side by side. Drag any note from the sidebar into the editor pane to immediately split, press `Cmd+\`, or right-click "Open to the Side".
-- 🔍 **Find & Replace with Regex**: Powerful document search with real-time match highlighting, single/bulk replace, and regular expression mode (`.*`) supporting full capture groups.
-- 📝 **Live Markdown Preview**: Toggle between full editor view, split pane (sync-scrolled edit and preview), and full preview.
-- 📊 **Contextual Highlighting Stats**: Displays overall word and character counts. Highlighting text displays selection stats (e.g. `5 words • 30 characters selected`) on the right next to the Save indicator.
-- 📥 **Native File Import**: Pick and import Markdown, source code, text files, and extensionless documents with automatic validation and alerts.
-- 📤 **Custom Directory File Export**: Export your notes to any directory on your filesystem using native OS directory save dialogs.
-- 📁 **Sidebar Scratch Manager**: Create, delete, reorder (via drag & drop, context menu, or `Alt+↑`/`Alt+↓`), and search across multiple drafts on the fly.
-- ⚡ **Auto-Renaming**: Scratchpads auto-rename themselves based on the first line of text you write, unless you manually lock the title.
-- 🧘 **Focus Mode**: Press `Cmd+Shift+F` to clear all sidebars, status bars, and menus for a pure, distraction-free writing environment.
-- 🎨 **Terminal-Grade Color Theme Engine**: Built-in developer themes (*Dracula, Catppuccin Mocha, Nord, Tokyo Night, Monokai Pro, One Dark Pro, Solarized, GitHub Dark*), plus native import/export for `.json` and `.toml` custom color schemes.
+### Writing and editing
 
----
+- Multiple automatically saved scratchpads
+- Automatic titles derived from the first line until a title is edited manually
+- Edit, synchronized edit/preview, and full Markdown preview layouts
+- Two-note side-by-side editing via the toolbar, context menu, shortcut, or drag-to-split
+- Word and character counts for the document and current selection
+- Focus mode for distraction-free writing
+- Copy as Markdown or rendered HTML
 
-## ⌨️ Keyboard Shortcuts
+### Finding and organizing
+
+- Sidebar search across note titles and contents
+- Note reordering by drag and drop, context menu, or keyboard
+- Case-insensitive find and replace with live match highlighting
+- Regular-expression search and replacement, including capture groups
+- Native import for Markdown, source code, configuration, and other UTF-8 text files
+- Native Markdown export with a generated filename
+
+### Storage and workspaces
+
+- Local-first persistence with debounced saves
+- Optional portable workspace files that preserve notes and sidebar order
+- Explicit flows for opening an existing workspace or creating a new one
+- Native last-workspace preference shared across development and packaged launch modes
+- Automatic migration of workspace files created by earlier versions
+- Local mirroring while a workspace is connected
+
+Workspace files use SQLite internally and accept `.db` or `.sqlite` extensions. Connecting an empty workspace seeds it with the notes currently available in Scratchpad.
+
+### Themes and help
+
+- Built-in dark and light themes
+- Developer-oriented presets: Dracula, Catppuccin Mocha, Nord, Tokyo Night, Monokai Pro, One Dark Pro, Solarized Dark, Solarized Light, Amber CRT, Green CRT, Pastel Daydream, Macintosh System 6, Mac OS 9 Platinum, Windows Classic, and GitHub Dark
+- Import custom JSON or TOML/key-value color themes
+- Export the active theme as JSON
+- Built-in keyboard shortcut reference and Markdown cheatsheet
+- Keyboard navigation between help topics with `Tab` and `Shift+Tab`
+
+Markdown is parsed locally with a bundled copy of marked. Preview output is sanitized before rendering, and the desktop window uses a restrictive content security policy.
+
+## Keyboard shortcuts
+
+Use `Cmd` on macOS and `Ctrl` on Windows or Linux.
 
 | Shortcut | Action |
 | --- | --- |
-| `Cmd + N` or `Ctrl + N` | Create a new scratchpad |
-| `Cmd + B` or `Ctrl + B` | Toggle sidebar visibility |
-| `Cmd + \` or `Ctrl + \` | Toggle Dual-Note Split View (Side-by-Side) |
-| `Alt + ↑` / `Alt + ↓` | Move active note up / down in sidebar |
-| `Cmd + /` or `Ctrl + /` / `F1` | Open Help & Reference (Shortcuts & Markdown Cheatsheet) |
-| `Cmd + F` or `Ctrl + F` | Toggle Find bar |
-| `Cmd + H` or `Ctrl + H` | Toggle Find & Replace |
-| `Alt + R` | Toggle Regular Expression mode in Find |
-| `Enter` / `Shift + Enter` | Jump to next / previous search match |
-| `Cmd + Shift + F` or `Ctrl + Shift + F` | Toggle distraction-free Focus Mode |
-| `Escape` | Close Help Modal / Close Find / Exit Focus Mode |
+| `Cmd/Ctrl + N` | Create a scratchpad |
+| `Cmd/Ctrl + B` | Toggle the sidebar |
+| `Cmd/Ctrl + \` | Toggle two-note side-by-side editing |
+| `Alt + ↑` / `Alt + ↓` | Move the active note in the sidebar |
+| `Cmd/Ctrl + F` | Open or close Find |
+| `Cmd/Ctrl + H` | Open Find and Replace |
+| `Alt + R` | Toggle regular-expression mode while Find is open |
+| `Enter` / `Shift + Enter` | Select the next or previous match |
+| `Cmd/Ctrl + Shift + F` | Toggle Focus Mode |
+| `Cmd/Ctrl + /` or `F1` | Open or close Help and Reference |
+| `Tab` / `Shift + Tab` | Switch topics while Help is open |
+| `Escape` | Close the active modal or Find bar, or leave Focus Mode |
 
----
+## Custom themes
 
-## 🚀 Getting Started (Development)
+A JSON theme requires `background` and `foreground`. The remaining colors are optional and receive safe defaults when omitted.
+
+```json
+{
+  "name": "Amber CRT",
+  "background": "#120f08",
+  "foreground": "#f6c453",
+  "sidebar": "#1b160b",
+  "accent": "#ffb000",
+  "border": "#4a3814",
+  "selection": "#5c4315"
+}
+```
+
+Scratchpad also accepts simple TOML/key-value themes using the same property names. Imported color values are validated before the theme is stored or rendered.
+
+## Development
 
 ### Prerequisites
 
-Ensure you have the following installed on your machine:
-- **Node.js** (v18+)
-- **Rust & Cargo** (v1.85+)
-- Operating system dependencies for Tauri (e.g. Xcode Command Line Tools on macOS, C++ Build Tools on Windows). Refer to the [Tauri Setup Guide](https://tauri.app/start/prerequisites/) for details.
+- Node.js 18 or newer
+- A current stable Rust toolchain with Cargo
+- The platform dependencies listed in the [Tauri prerequisites guide](https://tauri.app/start/prerequisites/)
 
-### Setup and Running
-
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/crims0n/scratchpad.git
-   cd scratchpad
-   ```
-
-2. **Install frontend dependencies**:
-   ```bash
-   npm install
-   ```
-
-3. **Start the application in Development Mode**:
-   ```bash
-   npm run tauri dev
-   ```
-   *This will download Rust dependencies, compile the native application wrapper, and open the desktop window.*
-
----
-
-## 🏗️ Production Build
-
-To build a standalone, optimized release executable package (e.g., `.app`/`.dmg` on macOS, `.exe` on Windows):
+### Run locally
 
 ```bash
-npm run tauri build
+git clone https://github.com/crims0n/scratchpad.git
+cd scratchpad
+npm install
+npm run tauri -- dev
 ```
 
-The resulting installers will be placed inside the `src-tauri/target/release/bundle/` directory.
+The frontend is served directly from `src/`; there is no framework-specific build step or development server.
 
----
+### Validate changes
 
-## 🛠️ Tech Stack & Architecture
+```bash
+node --check src/main.js
+cargo fmt --check --manifest-path src-tauri/Cargo.toml
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+cargo test --manifest-path src-tauri/Cargo.toml
+```
 
-- **Wrapper & System Bridge**: [Tauri v2](https://tauri.app/) (Rust-based runtime)
-- **Database Engine**: [SQLite](https://www.sqlite.org/) (integrated natively via `rusqlite` compiled bundle)
-- **Frontend**: Vanilla HTML5, CSS Variables, and JavaScript (ES Modules) for lightweight performance.
-- **Markdown Compiler**: [marked.js](https://marked.js.org/) (bundled locally for offline access).
-- **Styling**: Vanilla CSS utilizing custom scrollbars, animations, and fluid container sizing.
+### Build a release
+
+```bash
+npm run tauri -- build
+```
+
+Application bundles and installers are written beneath `src-tauri/target/release/bundle/`.
+
+## Architecture
+
+| Area | Implementation |
+| --- | --- |
+| Desktop runtime | Tauri v2 and Rust |
+| Frontend | Vanilla HTML, CSS, and JavaScript |
+| Markdown | Bundled marked parser with an allowlist sanitizer |
+| Local persistence | Webview local storage |
+| Workspace persistence | Bundled SQLite through `rusqlite` |
+| Native preferences | JSON in the platform app configuration directory |
+| Native integration | Rust commands and native file/message dialogs |
+| Themes | CSS custom properties with JSON and TOML/key-value import |
+
+The main project files are:
+
+- `src/index.html` — application structure and built-in help content
+- `src/styles.css` — layout modes, components, and theme tokens
+- `src/main.js` — editor state, persistence coordination, commands, and interactions
+- `src-tauri/src/lib.rs` — native dialogs, file operations, and workspace persistence
+- `src-tauri/tauri.conf.json` — desktop window, bundle, and security configuration

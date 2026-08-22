@@ -1721,3 +1721,140 @@ kbd {
 .theme-card:hover .theme-card-delete {
   display: flex;
 }
+
+/* ----------------------------------------------------
+   Era-specific chrome for built-in retro themes
+   ---------------------------------------------------- */
+
+:root[data-theme-style="windows-classic"] {
+  --font-sans: Tahoma, "MS Sans Serif", Arial, sans-serif;
+  --transition-speed: 0s;
+  --transition-easing: linear;
+}
+
+:root[data-theme-style="windows-classic"] .topbar {
+  background-color: #000080;
+  border-bottom: 2px solid #000000;
+}
+
+:root[data-theme-style="windows-classic"] .topbar .note-title-input {
+  color: #ffffff;
+  text-shadow: 1px 1px #000000;
+}
+
+:root[data-theme-style="windows-classic"] .topbar .note-title-input:focus {
+  border-bottom-color: #ffffff;
+}
+
+:root[data-theme-style="windows-classic"] .layout-controls,
+:root[data-theme-style="windows-classic"] .topbar .icon-btn,
+:root[data-theme-style="windows-classic"] .find-btn,
+:root[data-theme-style="windows-classic"] .find-action-btn,
+:root[data-theme-style="windows-classic"] .theme-action-btn {
+  color: #000000;
+  background-color: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #404040 #404040 #ffffff;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+:root[data-theme-style="windows-classic"] .layout-btn {
+  color: #000000;
+  border-radius: 0;
+}
+
+:root[data-theme-style="windows-classic"] .layout-btn.active,
+:root[data-theme-style="windows-classic"] .topbar .icon-btn:active,
+:root[data-theme-style="windows-classic"] .find-btn:active,
+:root[data-theme-style="windows-classic"] .find-action-btn:active {
+  background-color: #dfdfdf;
+  border-color: #404040 #ffffff #ffffff #404040;
+}
+
+:root[data-theme-style="windows-classic"] #search-input,
+:root[data-theme-style="windows-classic"] .note-item,
+:root[data-theme-style="windows-classic"] .layout-controls,
+:root[data-theme-style="windows-classic"] .dropdown-content,
+:root[data-theme-style="windows-classic"] .dropdown-item,
+:root[data-theme-style="windows-classic"] .custom-context-menu,
+:root[data-theme-style="windows-classic"] .help-modal,
+:root[data-theme-style="windows-classic"] .help-tab-btn,
+:root[data-theme-style="windows-classic"] .theme-card {
+  border-radius: 0;
+}
+
+:root[data-theme-style="windows-classic"] .dropdown-content,
+:root[data-theme-style="windows-classic"] .custom-context-menu,
+:root[data-theme-style="windows-classic"] .help-modal {
+  border: 2px solid;
+  border-color: #ffffff #404040 #404040 #ffffff;
+  box-shadow: 2px 2px 0 #000000;
+}
+
+:root[data-theme-style="windows-classic"] .sidebar,
+:root[data-theme-style="windows-classic"] .statusbar {
+  box-shadow: inset 1px 1px #ffffff, inset -1px -1px #404040;
+}
+
+:root[data-theme-style="mac-os-9"] {
+  --font-sans: Charcoal, "Lucida Grande", Geneva, sans-serif;
+  --transition-speed: 0.1s;
+}
+
+:root[data-theme-style="mac-os-9"] .topbar,
+:root[data-theme-style="mac-os-9"] .sidebar-header,
+:root[data-theme-style="mac-os-9"] .help-modal-header {
+  background-color: #d6d6d6;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.7) 0,
+    rgba(255, 255, 255, 0.7) 1px,
+    rgba(112, 112, 112, 0.18) 1px,
+    rgba(112, 112, 112, 0.18) 3px
+  );
+}
+
+:root[data-theme-style="mac-os-9"] .note-title-input {
+  background-color: #d6d6d6;
+  border: 1px solid #707070;
+  border-radius: 3px;
+  padding: 3px 7px;
+  box-shadow: inset 1px 1px #ffffff;
+}
+
+:root[data-theme-style="mac-os-9"] .layout-controls,
+:root[data-theme-style="mac-os-9"] .icon-btn,
+:root[data-theme-style="mac-os-9"] .find-btn,
+:root[data-theme-style="mac-os-9"] .find-action-btn,
+:root[data-theme-style="mac-os-9"] .theme-action-btn,
+:root[data-theme-style="mac-os-9"] .help-tab-btn {
+  border: 1px solid #707070;
+  border-radius: 4px;
+  background-color: #d6d6d6;
+  box-shadow: inset 1px 1px #ffffff, inset -1px -1px #9a9a9a;
+}
+
+:root[data-theme-style="mac-os-9"] .layout-btn.active,
+:root[data-theme-style="mac-os-9"] .icon-btn:active,
+:root[data-theme-style="mac-os-9"] .find-btn:active,
+:root[data-theme-style="mac-os-9"] .find-action-btn:active {
+  background-color: #bfc9dc;
+  box-shadow: inset 1px 1px #888888, inset -1px -1px #ffffff;
+}
+
+:root[data-theme-style="mac-os-9"] #search-input,
+:root[data-theme-style="mac-os-9"] .note-item,
+:root[data-theme-style="mac-os-9"] .dropdown-content,
+:root[data-theme-style="mac-os-9"] .custom-context-menu,
+:root[data-theme-style="mac-os-9"] .help-modal,
+:root[data-theme-style="mac-os-9"] .theme-card {
+  border-radius: 4px;
+}
+
+:root[data-theme-style="mac-os-9"] .dropdown-content,
+:root[data-theme-style="mac-os-9"] .custom-context-menu,
+:root[data-theme-style="mac-os-9"] .help-modal {
+  border: 1px solid #505050;
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.35);
+}

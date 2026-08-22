@@ -1,5 +1,79 @@
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::Write;
+use std::path::{Path, PathBuf};
+use tauri::Manager;
+
+const PREFERENCES_FILE_NAME: &str = "scratchpad-preferences.json";
+
+#[derive(serde::Serialize, serde::Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct AppPreferences {
+    last_workspace: Option<String>,
+}
+
+fn read_preferences(path: &Path) -> Result<Option<AppPreferences>, String> {
+    match fs::read(path) {
+        Ok(contents) => serde_json::from_slice(&contents)
+            .map(Some)
+            .map_err(|e| format!("Could not parse native preferences: {e}")),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!("Could not read native preferences: {error}")),
+    }
+}
+
+fn write_preferences(path: &Path, preferences: &AppPreferences) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| "Native preferences path has no parent directory".to_string())?;
+    fs::create_dir_all(parent)
+        .map_err(|e| format!("Could not create native preferences directory: {e}"))?;
+    let contents = serde_json::to_vec_pretty(preferences)
+        .map_err(|e| format!("Could not serialize native preferences: {e}"))?;
+    fs::write(path, contents).map_err(|e| format!("Could not write native preferences: {e}"))
+}
+
+fn load_workspace_preference_from(
+    path: &Path,
+    legacy_path: Option<String>,
+) -> Result<Option<String>, String> {
+    if let Some(preferences) = read_preferences(path)? {
+        return Ok(preferences.last_workspace);
+    }
+
+    let migrated_path = legacy_path.filter(|value| !value.is_empty());
+    write_preferences(
+        path,
+        &AppPreferences {
+            last_workspace: migrated_path.clone(),
+        },
+    )?;
+    Ok(migrated_path)
+}
+
+fn preferences_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_config_dir()
+        .map(|directory| directory.join(PREFERENCES_FILE_NAME))
+        .map_err(|e| format!("Could not resolve native preferences directory: {e}"))
+}
+
+#[tauri::command]
+fn load_workspace_preference(
+    app: tauri::AppHandle,
+    legacy_path: Option<String>,
+) -> Result<Option<String>, String> {
+    load_workspace_preference_from(&preferences_path(&app)?, legacy_path)
+}
+
+#[tauri::command]
+fn set_last_workspace(app: tauri::AppHandle, db_path: Option<String>) -> Result<(), String> {
+    write_preferences(
+        &preferences_path(&app)?,
+        &AppPreferences {
+            last_workspace: db_path,
+        },
+    )
+}
 
 // Note struct representation matching frontend note
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
@@ -272,6 +346,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
+            load_workspace_preference,
+            set_last_workspace,
             save_file_native,
             import_file_native,
             select_db_file,
@@ -287,7 +363,6 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temporary_db_path(test_name: &str) -> PathBuf {
@@ -309,6 +384,33 @@ mod tests {
             updated_at,
             is_title_locked: false,
         }
+    }
+
+    #[test]
+    fn migrates_legacy_workspace_once_and_respects_an_explicit_disconnect() {
+        let path = temporary_db_path("native-preferences").with_extension("json");
+        let legacy_path = "/tmp/legacy-workspace.db".to_string();
+
+        let migrated = load_workspace_preference_from(&path, Some(legacy_path.clone()))
+            .expect("legacy preference should migrate");
+        assert_eq!(migrated, Some(legacy_path));
+
+        write_preferences(
+            &path,
+            &AppPreferences {
+                last_workspace: None,
+            },
+        )
+        .expect("disconnect should be persisted");
+
+        let stale_legacy = load_workspace_preference_from(
+            &path,
+            Some("/tmp/stale-origin-workspace.db".to_string()),
+        )
+        .expect("native preference should take precedence");
+        assert_eq!(stale_legacy, None);
+
+        std::fs::remove_file(path).expect("temporary preferences should be removable");
     }
 
     #[test]

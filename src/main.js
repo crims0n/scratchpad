@@ -205,6 +205,58 @@ const PRESET_THEMES = [
     selection: "#5c4315"
   },
   {
+    id: "green-crt",
+    name: "Green CRT",
+    background: "#07110a",
+    foreground: "#7cff8a",
+    sidebar: "#0a180d",
+    accent: "#39ff65",
+    border: "#1d5c2b",
+    selection: "#154d24"
+  },
+  {
+    id: "pastel-daydream",
+    name: "Pastel Daydream",
+    background: "#fff7fb",
+    foreground: "#574f64",
+    sidebar: "#f5ecfa",
+    accent: "#a56cc1",
+    border: "#ddcfe8",
+    selection: "#eadcf3"
+  },
+  {
+    id: "macintosh-system-6",
+    name: "Macintosh System 6",
+    background: "#f4f4f4",
+    foreground: "#111111",
+    sidebar: "#d9d9d9",
+    accent: "#000000",
+    border: "#777777",
+    selection: "#b8b8b8"
+  },
+  {
+    id: "mac-os-9-platinum",
+    name: "Mac OS 9 Platinum",
+    background: "#ffffff",
+    foreground: "#171717",
+    sidebar: "#d6d6d6",
+    accent: "#315da8",
+    border: "#707070",
+    selection: "#bed0ec",
+    uiStyle: "mac-os-9"
+  },
+  {
+    id: "windows-classic",
+    name: "Windows Classic",
+    background: "#ffffff",
+    foreground: "#000000",
+    sidebar: "#c0c0c0",
+    accent: "#000080",
+    border: "#808080",
+    selection: "#a6caf0",
+    uiStyle: "windows-classic"
+  },
+  {
     id: "github-dark",
     name: "GitHub Dark",
     background: "#0d1117",
@@ -215,6 +267,10 @@ const PRESET_THEMES = [
     selection: "#1f6feb"
   }
 ];
+
+const LEGACY_THEME_IDS = {
+  "macintosh-system-7": "mac-os-9-platinum"
+};
 
 // State
 let notes = [];
@@ -241,6 +297,20 @@ const noteSaveDebounceTimers = new Map();
 let previewDebounceTimer = null;
 let dbSaveQueue = Promise.resolve();
 
+async function loadRememberedWorkspacePath() {
+  const legacyPath = localStorage.getItem("scratchpad_active_db");
+  if (!window.__TAURI__) return legacyPath;
+
+  try {
+    const savedPath = await invoke("load_workspace_preference", { legacyPath });
+    localStorage.removeItem("scratchpad_active_db");
+    return savedPath;
+  } catch (err) {
+    console.error("Failed to load native workspace preference", err);
+    return legacyPath;
+  }
+}
+
 // Initialize app
 async function init() {
   // 1. Attach all event listeners immediately so all UI buttons and keyboard shortcuts are live
@@ -257,8 +327,9 @@ async function init() {
   // 3. Always load existing LocalStorage notes first as guaranteed baseline
   loadNotesFromLocalStorage();
 
-  // 4. Check if an active SQLite database is configured
-  const savedActiveDb = localStorage.getItem("scratchpad_active_db");
+  // 4. Check if a native workspace preference is configured. Existing
+  // localStorage preferences are migrated once for origin-independent startup.
+  const savedActiveDb = await loadRememberedWorkspacePath();
   if (savedActiveDb && window.__TAURI__) {
     activeDbPath = savedActiveDb;
     try {
@@ -274,7 +345,6 @@ async function init() {
       console.error("Failed to load notes from SQLite DB on boot", err);
       showNotification("Workspace error: using local notes");
       activeDbPath = null;
-      localStorage.removeItem("scratchpad_active_db");
       updateDbUiState(false);
     }
   } else {
@@ -356,15 +426,11 @@ function setTheme(theme, pin = true) {
   if (isDark) {
     document.documentElement.classList.add("theme-dark");
     document.documentElement.classList.remove("theme-light");
-    themeToggleBtn.querySelector(".light-icon").style.display = "none";
-    themeToggleBtn.querySelector(".dark-icon").style.display = "block";
-    themeToggleBtn.querySelector(".btn-text").textContent = "Dark Mode";
+    themeToggleBtn.querySelector(".btn-text").textContent = "Theme: Default Dark";
   } else {
     document.documentElement.classList.add("theme-light");
     document.documentElement.classList.remove("theme-dark");
-    themeToggleBtn.querySelector(".light-icon").style.display = "block";
-    themeToggleBtn.querySelector(".dark-icon").style.display = "none";
-    themeToggleBtn.querySelector(".btn-text").textContent = "Light Mode";
+    themeToggleBtn.querySelector(".btn-text").textContent = "Theme: Default Light";
   }
 
   if (pin) {
@@ -1413,7 +1479,6 @@ async function connectDatabase() {
   if (!path) return;
 
   activeDbPath = path;
-  localStorage.setItem("scratchpad_active_db", path);
 
   try {
     notes = await invoke("load_db_notes", { dbPath: path });
@@ -1434,6 +1499,15 @@ async function connectDatabase() {
       }
     }
 
+    let preferenceSaved = true;
+    try {
+      await invoke("set_last_workspace", { dbPath: path });
+      localStorage.removeItem("scratchpad_active_db");
+    } catch (err) {
+      preferenceSaved = false;
+      console.error("Failed to remember workspace", err);
+    }
+
     updateDbUiState(true);
     if (notes.length === 0) {
       createNote();
@@ -1443,11 +1517,12 @@ async function connectDatabase() {
       loadActiveNote();
     }
 
-    showNotification("Workspace connected!");
+    showNotification(preferenceSaved
+      ? "Workspace connected!"
+      : "Workspace connected, but could not be remembered");
   } catch (err) {
     console.error("Failed to read SQLite database", err);
     activeDbPath = null;
-    localStorage.removeItem("scratchpad_active_db");
     loadNotesFromLocalStorage();
 
     if (notes.length === 0) {
@@ -1463,7 +1538,7 @@ async function connectDatabase() {
   }
 }
 
-function disconnectDatabase() {
+async function disconnectDatabase() {
   activeDbPath = null;
   localStorage.removeItem("scratchpad_active_db");
   
@@ -1478,7 +1553,15 @@ function disconnectDatabase() {
   }
   
   updateDbUiState(false);
-  showNotification("Workspace disconnected; using local notes");
+  try {
+    if (window.__TAURI__) {
+      await invoke("set_last_workspace", { dbPath: null });
+    }
+    showNotification("Workspace disconnected; using local notes");
+  } catch (err) {
+    console.error("Failed to forget workspace", err);
+    showNotification("Disconnected, but the workspace preference could not be cleared");
+  }
 }
 
 // Find & Replace Widget functions
@@ -2168,8 +2251,12 @@ function loadSavedThemes() {
     }
   } catch (e) {}
 
-  const savedThemeId = localStorage.getItem("scratchpad_active_theme");
+  const storedThemeId = localStorage.getItem("scratchpad_active_theme");
+  const savedThemeId = LEGACY_THEME_IDS[storedThemeId] || storedThemeId;
   if (savedThemeId) {
+    if (savedThemeId !== storedThemeId) {
+      localStorage.setItem("scratchpad_active_theme", savedThemeId);
+    }
     applyTheme(savedThemeId);
   }
 }
@@ -2199,6 +2286,12 @@ function applyTheme(themeId) {
   const allThemes = [...PRESET_THEMES, ...customThemes];
   const theme = allThemes.find(t => t.id === themeId);
   if (!theme) return;
+
+  if (theme.uiStyle) {
+    root.dataset.themeStyle = theme.uiStyle;
+  } else {
+    delete root.dataset.themeStyle;
+  }
 
   const isDark = isColorDark(theme.background);
   if (isDark) {
@@ -2242,6 +2335,7 @@ function clearCustomThemeStyles() {
     "--bg-note-active", "--border-note-active"
   ];
   props.forEach(p => root.style.removeProperty(p));
+  delete root.dataset.themeStyle;
 }
 
 function isColorDark(hex) {
@@ -2539,4 +2633,18 @@ function exportCurrentTheme() {
 }
 
 // Boot up!
-window.addEventListener("DOMContentLoaded", init);
+function startApp() {
+  init().catch((error) => {
+    console.error("Scratchpad failed to initialize", error);
+    if (saveStatus) {
+      saveStatus.textContent = "Startup error";
+      saveStatus.title = String(error);
+    }
+  });
+}
+
+if (document.readyState === "loading") {
+  window.addEventListener("DOMContentLoaded", startApp, { once: true });
+} else {
+  startApp();
+}
