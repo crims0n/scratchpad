@@ -83,6 +83,7 @@ const tabShortcutsBtn = document.getElementById("tab-shortcuts-btn");
 const tabMarkdownBtn = document.getElementById("tab-markdown-btn");
 const paneShortcuts = document.getElementById("pane-shortcuts");
 const paneMarkdown = document.getElementById("pane-markdown");
+const splitDropOverlay = document.getElementById("split-drop-overlay");
 
 // State
 let notes = [];
@@ -398,6 +399,7 @@ function renderNoteList(filter = "") {
       let dragAvatar = null;
       let dropTarget = null;
       let dropPosition = "bottom";
+      let isOverSplitDropZone = false;
 
       function onPointerMove(moveEvent) {
         const dx = moveEvent.clientX - startX;
@@ -425,26 +427,43 @@ function renderNoteList(filter = "") {
           dragAvatar.style.left = `${moveEvent.clientX - 20}px`;
           dragAvatar.style.top = `${moveEvent.clientY - 20}px`;
 
-          // Hit test underneath the cursor
-          dragAvatar.style.display = "none";
-          const elemBelow = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
-          dragAvatar.style.display = "flex";
+          const sidebarRect = sidebar.getBoundingClientRect();
+          const isPastSidebar = moveEvent.clientX > (sidebarRect.right + 10);
 
-          const targetItem = elemBelow ? elemBelow.closest(".note-item:not(.drag-avatar)") : null;
-
-          document.querySelectorAll(".note-item").forEach(el => {
-            el.classList.remove("drag-over-top", "drag-over-bottom");
-          });
-
-          if (targetItem && targetItem !== item) {
-            dropTarget = targetItem;
-            const rect = targetItem.getBoundingClientRect();
-            const isTop = (moveEvent.clientY - rect.top) < (rect.height / 2);
-            dropPosition = isTop ? "top" : "bottom";
-            targetItem.classList.toggle("drag-over-top", isTop);
-            targetItem.classList.toggle("drag-over-bottom", !isTop);
-          } else {
+          if (isPastSidebar) {
+            // Dragging over the editor workspace!
+            document.querySelectorAll(".note-item").forEach(el => {
+              el.classList.remove("drag-over-top", "drag-over-bottom");
+            });
             dropTarget = null;
+            isOverSplitDropZone = true;
+            splitDropOverlay.style.display = "flex";
+          } else {
+            // Inside the sidebar list: Reordering mode
+            isOverSplitDropZone = false;
+            splitDropOverlay.style.display = "none";
+
+            // Hit test underneath the cursor
+            dragAvatar.style.display = "none";
+            const elemBelow = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
+            dragAvatar.style.display = "flex";
+
+            const targetItem = elemBelow ? elemBelow.closest(".note-item:not(.drag-avatar)") : null;
+
+            document.querySelectorAll(".note-item").forEach(el => {
+              el.classList.remove("drag-over-top", "drag-over-bottom");
+            });
+
+            if (targetItem && targetItem !== item) {
+              dropTarget = targetItem;
+              const rect = targetItem.getBoundingClientRect();
+              const isTop = (moveEvent.clientY - rect.top) < (rect.height / 2);
+              dropPosition = isTop ? "top" : "bottom";
+              targetItem.classList.toggle("drag-over-top", isTop);
+              targetItem.classList.toggle("drag-over-bottom", !isTop);
+            } else {
+              dropTarget = null;
+            }
           }
         }
       }
@@ -462,11 +481,16 @@ function renderNoteList(filter = "") {
           dragAvatar = null;
         }
 
+        splitDropOverlay.style.display = "none";
+
         document.querySelectorAll(".note-item").forEach(el => {
           el.classList.remove("drag-over-top", "drag-over-bottom", "dragging");
         });
 
-        if (hasDragged && dropTarget) {
+        if (hasDragged && isOverSplitDropZone) {
+          openNoteInSecondaryPane(note.id);
+          showNotification(`Opened "${note.title}" side-by-side`);
+        } else if (hasDragged && dropTarget) {
           const targetId = dropTarget.getAttribute("data-id");
           if (targetId && targetId !== note.id) {
             const fromIndex = notes.findIndex(n => n.id === note.id);

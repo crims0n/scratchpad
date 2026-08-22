@@ -698,6 +698,42 @@ body {
   display: none;
 }
 
+/* Split Drop Overlay */
+.split-drop-overlay {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 50%;
+  height: 100%;
+  background: rgba(59, 130, 246, 0.08);
+  border-left: 2px dashed var(--accent-color);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  animation: fadeIn 0.15s ease-out;
+  box-sizing: border-box;
+}
+
+.split-drop-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  background-color: var(--sidebar-bg);
+  border: 1px solid var(--accent-color);
+  border-radius: 12px;
+  padding: 16px 24px;
+  color: var(--accent-color);
+  font-weight: 600;
+  font-size: 0.95rem;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+  animation: scaleUp 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 .secondary-pane-header {
   display: flex;
   align-items: center;

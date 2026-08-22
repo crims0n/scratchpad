@@ -7,7 +7,7 @@ An opinionated, cross-platform, high-efficiency desktop text editor designed to 
 
 - 💾 **Instant Auto-Save**: Never lose a thought. Every keystroke is saved automatically to local storage, debounced to maintain maximum system efficiency.
 - 🗄️ **SQLite DB Workspace Mode**: Connect to a local SQLite database file (`.db` or `.sqlite`) to save, sync, and persist your notes list natively. Automatically seeds new database files with your current LocalStorage drafts.
-- ◫ **Dual-Note Split View**: View and edit two distinct scratchpads simultaneously side by side with independent title editing, auto-save, and note selection.
+- ◫ **Dual-Note Split View**: View and edit two distinct scratchpads simultaneously side by side. Drag any note from the sidebar into the editor pane to immediately split, press `Cmd+\`, or right-click "Open to the Side".
 - 🔍 **Find & Replace with Regex**: Powerful document search with real-time match highlighting, single/bulk replace, and regular expression mode (`.*`) supporting full capture groups.
 - 📝 **Live Markdown Preview**: Toggle between full editor view, split pane (sync-scrolled edit and preview), and full preview.
 - 📊 **Contextual Highlighting Stats**: Displays overall word and character counts. Highlighting text displays selection stats (e.g. `5 words • 30 characters selected`) on the right next to the Save indicator.
