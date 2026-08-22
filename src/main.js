@@ -75,6 +75,15 @@ const ctxSidebarDivider = document.getElementById("ctx-sidebar-divider");
 const ctxMoveUpBtn = document.getElementById("ctx-move-up");
 const ctxMoveDownBtn = document.getElementById("ctx-move-down");
 
+const helpBtn = document.getElementById("help-btn");
+const helpModalBackdrop = document.getElementById("help-modal-backdrop");
+const helpModal = document.getElementById("help-modal");
+const closeHelpBtn = document.getElementById("close-help-btn");
+const tabShortcutsBtn = document.getElementById("tab-shortcuts-btn");
+const tabMarkdownBtn = document.getElementById("tab-markdown-btn");
+const paneShortcuts = document.getElementById("pane-shortcuts");
+const paneMarkdown = document.getElementById("pane-markdown");
+
 // State
 let notes = [];
 let activeNoteId = null;
@@ -85,6 +94,7 @@ let draggedNoteId = null;
 let activeDbPath = null;
 let currentLayoutMode = "edit"; // edit, split, preview
 let isFocusMode = false;
+let isHelpModalOpen = false;
 let findMatches = [];
 let activeMatchIndex = -1;
 let isFindBarOpen = false;
@@ -838,6 +848,15 @@ function attachEventListeners() {
   // Focus toggle
   focusBtn.addEventListener("click", toggleFocusMode);
 
+  // Help & Reference Modal
+  helpBtn.addEventListener("click", () => openHelpModal());
+  closeHelpBtn.addEventListener("click", closeHelpModal);
+  helpModalBackdrop.addEventListener("click", (e) => {
+    if (e.target === helpModalBackdrop) closeHelpModal();
+  });
+  tabShortcutsBtn.addEventListener("click", () => switchHelpTab("shortcuts"));
+  tabMarkdownBtn.addEventListener("click", () => switchHelpTab("markdown"));
+
   // Split Note toggle
   splitNoteBtn.addEventListener("click", () => toggleSplitNoteMode());
   closeSecondaryBtn.addEventListener("click", () => toggleSplitNoteMode(false));
@@ -974,6 +993,10 @@ function attachEventListeners() {
       e.preventDefault();
       toggleSplitNoteMode();
     }
+    if ((isMeta && (e.key === "/" || e.key === "?")) || e.key === "F1") {
+      e.preventDefault();
+      toggleHelpModal();
+    }
     if (e.altKey && e.key === "ArrowUp") {
       e.preventDefault();
       moveNoteUp();
@@ -987,7 +1010,10 @@ function attachEventListeners() {
       toggleFocusMode();
     }
     if (e.key === "Escape") {
-      if (isFindBarOpen) {
+      if (isHelpModalOpen) {
+        e.preventDefault();
+        closeHelpModal();
+      } else if (isFindBarOpen) {
         e.preventDefault();
         hideFindBar();
       } else if (isFocusMode) {
@@ -1752,6 +1778,42 @@ function moveNoteDown(noteId) {
   renderNoteList(searchInput.value);
   populateSecondaryNoteSelect();
   showNotification("Note moved down");
+}
+
+// ----------------------------------------------------
+// Help & Reference Modal Logic
+// ----------------------------------------------------
+function openHelpModal(defaultTab = "shortcuts") {
+  isHelpModalOpen = true;
+  helpModalBackdrop.style.display = "flex";
+  switchHelpTab(defaultTab);
+}
+
+function closeHelpModal() {
+  isHelpModalOpen = false;
+  helpModalBackdrop.style.display = "none";
+}
+
+function toggleHelpModal() {
+  if (isHelpModalOpen) {
+    closeHelpModal();
+  } else {
+    openHelpModal();
+  }
+}
+
+function switchHelpTab(tabName) {
+  if (tabName === "markdown") {
+    tabMarkdownBtn.classList.add("active");
+    tabShortcutsBtn.classList.remove("active");
+    paneMarkdown.classList.add("active");
+    paneShortcuts.classList.remove("active");
+  } else {
+    tabShortcutsBtn.classList.add("active");
+    tabMarkdownBtn.classList.remove("active");
+    paneShortcuts.classList.add("active");
+    paneMarkdown.classList.remove("active");
+  }
 }
 
 // Boot up!

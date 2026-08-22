@@ -92,6 +92,15 @@
               <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75v4.5m0-4.5h-4.5m4.5 0L15 9m5.25 11.25v-4.5m0 4.5h-4.5m4.5 0L15 15" />
             </svg>
           </button>
+
+          <!-- Help & Reference Modal -->
+          <button class="icon-btn" id="help-btn" title="Help & Reference (Cmd+/)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+          </button>
           
           <!-- Actions Menu -->
           <div class="actions-dropdown">
@@ -247,6 +256,172 @@
       <span>Move Down</span>
       <span class="shortcut-hint">Alt+↓</span>
     </button>
+  </div>
+
+  <!-- Help & Reference Modal -->
+  <div class="help-modal-backdrop" id="help-modal-backdrop" style="display: none;">
+    <div class="help-modal" id="help-modal">
+      <div class="help-modal-header">
+        <div class="help-tabs">
+          <button class="help-tab-btn active" id="tab-shortcuts-btn">⌨️ Keyboard Shortcuts</button>
+          <button class="help-tab-btn" id="tab-markdown-btn">📝 Markdown Cheatsheet</button>
+        </div>
+        <button class="close-help-btn" id="close-help-btn" title="Close (Escape)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="help-modal-body">
+        <!-- Shortcuts Pane -->
+        <div class="help-pane active" id="pane-shortcuts">
+          <div class="shortcuts-section">
+            <h4 class="shortcuts-heading">Workspace & Notes</h4>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">New Scratchpad</span>
+              <div class="shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>N</kbd></div>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Toggle Sidebar</span>
+              <div class="shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>B</kbd></div>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Dual-Note Split View (Side-by-Side)</span>
+              <div class="shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>\</kbd></div>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Move Active Note Up in Sidebar</span>
+              <div class="shortcut-keys"><kbd>Alt</kbd><span class="key-plus">+</span><kbd>↑</kbd></div>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Move Active Note Down in Sidebar</span>
+              <div class="shortcut-keys"><kbd>Alt</kbd><span class="key-plus">+</span><kbd>↓</kbd></div>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Toggle Focus Mode (Distraction-Free)</span>
+              <div class="shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>Shift</kbd><span class="key-plus">+</span><kbd>F</kbd></div>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Help & Cheatsheet</span>
+              <div class="shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>/</kbd></div>
+            </div>
+          </div>
+
+          <div class="shortcuts-section">
+            <h4 class="shortcuts-heading">Find & Replace</h4>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Find in Document</span>
+              <div class="shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>F</kbd></div>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Find & Replace</span>
+              <div class="shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>H</kbd></div>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Toggle Regular Expression Mode (<span class="code-mono">.*</span>)</span>
+              <div class="shortcut-keys"><kbd>Alt</kbd><span class="key-plus">+</span><kbd>R</kbd></div>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Jump to Next Match</span>
+              <div class="shortcut-keys"><kbd>Enter</kbd></div>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Jump to Previous Match</span>
+              <div class="shortcut-keys"><kbd>Shift</kbd><span class="key-plus">+</span><kbd>Enter</kbd></div>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Close Find Bar / Exit Focus Mode / Close Help</span>
+              <div class="shortcut-keys"><kbd>Esc</kbd></div>
+            </div>
+          </div>
+
+          <div class="shortcuts-section">
+            <h4 class="shortcuts-heading">Editing & Clipboard</h4>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Copy Selected Text</span>
+              <div class="shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>C</kbd></div>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Cut Selected Text</span>
+              <div class="shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>X</kbd></div>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Paste Text</span>
+              <div class="shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>V</kbd></div>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Select All</span>
+              <div class="shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>A</kbd></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Markdown Cheatsheet Pane -->
+        <div class="help-pane" id="pane-markdown">
+          <div class="cheatsheet-grid">
+            <div class="cheatsheet-card">
+              <div class="cheatsheet-card-title">Headers</div>
+              <pre class="cheatsheet-code"># Header 1
+## Header 2
+### Header 3
+#### Header 4</pre>
+            </div>
+
+            <div class="cheatsheet-card">
+              <div class="cheatsheet-card-title">Text Emphasis</div>
+              <pre class="cheatsheet-code">**Bold text**
+*Italic text*
+~~Strikethrough~~
+`inline_code()`</pre>
+            </div>
+
+            <div class="cheatsheet-card">
+              <div class="cheatsheet-card-title">Lists & Checkboxes</div>
+              <pre class="cheatsheet-code">- Unordered item
+* Alternative bullet
+1. Numbered item 1
+2. Numbered item 2
+- [ ] Incomplete task
+- [x] Completed task</pre>
+            </div>
+
+            <div class="cheatsheet-card">
+              <div class="cheatsheet-card-title">Code Blocks</div>
+              <pre class="cheatsheet-code">```javascript
+function hello() {
+  console.log("Hello, World!");
+}
+```</pre>
+            </div>
+
+            <div class="cheatsheet-card">
+              <div class="cheatsheet-card-title">Quotes & Callouts</div>
+              <pre class="cheatsheet-code">> Blockquote quotation
+> Multiple lines supported
+
+> [!NOTE]
+> Helpful notice</pre>
+            </div>
+
+            <div class="cheatsheet-card">
+              <div class="cheatsheet-card-title">Links & Images</div>
+              <pre class="cheatsheet-code">[Link Text](https://example.com)
+![Image Alt](https://example.com/img.png)</pre>
+            </div>
+
+            <div class="cheatsheet-card full-width">
+              <div class="cheatsheet-card-title">Tables & Dividers</div>
+              <pre class="cheatsheet-code">| Column 1 | Column 2 | Column 3 |
+| :--- | :---: | ---: |
+| Left | Center | Right |
+
+--- (Horizontal Divider)</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </body>
 </html>

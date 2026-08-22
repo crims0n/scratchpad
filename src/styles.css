@@ -1287,3 +1287,221 @@ body {
   margin: 3px 0;
 }
 
+/* ----------------------------------------------------
+   Help & Reference Modal
+   ---------------------------------------------------- */
+
+.help-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.help-modal {
+  background-color: var(--sidebar-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 680px;
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  animation: scaleUp 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleUp {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.help-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--sidebar-bg);
+}
+
+.help-tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.help-tab-btn {
+  background: none;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.help-tab-btn:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-input);
+}
+
+.help-tab-btn.active {
+  color: var(--text-primary);
+  background-color: var(--bg-note-active);
+  border: 1px solid var(--border-note-active);
+}
+
+.close-help-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.close-help-btn:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-input);
+}
+
+.help-modal-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.help-pane {
+  display: none;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.help-pane.active {
+  display: flex;
+}
+
+/* Shortcuts List Styling */
+.shortcuts-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.shortcuts-heading {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent-color);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background-color: var(--editor-bg);
+  border: 1px solid var(--border-color);
+}
+
+.shortcut-desc {
+  font-size: 0.86rem;
+  color: var(--text-primary);
+}
+
+.shortcut-keys {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.key-plus {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+kbd {
+  display: inline-block;
+  padding: 3px 6px;
+  font-family: var(--font-mono, "SF Mono", monospace);
+  font-size: 0.75rem;
+  line-height: 1;
+  color: var(--text-primary);
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.15);
+}
+
+.code-mono {
+  font-family: var(--font-mono, monospace);
+  color: var(--accent-color);
+  font-weight: 600;
+}
+
+/* Markdown Cheatsheet Grid */
+.cheatsheet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.cheatsheet-card {
+  background-color: var(--editor-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cheatsheet-card.full-width {
+  grid-column: 1 / -1;
+}
+
+.cheatsheet-card-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent-color);
+}
+
+.cheatsheet-code {
+  font-family: var(--font-mono, "SF Mono", monospace);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--text-primary);
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+

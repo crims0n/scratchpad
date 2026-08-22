@@ -28,12 +28,13 @@ An opinionated, cross-platform, high-efficiency desktop text editor designed to 
 | `Cmd + B` or `Ctrl + B` | Toggle sidebar visibility |
 | `Cmd + \` or `Ctrl + \` | Toggle Dual-Note Split View (Side-by-Side) |
 | `Alt + ↑` / `Alt + ↓` | Move active note up / down in sidebar |
+| `Cmd + /` or `Ctrl + /` / `F1` | Open Help & Reference (Shortcuts & Markdown Cheatsheet) |
 | `Cmd + F` or `Ctrl + F` | Toggle Find bar |
 | `Cmd + H` or `Ctrl + H` | Toggle Find & Replace |
 | `Alt + R` | Toggle Regular Expression mode in Find |
 | `Enter` / `Shift + Enter` | Jump to next / previous search match |
 | `Cmd + Shift + F` or `Ctrl + Shift + F` | Toggle distraction-free Focus Mode |
-| `Escape` | Close Find / Exit Focus Mode |
+| `Escape` | Close Help Modal / Close Find / Exit Focus Mode |
 
 ---
 
