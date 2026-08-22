@@ -57,27 +57,47 @@ let previewDebounceTimer = null;
 
 // Initialize app
 async function init() {
-  // Check if an active SQLite database is configured
+  // 1. Attach all event listeners immediately so all UI buttons and keyboard shortcuts are live
+  attachEventListeners();
+
+  // 2. Load dark/light theme & layout mode
+  initTheme();
+  const savedLayoutMode = localStorage.getItem("scratchpad_layout_mode");
+  if (savedLayoutMode) {
+    setLayoutMode(savedLayoutMode);
+  }
+
+  // 3. Always load existing LocalStorage notes first as guaranteed baseline
+  loadNotesFromLocalStorage();
+
+  // 4. Check if an active SQLite database is configured
   const savedActiveDb = localStorage.getItem("scratchpad_active_db");
   if (savedActiveDb && window.__TAURI__) {
     activeDbPath = savedActiveDb;
     try {
-      notes = await invoke("load_db_notes", { dbPath: activeDbPath });
+      const dbNotes = await invoke("load_db_notes", { dbPath: activeDbPath });
+      if (Array.isArray(dbNotes) && dbNotes.length > 0) {
+        notes = dbNotes;
+      } else if (notes.length > 0) {
+        // Seed empty SQLite database with existing LocalStorage notes
+        notes.forEach(note => {
+          invoke("save_note_db", { dbPath: activeDbPath, note: note })
+            .catch(err => console.error("Failed to seed note to SQLite DB", err));
+        });
+      }
       updateDbUiState(true);
     } catch (err) {
       console.error("Failed to load notes from SQLite DB on boot", err);
       showNotification("SQLite DB error: switched to local storage");
       activeDbPath = null;
       localStorage.removeItem("scratchpad_active_db");
-      loadNotesFromLocalStorage();
       updateDbUiState(false);
     }
   } else {
-    loadNotesFromLocalStorage();
     updateDbUiState(false);
   }
 
-  // Create default note if none exist
+  // 5. Create default note if none exist
   if (notes.length === 0) {
     createNote("Welcome to Scratchpad!", `# Welcome to Scratchpad!
 
@@ -118,21 +138,9 @@ function greet() {
     activeNoteId = notes[0].id;
   }
 
-  // Load layout mode and theme preference
-  const savedLayoutMode = localStorage.getItem("scratchpad_layout_mode");
-  if (savedLayoutMode) {
-    setLayoutMode(savedLayoutMode);
-  }
-
-  // Load dark/light theme
-  initTheme();
-
-  // Render UI
+  // 6. Render UI
   renderNoteList();
   loadActiveNote();
-
-  // Attach event listeners
-  attachEventListeners();
 }
 
 // ----------------------------------------------------
@@ -967,15 +975,6 @@ function updateFindCount() {
   } else {
     findCount.textContent = `${activeMatchIndex + 1} of ${findMatches.length}`;
   }
-}
-
-function escapeHTML(text) {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
 }
 
 function updateHighlights() {

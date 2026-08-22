@@ -8,8 +8,8 @@ struct Note {
     id: String,
     title: String,
     content: String,
-    updatedAt: i64,
-    isTitleLocked: bool,
+    updated_at: i64,
+    is_title_locked: bool,
 }
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
@@ -110,8 +110,8 @@ fn load_db_notes(db_path: String) -> Result<Vec<Note>, String> {
                 id: row.get(0)?,
                 title: row.get(1)?,
                 content: row.get(2)?,
-                updatedAt: row.get(3)?,
-                isTitleLocked: is_title_locked_int != 0,
+                updated_at: row.get(3)?,
+                is_title_locked: is_title_locked_int != 0,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -144,8 +144,8 @@ fn save_note_db(db_path: String, note: Note) -> Result<(), String> {
             note.id,
             note.title,
             note.content,
-            note.updatedAt,
-            if note.isTitleLocked { 1 } else { 0 }
+            note.updated_at,
+            if note.is_title_locked { 1 } else { 0 }
         ],
     ).map_err(|e| e.to_string())?;
     Ok(())
