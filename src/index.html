@@ -35,7 +35,7 @@
         <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
-        <input type="text" id="search-input" placeholder="Search scratchpads..." autocomplete="off" />
+        <input type="text" id="search-input" placeholder="Search scratchpads..." autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
       </div>
 
       <div class="note-list-container">
@@ -67,7 +67,7 @@
               <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7" />
             </svg>
           </button>
-          <input type="text" class="note-title-input" id="note-title" placeholder="Untitled Scratchpad" />
+          <input type="text" class="note-title-input" id="note-title" placeholder="Untitled Scratchpad" autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
         </div>
 
         <!-- Mode Selectors -->
@@ -117,7 +117,7 @@
               </svg>
             </button>
             <div class="find-input-wrapper">
-              <input type="text" id="find-input" placeholder="Find in document..." autocomplete="off" />
+              <input type="text" id="find-input" placeholder="Find in document..." autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
               <button class="find-option-btn" id="find-regex-toggle" title="Use Regular Expression (Alt+R)">.*</button>
             </div>
             <span class="find-count" id="find-count">0 of 0</span>
@@ -140,7 +140,7 @@
           </div>
           <div class="replace-row" id="replace-row" style="display: none;">
             <div class="find-input-wrapper replace-input-wrapper">
-              <input type="text" id="replace-input" placeholder="Replace with..." autocomplete="off" />
+              <input type="text" id="replace-input" placeholder="Replace with..." autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
             </div>
             <button class="find-action-btn" id="replace-one-btn" title="Replace Current Match">Replace</button>
             <button class="find-action-btn" id="replace-all-btn" title="Replace All Matches">Replace All</button>
@@ -149,7 +149,7 @@
         <!-- Edit Area -->
         <div class="editor-wrapper" id="editor-wrapper">
           <div class="editor-backdrop" id="editor-backdrop"></div>
-          <textarea class="editor-textarea" id="editor-textarea" placeholder="Type something here... Supports Markdown formatting." spellcheck="true"></textarea>
+          <textarea class="editor-textarea" id="editor-textarea" placeholder="Type something here... Supports Markdown formatting." spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off"></textarea>
         </div>
 
         <!-- Divider line (visible in split mode) -->
