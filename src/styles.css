@@ -1320,6 +1320,9 @@ body {
   flex-direction: column;
   box-shadow: 0 20px 48px rgba(0, 0, 0, 0.35);
   overflow: hidden;
+  position: relative;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
   animation: scaleUp 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -1340,6 +1343,10 @@ body {
   padding: 12px 16px;
   border-bottom: 1px solid var(--border-color);
   background-color: var(--sidebar-bg);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
+  box-sizing: border-box;
 }
 
 .help-tabs {
@@ -1393,6 +1400,9 @@ body {
   padding: 16px 20px;
   overflow-y: auto;
   flex: 1;
+  min-height: 0;
+  box-sizing: border-box;
+  overscroll-behavior: contain;
 }
 
 .help-pane {
