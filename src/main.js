@@ -621,14 +621,14 @@ function importFile() {
     // Safe web-based file reader fallback compatible across browser environments
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = ".md,.txt,.markdown";
     input.onchange = (e) => {
       const file = e.target.files[0];
       if (!file) return;
       
       const reader = new FileReader();
       reader.onload = (evt) => {
-        const title = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+        const lastDot = file.name.lastIndexOf('.');
+        const title = (lastDot > 0) ? file.name.substring(0, lastDot) : file.name;
         createNote(title, evt.target.result);
         showNotification("Imported: " + title);
       };

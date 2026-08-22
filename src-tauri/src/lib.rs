@@ -42,9 +42,7 @@ struct ImportedFile {
 
 #[tauri::command]
 fn import_file_native() -> Result<Option<ImportedFile>, String> {
-    let file_path = rfd::FileDialog::new()
-        .add_filter("Text Files", &["md", "txt", "markdown"])
-        .pick_file();
+    let file_path = rfd::FileDialog::new().pick_file();
 
     if let Some(path) = file_path {
         let name = path
@@ -54,12 +52,17 @@ fn import_file_native() -> Result<Option<ImportedFile>, String> {
             .to_string();
         
         let title = if let Some(idx) = name.rfind('.') {
-            name[..idx].to_string()
+            if idx > 0 {
+                name[..idx].to_string()
+            } else {
+                name
+            }
         } else {
             name
         };
 
-        let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        let content = std::fs::read_to_string(&path)
+            .map_err(|e| format!("Could not read file as text: {}", e))?;
         Ok(Some(ImportedFile { title, content }))
     } else {
         Ok(None)
