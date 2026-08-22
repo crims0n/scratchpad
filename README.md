@@ -6,12 +6,15 @@ A minimalist, cross-platform, and high-efficiency desktop text editor designed t
 ## ✨ Features
 
 - 💾 **Instant Auto-Save**: Never lose a thought. Every keystroke is saved automatically to local storage, debounced to maintain maximum system efficiency.
+- 🗄️ **SQLite DB Workspace Mode**: Connect to a local SQLite database file (`.db` or `.sqlite`) to save, sync, and persist your notes list natively. Automatically seeds new database files with your current LocalStorage drafts.
 - 📝 **Live Markdown Preview**: Toggle between full editor view, split pane (sync-scrolled edit and preview), and full preview.
+- 📊 **Contextual Highlighting Stats**: Displays overall word and character counts. Highlighting text displays selection stats (e.g. `5 words • 30 characters selected`) on the right next to the Save indicator.
+- 📥 **Native File Import**: Pick and import Markdown (`.md`/`.markdown`) and text (`.txt`) files from your filesystem to create new scratchpads.
+- 📤 **Custom Directory File Export**: Export your notes to any directory on your filesystem using native OS directory save dialogs.
 - 📁 **Sidebar Scratch Manager**: Create, delete, and search across multiple drafts/notes on the fly.
 - ⚡ **Auto-Renaming**: Scratchpads auto-rename themselves based on the first line of text you write, unless you manually lock the title.
 - 🧘 **Focus Mode**: Press `Cmd+Shift+F` to clear all sidebars, status bars, and menus for a pure, distraction-free writing environment.
 - 🎨 **Adaptive Design System**: System-adaptive dark and light modes (respecting system theme transitions, with manual override pinning).
-- 📤 **Fast Export**: Easily copy raw Markdown, copy rendered HTML, or export your scratchpad as a `.md` document.
 
 ---
 
@@ -71,6 +74,7 @@ The resulting installers will be placed inside the `src-tauri/target/release/bun
 ## 🛠️ Tech Stack & Architecture
 
 - **Wrapper & System Bridge**: [Tauri v2](https://tauri.app/) (Rust-based runtime)
+- **Database Engine**: [SQLite](https://www.sqlite.org/) (integrated natively via `rusqlite` compiled bundle)
 - **Frontend**: Vanilla HTML5, CSS Variables, and JavaScript (ES Modules) for lightweight performance.
 - **Markdown Compiler**: [marked.js](https://marked.js.org/) (bundled locally for offline access).
 - **Styling**: Vanilla CSS utilizing custom scrollbars, animations, and fluid container sizing.
