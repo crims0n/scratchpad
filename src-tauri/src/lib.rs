@@ -55,14 +55,26 @@ fn import_file_native() -> Result<Option<ImportedFile>, String> {
             if idx > 0 {
                 name[..idx].to_string()
             } else {
-                name
+                name.clone()
             }
         } else {
-            name
+            name.clone()
         };
 
-        let content = std::fs::read_to_string(&path)
-            .map_err(|e| format!("Could not read file as text: {}", e))?;
+        let content = match std::fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(_) => {
+                rfd::MessageDialog::new()
+                    .set_title("Unsupported File Format")
+                    .set_description(&format!(
+                        "The file \"{}\" could not be opened because it is not a valid text file.\n\nOnly text-encoded files (Markdown, source code, config files, plain text) can be imported into Scratchpad.",
+                        name
+                    ))
+                    .set_buttons(rfd::MessageButtons::Ok)
+                    .show();
+                return Ok(None);
+            }
+        };
         Ok(Some(ImportedFile { title, content }))
     } else {
         Ok(None)

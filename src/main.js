@@ -615,7 +615,8 @@ function importFile() {
         }
       })
       .catch((err) => {
-        showNotification("Import failed: " + err);
+        alert("Unsupported File Format: " + err);
+        showNotification("Import failed");
       });
   } else {
     // Safe web-based file reader fallback compatible across browser environments
@@ -631,6 +632,9 @@ function importFile() {
         const title = (lastDot > 0) ? file.name.substring(0, lastDot) : file.name;
         createNote(title, evt.target.result);
         showNotification("Imported: " + title);
+      };
+      reader.onerror = () => {
+        alert(`Unsupported File Format: The file "${file.name}" could not be read as text.`);
       };
       reader.readAsText(file);
     };
