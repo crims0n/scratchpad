@@ -29,6 +29,7 @@ const actionsBtn = document.getElementById("actions-btn");
 const actionsDropdown = document.getElementById("actions-dropdown-content");
 const copyMarkdownBtn = document.getElementById("copy-markdown");
 const copyHtmlBtn = document.getElementById("copy-html");
+const importBtn = document.getElementById("import-btn");
 const exportBtn = document.getElementById("export-btn");
 
 // State
@@ -531,6 +532,39 @@ function exportAsMarkdownFile() {
   }
 }
 
+function importFile() {
+  if (window.__TAURI__) {
+    invoke("import_file_native")
+      .then((file) => {
+        if (file) {
+          createNote(file.title, file.content);
+          showNotification("Imported: " + file.title);
+        }
+      })
+      .catch((err) => {
+        showNotification("Import failed: " + err);
+      });
+  } else {
+    // Safe web-based file reader fallback compatible across browser environments
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".md,.txt,.markdown";
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const title = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+        createNote(title, evt.target.result);
+        showNotification("Imported: " + title);
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  }
+}
+
 function showNotification(msg) {
   const originalStatus = saveStatus.textContent;
   const originalClass = saveStatus.className;
@@ -589,6 +623,7 @@ function attachEventListeners() {
 
   copyMarkdownBtn.addEventListener("click", copyMarkdownToClipboard);
   copyHtmlBtn.addEventListener("click", copyHtmlToClipboard);
+  importBtn.addEventListener("click", importFile);
   exportBtn.addEventListener("click", exportAsMarkdownFile);
 
   // Shortcuts
