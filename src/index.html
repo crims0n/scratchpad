@@ -108,6 +108,27 @@
 
       <!-- Editor Container -->
       <div class="editor-pane" id="editor-pane">
+        <!-- Find Bar -->
+        <div class="find-bar" id="find-bar">
+          <input type="text" id="find-input" placeholder="Find in document..." autocomplete="off" />
+          <span class="find-count" id="find-count">0 of 0</span>
+          <button class="find-btn" id="find-prev" title="Previous Match (Shift+Enter)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="18 15 12 9 6 15" />
+            </svg>
+          </button>
+          <button class="find-btn" id="find-next" title="Next Match (Enter)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+          <button class="find-btn find-close" id="find-close" title="Close (Esc)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
         <!-- Edit Area -->
         <div class="editor-wrapper" id="editor-wrapper">
           <textarea class="editor-textarea" id="editor-textarea" placeholder="Type something here... Supports Markdown formatting." spellcheck="true"></textarea>

@@ -35,12 +35,22 @@ const dbConnectBtn = document.getElementById("db-connect-btn");
 const dbDisconnectBtn = document.getElementById("db-disconnect-btn");
 const dbDivider = document.getElementById("db-divider");
 
+const findBar = document.getElementById("find-bar");
+const findInput = document.getElementById("find-input");
+const findCount = document.getElementById("find-count");
+const findPrevBtn = document.getElementById("find-prev");
+const findNextBtn = document.getElementById("find-next");
+const findCloseBtn = document.getElementById("find-close");
+
 // State
 let notes = [];
 let activeNoteId = null;
 let activeDbPath = null;
 let currentLayoutMode = "edit"; // edit, split, preview
 let isFocusMode = false;
+let findMatches = [];
+let activeMatchIndex = -1;
+let isFindBarOpen = false;
 let saveDebounceTimer = null;
 let previewDebounceTimer = null;
 
@@ -663,6 +673,26 @@ function attachEventListeners() {
   dbConnectBtn.addEventListener("click", connectDatabase);
   dbDisconnectBtn.addEventListener("click", disconnectDatabase);
 
+  // Find Widget events
+  findInput.addEventListener("input", runFind);
+  findInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (e.shiftKey) {
+        findPrev();
+      } else {
+        findNext();
+      }
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      hideFindBar();
+    }
+  });
+  findPrevBtn.addEventListener("click", findPrev);
+  findNextBtn.addEventListener("click", findNext);
+  findCloseBtn.addEventListener("click", hideFindBar);
+
   // Shortcuts
   document.addEventListener("keydown", (e) => {
     const isMeta = e.metaKey || e.ctrlKey;
@@ -676,12 +706,21 @@ function attachEventListeners() {
       e.preventDefault();
       createNote();
     }
+    if (isMeta && e.key === "f") {
+      e.preventDefault();
+      toggleFindBar();
+    }
     if (isMeta && isShift && e.key.toLowerCase() === "f") {
       e.preventDefault();
       toggleFocusMode();
     }
-    if (e.key === "Escape" && isFocusMode) {
-      toggleFocusMode();
+    if (e.key === "Escape") {
+      if (isFindBarOpen) {
+        e.preventDefault();
+        hideFindBar();
+      } else if (isFocusMode) {
+        toggleFocusMode();
+      }
     }
   });
 
@@ -816,6 +855,105 @@ function disconnectDatabase() {
   
   updateDbUiState(false);
   showNotification("Switched to LocalStorage");
+}
+
+// Find Widget functions
+function toggleFindBar() {
+  if (isFindBarOpen) {
+    hideFindBar();
+  } else {
+    isFindBarOpen = true;
+    findBar.style.display = "flex";
+    
+    // Check if there is selected text in the textarea, prefill the find input
+    const selection = editorTextarea.value.substring(editorTextarea.selectionStart, editorTextarea.selectionEnd);
+    if (selection) {
+      findInput.value = selection;
+    }
+    
+    findInput.focus();
+    findInput.select();
+    runFind();
+  }
+}
+
+function hideFindBar() {
+  isFindBarOpen = false;
+  findBar.style.display = "none";
+  findMatches = [];
+  activeMatchIndex = -1;
+  findInput.value = "";
+  updateFindCount();
+  editorTextarea.focus();
+}
+
+function runFind() {
+  const query = findInput.value;
+  findMatches = [];
+  activeMatchIndex = -1;
+  
+  if (!query) {
+    updateFindCount();
+    return;
+  }
+  
+  const text = editorTextarea.value;
+  const lowerText = text.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+  let index = 0;
+  
+  while ((index = lowerText.indexOf(lowerQuery, index)) !== -1) {
+    findMatches.push({
+      start: index,
+      end: index + query.length
+    });
+    index += query.length;
+  }
+  
+  if (findMatches.length > 0) {
+    activeMatchIndex = 0;
+    selectMatch(0);
+  } else {
+    updateFindCount();
+  }
+}
+
+function selectMatch(index) {
+  if (index < 0 || index >= findMatches.length) return;
+  activeMatchIndex = index;
+  const match = findMatches[index];
+  
+  editorTextarea.focus();
+  editorTextarea.setSelectionRange(match.start, match.end);
+  
+  // Custom scroll calculation to scroll selected match into view
+  const textBefore = editorTextarea.value.substring(0, match.start);
+  const lineCountBefore = textBefore.split("\n").length;
+  const lineHeight = parseFloat(window.getComputedStyle(editorTextarea).lineHeight) || 20;
+  
+  editorTextarea.scrollTop = (lineCountBefore - 3) * lineHeight;
+  
+  updateFindCount();
+}
+
+function findNext() {
+  if (findMatches.length === 0) return;
+  const nextIndex = (activeMatchIndex + 1) % findMatches.length;
+  selectMatch(nextIndex);
+}
+
+function findPrev() {
+  if (findMatches.length === 0) return;
+  const prevIndex = (activeMatchIndex - 1 + findMatches.length) % findMatches.length;
+  selectMatch(prevIndex);
+}
+
+function updateFindCount() {
+  if (findMatches.length === 0) {
+    findCount.textContent = "0 of 0";
+  } else {
+    findCount.textContent = `${activeMatchIndex + 1} of ${findMatches.length}`;
+  }
 }
 
 // Boot up!

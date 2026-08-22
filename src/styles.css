@@ -879,3 +879,79 @@ body {
 #save-status.unsaved::before {
   background-color: #eab308; /* Yellow for unsaved changes */
 }
+
+/* ----------------------------------------------------
+   Find Widget Styles
+   ---------------------------------------------------- */
+.find-bar {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  background-color: var(--sidebar-bg);
+  border-bottom: 1px solid var(--border-color);
+  padding: 8px 16px;
+  height: 40px;
+  box-sizing: border-box;
+  animation: slideDown 0.15s ease-out;
+  flex-shrink: 0;
+  z-index: 4;
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+#find-input {
+  background-color: var(--editor-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  width: 220px;
+  outline: none;
+  font-family: inherit;
+}
+
+#find-input:focus {
+  border-color: var(--accent-color);
+}
+
+.find-count {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  min-width: 70px;
+  user-select: none;
+}
+
+.find-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  transition: background-color 0.12s, color 0.12s;
+}
+
+.find-btn:hover {
+  background-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.find-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.find-close:hover {
+  background-color: #ef4444;
+  color: #ffffff;
+}
+
