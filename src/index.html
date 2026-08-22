@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scratchpad</title>
+  <link rel="stylesheet" href="styles.css" />
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+  <!-- Offline-ready Markdown Parser -->
+  <script src="marked.min.js"></script>
+  <script type="module" src="main.js" defer></script>
+</head>
+<body>
+  <div class="app-container" id="app">
+    <!-- Sidebar for Drafts -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="brand">
+          <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>Scratchpad</span>
+        </div>
+        <button class="icon-btn" id="new-note-btn" title="Create new scratch (Cmd+N)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="search-box">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+        <input type="text" id="search-input" placeholder="Search scratchpads..." autocomplete="off" />
+      </div>
+
+      <div class="note-list-container">
+        <ul class="note-list" id="note-list">
+          <!-- Dynamic note items inserted here -->
+        </ul>
+      </div>
+
+      <div class="sidebar-footer">
+        <button class="sidebar-action-btn" id="theme-toggle" title="Toggle theme">
+          <svg class="theme-icon light-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <svg class="theme-icon dark-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+          </svg>
+          <span class="btn-text">Light Mode</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Workspace -->
+    <main class="workspace" id="workspace">
+      <!-- Top Bar / Header -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="icon-btn toggle-sidebar-btn" id="toggle-sidebar" title="Toggle Sidebar (Cmd+B)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7" />
+            </svg>
+          </button>
+          <input type="text" class="note-title-input" id="note-title" placeholder="Untitled Scratchpad" />
+        </div>
+
+        <!-- Mode Selectors -->
+        <div class="layout-controls">
+          <button class="layout-btn active" id="mode-edit" data-mode="edit">Edit</button>
+          <button class="layout-btn" id="mode-split" data-mode="split">Split</button>
+          <button class="layout-btn" id="mode-preview" data-mode="preview">Preview</button>
+        </div>
+
+        <div class="topbar-right">
+          <!-- Focus Mode -->
+          <button class="icon-btn" id="focus-btn" title="Focus Mode (Cmd+Shift+F)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75v4.5m0-4.5h-4.5m4.5 0L15 9m5.25 11.25v-4.5m0 4.5h-4.5m4.5 0L15 15" />
+            </svg>
+          </button>
+          
+          <!-- Actions Menu -->
+          <div class="actions-dropdown">
+            <button class="icon-btn" id="actions-btn" title="Actions">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 10.742l5.028-2.514m0 0a3 3 0 10-4.796-3.486m4.796 3.486a3 3 0 110 5.83m0 0l-5.028-2.514m0 0a3 3 0 11-4.796-3.486m0 12a3 3 0 109.592 0m-9.592 0a3 3 0 109.592 0z" />
+              </svg>
+            </button>
+            <div class="dropdown-content" id="actions-dropdown-content">
+              <button class="dropdown-item" id="copy-markdown">Copy Markdown</button>
+              <button class="dropdown-item" id="copy-html">Copy HTML Preview</button>
+              <div class="dropdown-divider"></div>
+              <button class="dropdown-item" id="export-btn">Export as File</button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Editor Container -->
+      <div class="editor-pane" id="editor-pane">
+        <!-- Edit Area -->
+        <div class="editor-wrapper" id="editor-wrapper">
+          <textarea class="editor-textarea" id="editor-textarea" placeholder="Type something here... Supports Markdown formatting." spellcheck="true"></textarea>
+        </div>
+
+        <!-- Divider line (visible in split mode) -->
+        <div class="editor-divider" id="editor-divider"></div>
+
+        <!-- Preview Area -->
+        <div class="preview-wrapper" id="preview-wrapper">
+          <div class="markdown-preview" id="markdown-preview"></div>
+        </div>
+      </div>
+
+      <!-- Status Bar -->
+      <footer class="statusbar">
+        <div class="statusbar-left">
+          <span id="word-char-count">0 words • 0 characters</span>
+        </div>
+        <div class="statusbar-right">
+          <span id="save-status">Saved</span>
+        </div>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

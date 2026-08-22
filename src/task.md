@@ -1,0 +1,7 @@
+- [x] Initialize Tauri project in the workspace
+- [x] Configure Tauri app window, menus, and permissions
+- [x] Implement the core scratchpad interface (HTML/CSS)
+- [x] Add editor logic (auto-save, clear, dark mode, custom styling)
+- [x] Integrate Markdown preview rendering (marked.js)
+- [x] Test the desktop application locally
+- [x] Build and verify correct behavior
