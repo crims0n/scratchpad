@@ -1,6 +1,17 @@
 use std::fs::File;
 use std::io::Write;
 
+// Note struct representation matching frontend note
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+struct Note {
+    id: String,
+    title: String,
+    content: String,
+    updatedAt: i64,
+    isTitleLocked: bool,
+}
+
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -55,13 +66,107 @@ fn import_file_native() -> Result<Option<ImportedFile>, String> {
     }
 }
 
+// Database commands
+#[tauri::command]
+fn select_db_file(create_new: bool) -> Result<Option<String>, String> {
+    let dialog = rfd::FileDialog::new().add_filter("SQLite Database", &["db", "sqlite"]);
+    let file_path = if create_new {
+        dialog.save_file()
+    } else {
+        dialog.pick_file()
+    };
+    Ok(file_path.map(|path| path.to_string_lossy().to_string()))
+}
+
+#[tauri::command]
+fn load_db_notes(db_path: String) -> Result<Vec<Note>, String> {
+    let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
+    
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS notes (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            content TEXT NOT NULL,
+            updatedAt INTEGER NOT NULL,
+            isTitleLocked INTEGER NOT NULL
+        )",
+        [],
+    ).map_err(|e| e.to_string())?;
+
+    let mut stmt = conn
+        .prepare("SELECT id, title, content, updatedAt, isTitleLocked FROM notes ORDER BY updatedAt DESC")
+        .map_err(|e| e.to_string())?;
+
+    let note_iter = stmt
+        .query_map([], |row| {
+            let is_title_locked_int: i32 = row.get(4)?;
+            Ok(Note {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                content: row.get(2)?,
+                updatedAt: row.get(3)?,
+                isTitleLocked: is_title_locked_int != 0,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut notes = Vec::new();
+    for note in note_iter {
+        notes.push(note.map_err(|e| e.to_string())?);
+    }
+    Ok(notes)
+}
+
+#[tauri::command]
+fn save_note_db(db_path: String, note: Note) -> Result<(), String> {
+    let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
+    
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS notes (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            content TEXT NOT NULL,
+            updatedAt INTEGER NOT NULL,
+            isTitleLocked INTEGER NOT NULL
+        )",
+        [],
+    ).map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "INSERT OR REPLACE INTO notes (id, title, content, updatedAt, isTitleLocked) VALUES (?1, ?2, ?3, ?4, ?5)",
+        rusqlite::params![
+            note.id,
+            note.title,
+            note.content,
+            note.updatedAt,
+            if note.isTitleLocked { 1 } else { 0 }
+        ],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn delete_note_db(db_path: String, id: String) -> Result<(), String> {
+    let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM notes WHERE id = ?1", [id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .invoke_handler(tauri::generate_handler![greet, save_file_native, import_file_native])
+        .invoke_handler(tauri::generate_handler![
+            greet, 
+            save_file_native, 
+            import_file_native,
+            select_db_file,
+            load_db_notes,
+            save_note_db,
+            delete_note_db
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

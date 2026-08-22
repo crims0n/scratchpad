@@ -31,26 +31,39 @@ const copyMarkdownBtn = document.getElementById("copy-markdown");
 const copyHtmlBtn = document.getElementById("copy-html");
 const importBtn = document.getElementById("import-btn");
 const exportBtn = document.getElementById("export-btn");
+const dbConnectBtn = document.getElementById("db-connect-btn");
+const dbDisconnectBtn = document.getElementById("db-disconnect-btn");
+const dbDivider = document.getElementById("db-divider");
 
 // State
 let notes = [];
 let activeNoteId = null;
+let activeDbPath = null;
 let currentLayoutMode = "edit"; // edit, split, preview
 let isFocusMode = false;
 let saveDebounceTimer = null;
 let previewDebounceTimer = null;
 
 // Initialize app
-function init() {
-  // Load notes from localStorage
-  const savedNotes = localStorage.getItem("scratchpad_notes");
-  if (savedNotes) {
+async function init() {
+  // Check if an active SQLite database is configured
+  const savedActiveDb = localStorage.getItem("scratchpad_active_db");
+  if (savedActiveDb && window.__TAURI__) {
+    activeDbPath = savedActiveDb;
     try {
-      notes = JSON.parse(savedNotes);
-    } catch (e) {
-      console.error("Failed to parse saved notes, resetting", e);
-      notes = [];
+      notes = await invoke("load_db_notes", { dbPath: activeDbPath });
+      updateDbUiState(true);
+    } catch (err) {
+      console.error("Failed to load notes from SQLite DB on boot", err);
+      showNotification("SQLite DB error: switched to local storage");
+      activeDbPath = null;
+      localStorage.removeItem("scratchpad_active_db");
+      loadNotesFromLocalStorage();
+      updateDbUiState(false);
     }
+  } else {
+    loadNotesFromLocalStorage();
+    updateDbUiState(false);
   }
 
   // Create default note if none exist
@@ -197,6 +210,12 @@ function deleteNote(id, event) {
   
   notes.splice(index, 1);
   
+  // If database is active, delete it there
+  if (activeDbPath) {
+    invoke("delete_note_db", { dbPath: activeDbPath, id: id })
+      .catch(err => console.error("Failed to delete note from SQLite DB", err));
+  }
+  
   // Handle active note deletion
   if (activeNoteId === id) {
     if (notes.length > 0) {
@@ -285,6 +304,17 @@ function renderNoteList(filter = "") {
 
 function saveNotesToStorage() {
   localStorage.setItem("scratchpad_notes", JSON.stringify(notes));
+  
+  if (activeDbPath && activeNoteId) {
+    const activeNote = notes.find(n => n.id === activeNoteId);
+    if (activeNote) {
+      invoke("save_note_db", { dbPath: activeDbPath, note: activeNote })
+        .catch(err => {
+          console.error("Failed to save note to SQLite DB", err);
+          showNotification("SQLite DB save failed!");
+        });
+    }
+  }
 }
 
 // ----------------------------------------------------
@@ -354,7 +384,12 @@ function triggerSavingState() {
 }
 
 function setSavedState() {
-  saveStatus.textContent = "Saved";
+  if (activeDbPath) {
+    const fileName = activeDbPath.split(/[/\\]/).pop();
+    saveStatus.textContent = `Saved (SQLite: ${fileName})`;
+  } else {
+    saveStatus.textContent = "Saved";
+  }
   saveStatus.classList.remove("unsaved");
 }
 
@@ -625,6 +660,8 @@ function attachEventListeners() {
   copyHtmlBtn.addEventListener("click", copyHtmlToClipboard);
   importBtn.addEventListener("click", importFile);
   exportBtn.addEventListener("click", exportAsMarkdownFile);
+  dbConnectBtn.addEventListener("click", connectDatabase);
+  dbDisconnectBtn.addEventListener("click", disconnectDatabase);
 
   // Shortcuts
   document.addEventListener("keydown", (e) => {
@@ -675,6 +712,112 @@ function escapeHTML(str) {
       '"': '&quot;'
     }[tag] || tag)
   );
+}
+
+// Database helpers
+function loadNotesFromLocalStorage() {
+  const savedNotes = localStorage.getItem("scratchpad_notes");
+  if (savedNotes) {
+    try {
+      notes = JSON.parse(savedNotes);
+    } catch (e) {
+      console.error("Failed to parse saved notes, resetting", e);
+      notes = [];
+    }
+  }
+}
+
+function updateDbUiState(isConnected) {
+  if (isConnected && activeDbPath) {
+    dbConnectBtn.style.display = "none";
+    dbDisconnectBtn.style.display = "block";
+    
+    const fileName = activeDbPath.split(/[/\\]/).pop();
+    saveStatus.textContent = `Saved (SQLite: ${fileName})`;
+    saveStatus.title = `Database File: ${activeDbPath}`;
+  } else {
+    dbConnectBtn.style.display = "block";
+    dbDisconnectBtn.style.display = "none";
+    
+    saveStatus.textContent = "Saved";
+    saveStatus.title = "Saved to local webview storage";
+  }
+}
+
+function connectDatabase() {
+  if (!window.__TAURI__) {
+    showNotification("SQLite is only available in Desktop App mode!");
+    return;
+  }
+  
+  const createNew = confirm("Do you want to CREATE a new SQLite database file?\n\nClick OK to create a new database file, or Cancel to open an existing database file.");
+  
+  invoke("select_db_file", { createNew: createNew })
+    .then((path) => {
+      if (path) {
+        activeDbPath = path;
+        localStorage.setItem("scratchpad_active_db", path);
+        
+        // Load notes from the selected database
+        invoke("load_db_notes", { dbPath: path })
+          .then((dbNotes) => {
+            notes = dbNotes;
+            updateDbUiState(true);
+            
+            // If the database is completely empty, seed it with current LocalStorage notes
+            if (notes.length === 0) {
+              const savedNotes = localStorage.getItem("scratchpad_notes");
+              if (savedNotes) {
+                try {
+                  const fallbackNotes = JSON.parse(savedNotes);
+                  if (fallbackNotes.length > 0) {
+                    notes = fallbackNotes;
+                    notes.forEach((note) => {
+                      invoke("save_note_db", { dbPath: path, note: note })
+                        .catch(err => console.error("Failed to seed note to SQLite DB", err));
+                    });
+                  }
+                } catch (e) {}
+              }
+            }
+            
+            if (notes.length === 0) {
+              createNote();
+            } else {
+              activeNoteId = notes[0].id;
+              renderNoteList();
+              loadActiveNote();
+            }
+            
+            showNotification("SQLite database connected!");
+          })
+          .catch((err) => {
+            showNotification("Failed to read database: " + err);
+            disconnectDatabase();
+          });
+      }
+    })
+    .catch((err) => {
+      showNotification("Database selection failed: " + err);
+    });
+}
+
+function disconnectDatabase() {
+  activeDbPath = null;
+  localStorage.removeItem("scratchpad_active_db");
+  
+  loadNotesFromLocalStorage();
+  
+  if (notes.length === 0) {
+    createNote();
+  } else {
+    activeNoteId = notes[0].id;
+    renderNoteList();
+    loadActiveNote();
+  }
+  
+  updateDbUiState(false);
+  showNotification("Switched to LocalStorage");
 }
 
 // Boot up!
