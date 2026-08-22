@@ -641,6 +641,20 @@ body {
   border-left: 1px solid var(--border-color);
 }
 
+/* Force disable markdown preview and dividers in Dual-Note Split Mode */
+.panes-container.dual-split-mode .preview-wrapper,
+.panes-container.dual-split-mode .editor-divider {
+  display: none !important;
+}
+
+.panes-container.dual-split-mode .editor-wrapper {
+  display: flex !important;
+}
+
+.app-container.dual-note-active .layout-controls {
+  display: none;
+}
+
 .secondary-pane-header {
   display: flex;
   align-items: center;

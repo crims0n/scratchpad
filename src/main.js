@@ -490,7 +490,7 @@ function updateWordCharCount() {
 }
 
 function updateMarkdownPreview() {
-  if (currentLayoutMode === "edit") return; // don't render if not visible
+  if (currentLayoutMode === "edit" || isSplitNoteMode) return; // don't render if not visible or in dual-note split mode
 
   const rawText = editorTextarea.value;
   
@@ -1411,6 +1411,7 @@ function toggleSplitNoteMode(forceState) {
   isSplitNoteMode = typeof forceState === "boolean" ? forceState : !isSplitNoteMode;
   
   if (isSplitNoteMode) {
+    appContainer.classList.add("dual-note-active");
     panesContainer.classList.add("dual-split-mode");
     secondaryPaneWrapper.style.display = "flex";
     splitNoteBtn.classList.add("active");
@@ -1425,6 +1426,7 @@ function toggleSplitNoteMode(forceState) {
     loadSecondaryNote();
     showNotification("Dual-Note Split View enabled");
   } else {
+    appContainer.classList.remove("dual-note-active");
     panesContainer.classList.remove("dual-split-mode");
     secondaryPaneWrapper.style.display = "none";
     splitNoteBtn.classList.remove("active");
