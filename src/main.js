@@ -41,6 +41,12 @@ const findCount = document.getElementById("find-count");
 const findPrevBtn = document.getElementById("find-prev");
 const findNextBtn = document.getElementById("find-next");
 const findCloseBtn = document.getElementById("find-close");
+const findToggleReplaceBtn = document.getElementById("find-toggle-replace");
+const findRegexToggleBtn = document.getElementById("find-regex-toggle");
+const replaceRow = document.getElementById("replace-row");
+const replaceInput = document.getElementById("replace-input");
+const replaceOneBtn = document.getElementById("replace-one-btn");
+const replaceAllBtn = document.getElementById("replace-all-btn");
 const editorBackdrop = document.getElementById("editor-backdrop");
 
 // State
@@ -52,6 +58,8 @@ let isFocusMode = false;
 let findMatches = [];
 let activeMatchIndex = -1;
 let isFindBarOpen = false;
+let isRegexMode = false;
+let isReplaceOpen = false;
 let saveDebounceTimer = null;
 let previewDebounceTimer = null;
 
@@ -685,7 +693,7 @@ function attachEventListeners() {
   dbConnectBtn.addEventListener("click", connectDatabase);
   dbDisconnectBtn.addEventListener("click", disconnectDatabase);
 
-  // Find Widget events
+  // Find & Replace Widget events
   findInput.addEventListener("input", runFind);
   findInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
@@ -704,6 +712,21 @@ function attachEventListeners() {
   findPrevBtn.addEventListener("click", findPrev);
   findNextBtn.addEventListener("click", findNext);
   findCloseBtn.addEventListener("click", hideFindBar);
+  findToggleReplaceBtn.addEventListener("click", () => toggleReplace());
+  findRegexToggleBtn.addEventListener("click", toggleRegexMode);
+  
+  replaceInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      replaceOne();
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      hideFindBar();
+    }
+  });
+  replaceOneBtn.addEventListener("click", replaceOne);
+  replaceAllBtn.addEventListener("click", replaceAll);
 
   // Shortcuts
   document.addEventListener("keydown", (e) => {
@@ -721,6 +744,14 @@ function attachEventListeners() {
     if (isMeta && e.key === "f") {
       e.preventDefault();
       toggleFindBar();
+    }
+    if (isMeta && e.key === "h") {
+      e.preventDefault();
+      toggleFindBar(true);
+    }
+    if (e.altKey && e.key.toLowerCase() === "r" && isFindBarOpen) {
+      e.preventDefault();
+      toggleRegexMode();
     }
     if (isMeta && isShift && e.key.toLowerCase() === "f") {
       e.preventDefault();
@@ -871,13 +902,21 @@ function disconnectDatabase() {
   showNotification("Switched to LocalStorage");
 }
 
-// Find Widget functions
-function toggleFindBar() {
+// Find & Replace Widget functions
+function toggleFindBar(openReplace = false) {
   if (isFindBarOpen) {
-    hideFindBar();
+    if (openReplace && !isReplaceOpen) {
+      toggleReplace(true);
+    } else if (!openReplace) {
+      hideFindBar();
+    }
   } else {
     isFindBarOpen = true;
     findBar.style.display = "flex";
+    
+    if (openReplace) {
+      toggleReplace(true);
+    }
     
     // Check if there is selected text in the textarea, prefill the find input
     const selection = editorTextarea.value.substring(editorTextarea.selectionStart, editorTextarea.selectionEnd);
@@ -885,8 +924,13 @@ function toggleFindBar() {
       findInput.value = selection;
     }
     
-    findInput.focus();
-    findInput.select();
+    if (openReplace && isReplaceOpen) {
+      replaceInput.focus();
+      replaceInput.select();
+    } else {
+      findInput.focus();
+      findInput.select();
+    }
     runFind();
   }
 }
@@ -897,15 +941,33 @@ function hideFindBar() {
   findMatches = [];
   activeMatchIndex = -1;
   findInput.value = "";
+  replaceInput.value = "";
+  toggleReplace(false);
   updateFindCount();
   updateHighlights();
   editorTextarea.focus();
+}
+
+function toggleReplace(forceState) {
+  isReplaceOpen = typeof forceState === "boolean" ? forceState : !isReplaceOpen;
+  replaceRow.style.display = isReplaceOpen ? "flex" : "none";
+  findToggleReplaceBtn.classList.toggle("expanded", isReplaceOpen);
+  if (isReplaceOpen) {
+    replaceInput.focus();
+  }
+}
+
+function toggleRegexMode() {
+  isRegexMode = !isRegexMode;
+  findRegexToggleBtn.classList.toggle("active", isRegexMode);
+  runFind();
 }
 
 function runFind() {
   const query = findInput.value;
   findMatches = [];
   activeMatchIndex = -1;
+  findInput.classList.remove("invalid-regex");
   
   if (!query) {
     updateFindCount();
@@ -914,16 +976,42 @@ function runFind() {
   }
   
   const text = editorTextarea.value;
-  const lowerText = text.toLowerCase();
-  const lowerQuery = query.toLowerCase();
-  let index = 0;
   
-  while ((index = lowerText.indexOf(lowerQuery, index)) !== -1) {
-    findMatches.push({
-      start: index,
-      end: index + query.length
-    });
-    index += query.length;
+  if (isRegexMode) {
+    try {
+      const regex = new RegExp(query, "gi");
+      let match;
+      
+      while ((match = regex.exec(text)) !== null) {
+        if (match[0].length === 0) {
+          regex.lastIndex++;
+          continue;
+        }
+        findMatches.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          text: match[0]
+        });
+      }
+    } catch (e) {
+      findInput.classList.add("invalid-regex");
+      updateFindCount("Invalid");
+      updateHighlights();
+      return;
+    }
+  } else {
+    const lowerText = text.toLowerCase();
+    const lowerQuery = query.toLowerCase();
+    let index = 0;
+    
+    while ((index = lowerText.indexOf(lowerQuery, index)) !== -1) {
+      findMatches.push({
+        start: index,
+        end: index + query.length,
+        text: text.substring(index, index + query.length)
+      });
+      index += query.length;
+    }
   }
   
   if (findMatches.length > 0) {
@@ -969,8 +1057,82 @@ function findPrev() {
   selectMatch(prevIndex);
 }
 
-function updateFindCount() {
-  if (findMatches.length === 0) {
+function replaceOne() {
+  if (findMatches.length === 0 || activeMatchIndex < 0) return;
+  const match = findMatches[activeMatchIndex];
+  const replaceText = replaceInput.value;
+  const text = editorTextarea.value;
+  
+  let replacement = replaceText;
+  if (isRegexMode) {
+    try {
+      const regex = new RegExp(findInput.value, "i");
+      replacement = match.text.replace(regex, replaceText);
+    } catch (e) {}
+  }
+  
+  const newContent = text.substring(0, match.start) + replacement + text.substring(match.end);
+  editorTextarea.value = newContent;
+  
+  // Keep active note updated
+  const activeNote = notes.find(n => n.id === activeNoteId);
+  if (activeNote) {
+    activeNote.content = newContent;
+    activeNote.updatedAt = Date.now();
+    saveNotesToStorage();
+    renderNoteList(searchInput.value);
+    updateMarkdownPreview();
+    updateWordCharCount();
+  }
+  
+  const targetIndex = activeMatchIndex;
+  runFind();
+  if (findMatches.length > 0) {
+    selectMatch(Math.min(targetIndex, findMatches.length - 1), false);
+  }
+}
+
+function replaceAll() {
+  if (findMatches.length === 0) return;
+  const query = findInput.value;
+  const replaceText = replaceInput.value;
+  const text = editorTextarea.value;
+  const totalMatches = findMatches.length;
+  
+  let newContent = "";
+  if (isRegexMode) {
+    try {
+      const regex = new RegExp(query, "gi");
+      newContent = text.replace(regex, replaceText);
+    } catch (e) {
+      return;
+    }
+  } else {
+    const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(escapedQuery, "gi");
+    newContent = text.replace(regex, replaceText);
+  }
+  
+  editorTextarea.value = newContent;
+  
+  const activeNote = notes.find(n => n.id === activeNoteId);
+  if (activeNote) {
+    activeNote.content = newContent;
+    activeNote.updatedAt = Date.now();
+    saveNotesToStorage();
+    renderNoteList(searchInput.value);
+    updateMarkdownPreview();
+    updateWordCharCount();
+  }
+  
+  showNotification(`Replaced ${totalMatches} occurrences`);
+  runFind();
+}
+
+function updateFindCount(customText) {
+  if (customText) {
+    findCount.textContent = customText;
+  } else if (findMatches.length === 0) {
     findCount.textContent = "0 of 0";
   } else {
     findCount.textContent = `${activeMatchIndex + 1} of ${findMatches.length}`;

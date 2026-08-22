@@ -108,26 +108,43 @@
 
       <!-- Editor Container -->
       <div class="editor-pane" id="editor-pane">
-        <!-- Find Bar -->
+        <!-- Find & Replace Bar -->
         <div class="find-bar" id="find-bar">
-          <input type="text" id="find-input" placeholder="Find in document..." autocomplete="off" />
-          <span class="find-count" id="find-count">0 of 0</span>
-          <button class="find-btn" id="find-prev" title="Previous Match (Shift+Enter)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="18 15 12 9 6 15" />
-            </svg>
-          </button>
-          <button class="find-btn" id="find-next" title="Next Match (Enter)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </button>
-          <button class="find-btn find-close" id="find-close" title="Close (Esc)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
+          <div class="find-row">
+            <button class="find-btn find-toggle-replace" id="find-toggle-replace" title="Toggle Replace (Cmd+H)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
+            <div class="find-input-wrapper">
+              <input type="text" id="find-input" placeholder="Find in document..." autocomplete="off" />
+              <button class="find-option-btn" id="find-regex-toggle" title="Use Regular Expression (Alt+R)">.*</button>
+            </div>
+            <span class="find-count" id="find-count">0 of 0</span>
+            <button class="find-btn" id="find-prev" title="Previous Match (Shift+Enter)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="18 15 12 9 6 15" />
+              </svg>
+            </button>
+            <button class="find-btn" id="find-next" title="Next Match (Enter)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+            <button class="find-btn find-close" id="find-close" title="Close (Esc)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+          <div class="replace-row" id="replace-row" style="display: none;">
+            <div class="find-input-wrapper replace-input-wrapper">
+              <input type="text" id="replace-input" placeholder="Replace with..." autocomplete="off" />
+            </div>
+            <button class="find-action-btn" id="replace-one-btn" title="Replace Current Match">Replace</button>
+            <button class="find-action-btn" id="replace-all-btn" title="Replace All Matches">Replace All</button>
+          </div>
         </div>
         <!-- Edit Area -->
         <div class="editor-wrapper" id="editor-wrapper">

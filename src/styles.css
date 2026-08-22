@@ -922,51 +922,106 @@ body {
 }
 
 /* ----------------------------------------------------
-   Find Widget Styles
+   Find & Replace Widget Styles
    ---------------------------------------------------- */
 .find-bar {
   display: none;
   position: absolute;
   top: 12px;
   right: 24px;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
   background-color: var(--sidebar-bg);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
-  padding: 6px 12px;
-  height: 38px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border-radius: 8px;
+  padding: 8px 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
   box-sizing: border-box;
   animation: slideDown 0.15s ease-out;
   z-index: 100;
+  min-width: 340px;
 }
 
 @keyframes slideDown {
-  from { transform: translateY(-20px); opacity: 0; }
+  from { transform: translateY(-10px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
 
-#find-input {
+.find-row,
+.replace-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.find-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+#find-input,
+#replace-input {
   background-color: var(--editor-bg);
   border: 1px solid var(--border-color);
   color: var(--text-primary);
   border-radius: 4px;
   padding: 4px 8px;
   font-size: 0.8rem;
-  width: 220px;
+  width: 100%;
   outline: none;
   font-family: inherit;
+  box-sizing: border-box;
 }
 
-#find-input:focus {
+#find-input {
+  padding-right: 28px;
+}
+
+#find-input.invalid-regex {
+  border-color: #ef4444 !important;
+  color: #ef4444;
+}
+
+#find-input:focus,
+#replace-input:focus {
+  border-color: var(--accent-color);
+}
+
+.find-option-btn {
+  position: absolute;
+  right: 4px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 1px 4px;
+  cursor: pointer;
+  line-height: 1;
+  transition: all 0.15s ease;
+}
+
+.find-option-btn:hover {
+  background-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.find-option-btn.active {
+  background-color: var(--accent-color);
+  color: #ffffff;
   border-color: var(--accent-color);
 }
 
 .find-count {
   font-size: 0.75rem;
   color: var(--text-secondary);
-  min-width: 70px;
+  min-width: 60px;
+  text-align: center;
   user-select: none;
 }
 
@@ -995,8 +1050,34 @@ body {
   height: 14px;
 }
 
+.find-toggle-replace svg {
+  transition: transform 0.15s ease;
+}
+
+.find-toggle-replace.expanded svg {
+  transform: rotate(90deg);
+}
+
 .find-close:hover {
   background-color: #ef4444;
   color: #ffffff;
+}
+
+.find-action-btn {
+  background-color: var(--editor-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.find-action-btn:hover {
+  background-color: var(--border-color);
+  border-color: var(--text-secondary);
 }
 
