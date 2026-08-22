@@ -339,14 +339,27 @@ body {
 .note-item {
   padding: 10px 12px;
   border-radius: 8px;
-  cursor: pointer;
+  cursor: grab;
   display: flex;
   flex-direction: column;
   gap: 4px;
   position: relative;
-  border: 1px solid transparent;
-  transition: opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+  border: 2px solid transparent;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
   user-select: none;
+  -webkit-user-select: none;
+}
+
+.note-item:active {
+  cursor: grabbing;
+}
+
+.note-item * {
+  pointer-events: none;
+}
+
+.note-item .note-item-delete {
+  pointer-events: auto;
 }
 
 .note-item:hover {
@@ -359,9 +372,9 @@ body {
 }
 
 .note-item.dragging {
-  opacity: 0.4;
+  opacity: 0.35;
   background-color: var(--bg-input);
-  border: 1px dashed var(--accent-color);
+  border: 2px dashed var(--accent-color);
 }
 
 .note-item.drag-over-top {

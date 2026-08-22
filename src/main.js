@@ -397,22 +397,25 @@ function renderNoteList(filter = "") {
       item.classList.toggle("drag-over-bottom", !isTop);
     });
 
-    item.addEventListener("dragleave", () => {
+    item.addEventListener("dragleave", (e) => {
+      if (e.relatedTarget && item.contains(e.relatedTarget)) return;
       item.classList.remove("drag-over-top", "drag-over-bottom");
     });
 
     item.addEventListener("drop", (e) => {
       e.preventDefault();
+      e.stopPropagation();
       item.classList.remove("drag-over-top", "drag-over-bottom");
-      if (!draggedNoteId || draggedNoteId === note.id) return;
       
-      const fromIndex = notes.findIndex(n => n.id === draggedNoteId);
+      const sourceId = draggedNoteId || e.dataTransfer.getData("text/plain");
+      if (!sourceId || sourceId === note.id) return;
+      
+      const fromIndex = notes.findIndex(n => n.id === sourceId);
       const toIndex = notes.findIndex(n => n.id === note.id);
       if (fromIndex === -1 || toIndex === -1) return;
       
       const rect = item.getBoundingClientRect();
-      const offset = e.clientY - rect.top;
-      const isTop = offset < rect.height / 2;
+      const isTop = (e.clientY - rect.top) < (rect.height / 2);
       
       // Remove dragged note from list
       const [draggedNote] = notes.splice(fromIndex, 1);
