@@ -648,6 +648,10 @@ body {
   overflow-y: auto;
 }
 
+.editor-textarea::selection {
+  background-color: rgba(139, 92, 246, 0.35) !important;
+}
+
 /* Divider block between edit and preview (visible in split) */
 .editor-divider {
   width: 1px;
