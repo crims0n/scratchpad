@@ -78,6 +78,14 @@
         </div>
 
         <div class="topbar-right">
+          <!-- Split Note View Toggle -->
+          <button class="icon-btn" id="split-note-btn" title="Toggle Dual Note Split View (Cmd+\)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+              <line x1="12" y1="3" x2="12" y2="21" />
+            </svg>
+          </button>
+
           <!-- Focus Mode -->
           <button class="icon-btn" id="focus-btn" title="Focus Mode (Cmd+Shift+F)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -106,58 +114,87 @@
         </div>
       </header>
 
-      <!-- Editor Container -->
-      <div class="editor-pane" id="editor-pane">
-        <!-- Find & Replace Bar -->
-        <div class="find-bar" id="find-bar">
-          <div class="find-row">
-            <button class="find-btn find-toggle-replace" id="find-toggle-replace" title="Toggle Replace (Cmd+H)">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="9 18 15 12 9 6" />
-              </svg>
-            </button>
-            <div class="find-input-wrapper">
-              <input type="text" id="find-input" placeholder="Find in document..." autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
-              <button class="find-option-btn" id="find-regex-toggle" title="Use Regular Expression (Alt+R)">.*</button>
+      <!-- Panes Container -->
+      <div class="panes-container" id="panes-container">
+        <!-- Primary Pane -->
+        <div class="pane-wrapper active-pane" id="primary-pane-wrapper">
+          <div class="editor-pane" id="editor-pane">
+            <!-- Find & Replace Bar -->
+            <div class="find-bar" id="find-bar">
+              <div class="find-row">
+                <button class="find-btn find-toggle-replace" id="find-toggle-replace" title="Toggle Replace (Cmd+H)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                </button>
+                <div class="find-input-wrapper">
+                  <input type="text" id="find-input" placeholder="Find in document..." autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
+                  <button class="find-option-btn" id="find-regex-toggle" title="Use Regular Expression (Alt+R)">.*</button>
+                </div>
+                <span class="find-count" id="find-count">0 of 0</span>
+                <button class="find-btn" id="find-prev" title="Previous Match (Shift+Enter)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="18 15 12 9 6 15" />
+                  </svg>
+                </button>
+                <button class="find-btn" id="find-next" title="Next Match (Enter)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </button>
+                <button class="find-btn find-close" id="find-close" title="Close (Esc)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+              <div class="replace-row" id="replace-row" style="display: none;">
+                <div class="find-input-wrapper replace-input-wrapper">
+                  <input type="text" id="replace-input" placeholder="Replace with..." autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
+                </div>
+                <button class="find-action-btn" id="replace-one-btn" title="Replace Current Match">Replace</button>
+                <button class="find-action-btn" id="replace-all-btn" title="Replace All Matches">Replace All</button>
+              </div>
             </div>
-            <span class="find-count" id="find-count">0 of 0</span>
-            <button class="find-btn" id="find-prev" title="Previous Match (Shift+Enter)">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="18 15 12 9 6 15" />
-              </svg>
-            </button>
-            <button class="find-btn" id="find-next" title="Next Match (Enter)">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </button>
-            <button class="find-btn find-close" id="find-close" title="Close (Esc)">
+            <!-- Edit Area -->
+            <div class="editor-wrapper" id="editor-wrapper">
+              <div class="editor-backdrop" id="editor-backdrop"></div>
+              <textarea class="editor-textarea" id="editor-textarea" placeholder="Type something here... Supports Markdown formatting." spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off"></textarea>
+            </div>
+
+            <!-- Divider line (visible in split mode) -->
+            <div class="editor-divider" id="editor-divider"></div>
+
+            <!-- Preview Area -->
+            <div class="preview-wrapper" id="preview-wrapper">
+              <div class="markdown-preview" id="markdown-preview"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Secondary Pane (Split Note View) -->
+        <div class="pane-wrapper secondary-pane-wrapper" id="secondary-pane-wrapper" style="display: none;">
+          <div class="secondary-pane-header">
+            <select class="secondary-note-select" id="secondary-note-select" title="Switch Secondary Note"></select>
+            <input type="text" class="note-title-input secondary-title-input" id="secondary-note-title" placeholder="Untitled Scratchpad" autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
+            <button class="icon-btn close-secondary-btn" id="close-secondary-btn" title="Close Split View (Cmd+\)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             </button>
           </div>
-          <div class="replace-row" id="replace-row" style="display: none;">
-            <div class="find-input-wrapper replace-input-wrapper">
-              <input type="text" id="replace-input" placeholder="Replace with..." autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
+          <div class="editor-pane" id="secondary-editor-pane">
+            <div class="editor-wrapper" id="secondary-editor-wrapper">
+              <div class="editor-backdrop" id="secondary-editor-backdrop"></div>
+              <textarea class="editor-textarea" id="secondary-editor-textarea" placeholder="Type something here... Supports Markdown formatting." spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off"></textarea>
             </div>
-            <button class="find-action-btn" id="replace-one-btn" title="Replace Current Match">Replace</button>
-            <button class="find-action-btn" id="replace-all-btn" title="Replace All Matches">Replace All</button>
+            <div class="editor-divider" id="secondary-editor-divider"></div>
+            <div class="preview-wrapper" id="secondary-preview-wrapper">
+              <div class="markdown-preview" id="secondary-markdown-preview"></div>
+            </div>
           </div>
-        </div>
-        <!-- Edit Area -->
-        <div class="editor-wrapper" id="editor-wrapper">
-          <div class="editor-backdrop" id="editor-backdrop"></div>
-          <textarea class="editor-textarea" id="editor-textarea" placeholder="Type something here... Supports Markdown formatting." spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off"></textarea>
-        </div>
-
-        <!-- Divider line (visible in split mode) -->
-        <div class="editor-divider" id="editor-divider"></div>
-
-        <!-- Preview Area -->
-        <div class="preview-wrapper" id="preview-wrapper">
-          <div class="markdown-preview" id="markdown-preview"></div>
         </div>
       </div>
 
@@ -196,6 +233,10 @@
     <button class="context-menu-item" id="ctx-find">
       <span>Find in Note</span>
       <span class="shortcut-hint">Cmd+F</span>
+    </button>
+    <button class="context-menu-item" id="ctx-open-side" style="display: none;">
+      <span>Open to the Side</span>
+      <span class="shortcut-hint">Cmd+\</span>
     </button>
   </div>
 </body>

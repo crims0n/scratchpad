@@ -7,10 +7,11 @@ An opinionated, cross-platform, high-efficiency desktop text editor designed to 
 
 - 💾 **Instant Auto-Save**: Never lose a thought. Every keystroke is saved automatically to local storage, debounced to maintain maximum system efficiency.
 - 🗄️ **SQLite DB Workspace Mode**: Connect to a local SQLite database file (`.db` or `.sqlite`) to save, sync, and persist your notes list natively. Automatically seeds new database files with your current LocalStorage drafts.
+- ◫ **Dual-Note Split View**: View and edit two distinct scratchpads simultaneously side by side with independent title editing, auto-save, and note selection.
 - 🔍 **Find & Replace with Regex**: Powerful document search with real-time match highlighting, single/bulk replace, and regular expression mode (`.*`) supporting full capture groups.
 - 📝 **Live Markdown Preview**: Toggle between full editor view, split pane (sync-scrolled edit and preview), and full preview.
 - 📊 **Contextual Highlighting Stats**: Displays overall word and character counts. Highlighting text displays selection stats (e.g. `5 words • 30 characters selected`) on the right next to the Save indicator.
-- 📥 **Native File Import**: Pick and import Markdown (`.md`/`.markdown`) and text (`.txt`) files from your filesystem to create new scratchpads.
+- 📥 **Native File Import**: Pick and import Markdown, source code, text files, and extensionless documents with automatic validation and alerts.
 - 📤 **Custom Directory File Export**: Export your notes to any directory on your filesystem using native OS directory save dialogs.
 - 📁 **Sidebar Scratch Manager**: Create, delete, and search across multiple drafts/notes on the fly.
 - ⚡ **Auto-Renaming**: Scratchpads auto-rename themselves based on the first line of text you write, unless you manually lock the title.
@@ -25,6 +26,7 @@ An opinionated, cross-platform, high-efficiency desktop text editor designed to 
 | --- | --- |
 | `Cmd + N` or `Ctrl + N` | Create a new scratchpad |
 | `Cmd + B` or `Ctrl + B` | Toggle sidebar visibility |
+| `Cmd + \` or `Ctrl + \` | Toggle Dual-Note Split View (Side-by-Side) |
 | `Cmd + F` or `Ctrl + F` | Toggle Find bar |
 | `Cmd + H` or `Ctrl + H` | Toggle Find & Replace |
 | `Alt + R` | Toggle Regular Expression mode in Find |

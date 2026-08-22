@@ -20,6 +20,7 @@ const selectionCount = document.getElementById("selection-count");
 const saveStatus = document.getElementById("save-status");
 const themeToggleBtn = document.getElementById("theme-toggle");
 const focusBtn = document.getElementById("focus-btn");
+const splitNoteBtn = document.getElementById("split-note-btn");
 
 const modeEditBtn = document.getElementById("mode-edit");
 const modeSplitBtn = document.getElementById("mode-split");
@@ -34,6 +35,20 @@ const exportBtn = document.getElementById("export-btn");
 const dbConnectBtn = document.getElementById("db-connect-btn");
 const dbDisconnectBtn = document.getElementById("db-disconnect-btn");
 const dbDivider = document.getElementById("db-divider");
+
+const panesContainer = document.getElementById("panes-container");
+const primaryPaneWrapper = document.getElementById("primary-pane-wrapper");
+const secondaryPaneWrapper = document.getElementById("secondary-pane-wrapper");
+const secondaryNoteSelect = document.getElementById("secondary-note-select");
+const secondaryNoteTitle = document.getElementById("secondary-note-title");
+const closeSecondaryBtn = document.getElementById("close-secondary-btn");
+const secondaryEditorPane = document.getElementById("secondary-editor-pane");
+const secondaryEditorWrapper = document.getElementById("secondary-editor-wrapper");
+const secondaryEditorTextarea = document.getElementById("secondary-editor-textarea");
+const secondaryEditorBackdrop = document.getElementById("secondary-editor-backdrop");
+const secondaryEditorDivider = document.getElementById("secondary-editor-divider");
+const secondaryPreviewWrapper = document.getElementById("secondary-preview-wrapper");
+const secondaryMarkdownPreview = document.getElementById("secondary-markdown-preview");
 
 const findBar = document.getElementById("find-bar");
 const findInput = document.getElementById("find-input");
@@ -55,10 +70,14 @@ const ctxCopyBtn = document.getElementById("ctx-copy");
 const ctxPasteBtn = document.getElementById("ctx-paste");
 const ctxSelectAllBtn = document.getElementById("ctx-select-all");
 const ctxFindBtn = document.getElementById("ctx-find");
+const ctxOpenSideBtn = document.getElementById("ctx-open-side");
 
 // State
 let notes = [];
 let activeNoteId = null;
+let secondaryNoteId = null;
+let activePane = "primary"; // "primary" or "secondary"
+let isSplitNoteMode = false;
 let activeDbPath = null;
 let currentLayoutMode = "edit"; // edit, split, preview
 let isFocusMode = false;
@@ -66,6 +85,7 @@ let findMatches = [];
 let activeMatchIndex = -1;
 let isFindBarOpen = false;
 let contextMenuTarget = null;
+let contextMenuNoteId = null;
 let isRegexMode = false;
 let isReplaceOpen = false;
 let saveDebounceTimer = null;
@@ -325,9 +345,22 @@ function renderNoteList(filter = "") {
     
     // Switch to selected note on click
     item.addEventListener("click", () => {
-      activeNoteId = note.id;
-      renderNoteList(searchInput.value);
-      loadActiveNote();
+      if (isSplitNoteMode && activePane === "secondary") {
+        secondaryNoteId = note.id;
+        populateSecondaryNoteSelect();
+        loadSecondaryNote();
+      } else {
+        activeNoteId = note.id;
+        renderNoteList(searchInput.value);
+        loadActiveNote();
+      }
+    });
+
+    // Right click to open in side pane
+    item.addEventListener("contextmenu", (e) => {
+      e.stopPropagation();
+      contextMenuNoteId = note.id;
+      showContextMenu(e, note.id);
     });
     
     // Delete listener
@@ -685,6 +718,19 @@ function attachEventListeners() {
   // Focus toggle
   focusBtn.addEventListener("click", toggleFocusMode);
 
+  // Split Note toggle
+  splitNoteBtn.addEventListener("click", () => toggleSplitNoteMode());
+  closeSecondaryBtn.addEventListener("click", () => toggleSplitNoteMode(false));
+  secondaryNoteSelect.addEventListener("change", (e) => {
+    secondaryNoteId = e.target.value;
+    loadSecondaryNote();
+  });
+  secondaryEditorTextarea.addEventListener("input", handleSecondaryEditorInput);
+  secondaryEditorTextarea.addEventListener("select", () => updateWordCharCountForText(secondaryEditorTextarea));
+  secondaryEditorTextarea.addEventListener("focus", () => setActivePane("secondary"));
+  editorTextarea.addEventListener("focus", () => setActivePane("primary"));
+  secondaryNoteTitle.addEventListener("input", handleSecondaryTitleInput);
+
   // Theme toggle
   themeToggleBtn.addEventListener("click", toggleTheme);
 
@@ -715,6 +761,12 @@ function attachEventListeners() {
   ctxPasteBtn.addEventListener("click", handleContextPaste);
   ctxSelectAllBtn.addEventListener("click", handleContextSelectAll);
   ctxFindBtn.addEventListener("click", handleContextFind);
+  ctxOpenSideBtn.addEventListener("click", () => {
+    hideContextMenu();
+    if (contextMenuNoteId) {
+      openNoteInSecondaryPane(contextMenuNoteId);
+    }
+  });
 
   // Find & Replace Widget events
   findInput.addEventListener("input", runFind);
@@ -786,6 +838,10 @@ function attachEventListeners() {
       e.preventDefault();
       toggleRegexMode();
     }
+    if (isMeta && (e.key === "\\" || e.key === "|")) {
+      e.preventDefault();
+      toggleSplitNoteMode();
+    }
     if (isMeta && isShift && e.key.toLowerCase() === "f") {
       e.preventDefault();
       toggleFocusMode();
@@ -813,6 +869,20 @@ function attachEventListeners() {
     const previewScrollHeight = markdownPreview.scrollHeight - markdownPreview.clientHeight;
     
     markdownPreview.scrollTop = percentage * previewScrollHeight;
+  });
+
+  secondaryEditorTextarea.addEventListener("scroll", () => {
+    secondaryEditorBackdrop.scrollTop = secondaryEditorTextarea.scrollTop;
+
+    if (currentLayoutMode !== "split") return;
+    
+    const editScrollHeight = secondaryEditorTextarea.scrollHeight - secondaryEditorTextarea.clientHeight;
+    if (editScrollHeight <= 0) return;
+    
+    const percentage = secondaryEditorTextarea.scrollTop / editScrollHeight;
+    const previewScrollHeight = secondaryMarkdownPreview.scrollHeight - secondaryMarkdownPreview.clientHeight;
+    
+    secondaryMarkdownPreview.scrollTop = percentage * previewScrollHeight;
   });
 }
 
@@ -1209,26 +1279,44 @@ function updateHighlights() {
 // ----------------------------------------------------
 // Custom Context Menu Logic
 // ----------------------------------------------------
-function showContextMenu(e) {
+function showContextMenu(e, noteId = null) {
   e.preventDefault();
   
-  const target = e.target.closest("textarea, input[type='text'], .markdown-preview");
-  if (!target) {
-    hideContextMenu();
-    return;
-  }
-  
-  contextMenuTarget = target;
-  
-  let hasSelection = false;
-  if (target.tagName === "TEXTAREA" || target.tagName === "INPUT") {
-    hasSelection = target.selectionStart !== target.selectionEnd;
+  if (noteId) {
+    contextMenuNoteId = noteId;
+    ctxOpenSideBtn.style.display = "flex";
+    ctxCutBtn.style.display = "none";
+    ctxCopyBtn.style.display = "none";
+    ctxPasteBtn.style.display = "none";
+    ctxSelectAllBtn.style.display = "none";
+    ctxFindBtn.style.display = "none";
   } else {
-    hasSelection = Boolean(window.getSelection().toString());
+    contextMenuNoteId = null;
+    ctxOpenSideBtn.style.display = "none";
+    ctxCutBtn.style.display = "flex";
+    ctxCopyBtn.style.display = "flex";
+    ctxPasteBtn.style.display = "flex";
+    ctxSelectAllBtn.style.display = "flex";
+    ctxFindBtn.style.display = "flex";
+    
+    const target = e.target.closest("textarea, input[type='text'], .markdown-preview");
+    if (!target) {
+      hideContextMenu();
+      return;
+    }
+    
+    contextMenuTarget = target;
+    
+    let hasSelection = false;
+    if (target.tagName === "TEXTAREA" || target.tagName === "INPUT") {
+      hasSelection = target.selectionStart !== target.selectionEnd;
+    } else {
+      hasSelection = Boolean(window.getSelection().toString());
+    }
+    
+    ctxCutBtn.disabled = !hasSelection;
+    ctxCopyBtn.disabled = !hasSelection;
   }
-  
-  ctxCutBtn.disabled = !hasSelection;
-  ctxCopyBtn.disabled = !hasSelection;
   
   const menuWidth = 180;
   const menuHeight = 180;
@@ -1314,6 +1402,174 @@ function handleContextSelectAll() {
 function handleContextFind() {
   hideContextMenu();
   toggleFindBar();
+}
+
+// ----------------------------------------------------
+// Dual-Note Split View Functions
+// ----------------------------------------------------
+function toggleSplitNoteMode(forceState) {
+  isSplitNoteMode = typeof forceState === "boolean" ? forceState : !isSplitNoteMode;
+  
+  if (isSplitNoteMode) {
+    panesContainer.classList.add("dual-split-mode");
+    secondaryPaneWrapper.style.display = "flex";
+    splitNoteBtn.classList.add("active");
+    
+    // Choose secondary note (different from activeNoteId if possible)
+    if (!secondaryNoteId || secondaryNoteId === activeNoteId) {
+      const otherNote = notes.find(n => n.id !== activeNoteId);
+      secondaryNoteId = otherNote ? otherNote.id : activeNoteId;
+    }
+    
+    populateSecondaryNoteSelect();
+    loadSecondaryNote();
+    showNotification("Dual-Note Split View enabled");
+  } else {
+    panesContainer.classList.remove("dual-split-mode");
+    secondaryPaneWrapper.style.display = "none";
+    splitNoteBtn.classList.remove("active");
+    activePane = "primary";
+    editorTextarea.focus();
+  }
+}
+
+function openNoteInSecondaryPane(noteId) {
+  if (!noteId) return;
+  secondaryNoteId = noteId;
+  if (!isSplitNoteMode) {
+    toggleSplitNoteMode(true);
+  } else {
+    populateSecondaryNoteSelect();
+    loadSecondaryNote();
+  }
+  activePane = "secondary";
+  setActivePane("secondary");
+  secondaryEditorTextarea.focus();
+}
+
+function populateSecondaryNoteSelect() {
+  secondaryNoteSelect.innerHTML = "";
+  notes.forEach(note => {
+    const opt = document.createElement("option");
+    opt.value = note.id;
+    opt.textContent = note.title || "Untitled Scratchpad";
+    if (note.id === secondaryNoteId) {
+      opt.selected = true;
+    }
+    secondaryNoteSelect.appendChild(opt);
+  });
+}
+
+function loadSecondaryNote() {
+  const note = notes.find(n => n.id === secondaryNoteId);
+  if (!note) return;
+
+  secondaryNoteTitle.value = note.title;
+  secondaryEditorTextarea.value = note.content;
+  
+  updateSecondaryMarkdownPreview();
+  if (secondaryNoteSelect.value !== note.id) {
+    secondaryNoteSelect.value = note.id;
+  }
+}
+
+function handleSecondaryEditorInput() {
+  const note = notes.find(n => n.id === secondaryNoteId);
+  if (!note) return;
+
+  note.content = secondaryEditorTextarea.value;
+  note.updatedAt = Date.now();
+
+  // Auto-rename if not locked
+  if (!note.isTitleLocked) {
+    const firstLine = note.content.trim().split("\n")[0];
+    if (firstLine && firstLine.length > 0) {
+      const cleanTitle = firstLine.replace(/^#+\s*/, "").trim().substring(0, 40);
+      if (cleanTitle) {
+        note.title = cleanTitle;
+        secondaryNoteTitle.value = cleanTitle;
+        populateSecondaryNoteSelect();
+      }
+    }
+  }
+
+  triggerSavingState();
+
+  clearTimeout(saveDebounceTimer);
+  saveDebounceTimer = setTimeout(() => {
+    saveNotesToStorage();
+    renderNoteList(searchInput.value);
+    setSavedState();
+  }, 400);
+
+  clearTimeout(previewDebounceTimer);
+  previewDebounceTimer = setTimeout(() => {
+    updateSecondaryMarkdownPreview();
+    if (activePane === "secondary") {
+      updateWordCharCountForText(secondaryEditorTextarea);
+    }
+  }, 150);
+}
+
+function handleSecondaryTitleInput() {
+  const note = notes.find(n => n.id === secondaryNoteId);
+  if (!note) return;
+
+  note.title = secondaryNoteTitle.value.trim() || "Untitled Scratchpad";
+  note.isTitleLocked = true;
+  note.updatedAt = Date.now();
+
+  triggerSavingState();
+
+  clearTimeout(saveDebounceTimer);
+  saveDebounceTimer = setTimeout(() => {
+    saveNotesToStorage();
+    renderNoteList(searchInput.value);
+    populateSecondaryNoteSelect();
+    setSavedState();
+  }, 400);
+}
+
+function updateSecondaryMarkdownPreview() {
+  if (currentLayoutMode === "edit") return;
+  if (window.marked) {
+    secondaryMarkdownPreview.innerHTML = window.marked.parse(secondaryEditorTextarea.value);
+  }
+}
+
+function setActivePane(pane) {
+  activePane = pane;
+  if (pane === "secondary") {
+    primaryPaneWrapper.classList.remove("active-pane");
+    secondaryPaneWrapper.classList.add("active-pane");
+    updateWordCharCountForText(secondaryEditorTextarea);
+  } else {
+    primaryPaneWrapper.classList.add("active-pane");
+    secondaryPaneWrapper.classList.remove("active-pane");
+    updateWordCharCountForText(editorTextarea);
+  }
+}
+
+function updateWordCharCountForText(el) {
+  const text = el.value || "";
+  const totalWords = text.trim() ? text.trim().split(/\s+/).filter(Boolean).length : 0;
+  const totalChars = text.length;
+  
+  wordCharCount.textContent = `${totalWords} word${totalWords !== 1 ? 's' : ''} • ${totalChars} character${totalChars !== 1 ? 's' : ''}`;
+
+  const start = el.selectionStart;
+  const end = el.selectionEnd;
+  
+  if (start !== end && start !== undefined && end !== undefined) {
+    const selectedText = text.substring(start, end);
+    const selectedWords = selectedText.trim() ? selectedText.trim().split(/\s+/).filter(Boolean).length : 0;
+    const selectedChars = selectedText.length;
+    
+    selectionCount.textContent = `${selectedWords} word${selectedWords !== 1 ? 's' : ''} • ${selectedChars} character${selectedChars !== 1 ? 's' : ''} selected`;
+    selectionCount.style.display = "inline-block";
+  } else {
+    selectionCount.style.display = "none";
+  }
 }
 
 // Boot up!
