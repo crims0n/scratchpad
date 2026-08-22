@@ -320,7 +320,6 @@ function renderNoteList(filter = "") {
     const item = document.createElement("li");
     item.className = `note-item ${note.id === activeNoteId ? "active" : ""}`;
     item.setAttribute("data-id", note.id);
-    item.setAttribute("draggable", "true");
     
     // Snippet formatting
     const firstLine = note.content.trim().split("\n")[0] || "";
@@ -348,8 +347,14 @@ function renderNoteList(filter = "") {
       </div>
     `;
     
+    let isItemDragged = false;
+
     // Switch to selected note on click
-    item.addEventListener("click", () => {
+    item.addEventListener("click", (e) => {
+      if (isItemDragged) {
+        isItemDragged = false;
+        return;
+      }
       if (isSplitNoteMode && activePane === "secondary") {
         secondaryNoteId = note.id;
         populateSecondaryNoteSelect();
@@ -372,6 +377,11 @@ function renderNoteList(filter = "") {
     item.addEventListener("pointerdown", (e) => {
       if (e.button !== 0 || e.target.closest(".note-item-delete")) return;
       
+      const pointerId = e.pointerId;
+      try {
+        item.setPointerCapture(pointerId);
+      } catch (err) {}
+
       const startX = e.clientX;
       const startY = e.clientY;
       let hasDragged = false;
@@ -386,6 +396,7 @@ function renderNoteList(filter = "") {
         // 4px threshold to distinguish normal click from dragging
         if (!hasDragged && Math.hypot(dx, dy) > 4) {
           hasDragged = true;
+          isItemDragged = true;
           item.classList.add("dragging");
 
           dragAvatar = item.cloneNode(true);
@@ -428,7 +439,11 @@ function renderNoteList(filter = "") {
         }
       }
 
-      function onPointerUp() {
+      function onPointerUp(upEvent) {
+        try {
+          item.releasePointerCapture(pointerId);
+        } catch (err) {}
+
         window.removeEventListener("pointermove", onPointerMove);
         window.removeEventListener("pointerup", onPointerUp);
 

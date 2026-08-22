@@ -348,6 +348,7 @@ body {
   transition: background-color 0.15s ease, border-color 0.15s ease;
   user-select: none;
   -webkit-user-select: none;
+  touch-action: none;
 }
 
 .note-item:active {
