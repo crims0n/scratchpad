@@ -41,6 +41,7 @@ const findCount = document.getElementById("find-count");
 const findPrevBtn = document.getElementById("find-prev");
 const findNextBtn = document.getElementById("find-next");
 const findCloseBtn = document.getElementById("find-close");
+const editorBackdrop = document.getElementById("editor-backdrop");
 
 // State
 let notes = [];
@@ -254,7 +255,9 @@ function loadActiveNote() {
   
   // Reset scrolling of editor & preview
   editorTextarea.scrollTop = 0;
+  editorBackdrop.scrollTop = 0;
   markdownPreview.scrollTop = 0;
+  updateHighlights();
 }
 
 function renderNoteList(filter = "") {
@@ -336,6 +339,7 @@ function handleEditorInput() {
 
   activeNote.content = editorTextarea.value;
   activeNote.updatedAt = Date.now();
+  updateHighlights();
 
   // Premium feature: auto-rename title from first line of text
   if (!activeNote.isTitleLocked) {
@@ -724,8 +728,10 @@ function attachEventListeners() {
     }
   });
 
-  // Sync scrolling of Edit & Preview in Split mode
+  // Sync scrolling of Edit & Preview in Split mode + Backdrop scroll always
   editorTextarea.addEventListener("scroll", () => {
+    editorBackdrop.scrollTop = editorTextarea.scrollTop;
+
     if (currentLayoutMode !== "split") return;
     
     const editScrollHeight = editorTextarea.scrollHeight - editorTextarea.clientHeight;
@@ -884,6 +890,7 @@ function hideFindBar() {
   activeMatchIndex = -1;
   findInput.value = "";
   updateFindCount();
+  updateHighlights();
   editorTextarea.focus();
 }
 
@@ -894,6 +901,7 @@ function runFind() {
   
   if (!query) {
     updateFindCount();
+    updateHighlights();
     return;
   }
   
@@ -915,6 +923,7 @@ function runFind() {
     selectMatch(0, false); // Do not steal focus from search input
   } else {
     updateFindCount();
+    updateHighlights();
   }
 }
 
@@ -934,8 +943,10 @@ function selectMatch(index, focusEditor = false) {
   const lineHeight = parseFloat(window.getComputedStyle(editorTextarea).lineHeight) || 20;
   
   editorTextarea.scrollTop = (lineCountBefore - 3) * lineHeight;
+  editorBackdrop.scrollTop = editorTextarea.scrollTop; // sync scroll immediately
   
   updateFindCount();
+  updateHighlights();
 }
 
 function findNext() {
@@ -956,6 +967,49 @@ function updateFindCount() {
   } else {
     findCount.textContent = `${activeMatchIndex + 1} of ${findMatches.length}`;
   }
+}
+
+function escapeHTML(text) {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function updateHighlights() {
+  const text = editorTextarea.value;
+  const query = findInput.value;
+  
+  if (!isFindBarOpen || !query || findMatches.length === 0) {
+    editorBackdrop.innerHTML = escapeHTML(text) + "\n";
+    return;
+  }
+  
+  let html = "";
+  let lastIndex = 0;
+  
+  for (let i = 0; i < findMatches.length; i++) {
+    const match = findMatches[i];
+    if (match.start < lastIndex) continue;
+    
+    const before = text.substring(lastIndex, match.start);
+    const matchText = text.substring(match.start, match.end);
+    
+    const isActive = (i === activeMatchIndex);
+    const markClass = isActive ? 'class="active-match"' : '';
+    
+    html += escapeHTML(before) + `<mark ${markClass}>` + escapeHTML(matchText) + "</mark>";
+    lastIndex = match.end;
+  }
+  html += escapeHTML(text.substring(lastIndex));
+  
+  if (html.endsWith("\n")) {
+    html += "\n";
+  }
+  
+  editorBackdrop.innerHTML = html;
 }
 
 // Boot up!

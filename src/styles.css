@@ -622,7 +622,15 @@ body {
   position: relative;
 }
 
-.editor-wrapper,
+.editor-wrapper {
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative; /* Positioning anchor for absolute child elements */
+}
+
 .preview-wrapper {
   flex: 1;
   height: 100%;
@@ -632,20 +640,49 @@ body {
 }
 
 /* Editor Specifics */
-.editor-textarea {
-  flex: 1;
+.editor-textarea,
+.editor-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
-  resize: none;
-  border: none;
-  background-color: var(--editor-bg);
-  color: var(--editor-text);
+  padding: 24px;
   font-family: var(--font-mono);
   font-size: 1rem;
   line-height: 1.6;
-  padding: 24px;
+  border: none;
+  box-sizing: border-box;
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.editor-textarea {
+  background: transparent;
+  color: var(--editor-text);
+  z-index: 2;
   outline: none;
+  resize: none;
   overflow-y: auto;
+}
+
+.editor-backdrop {
+  background-color: var(--editor-bg);
+  color: transparent; /* hide duplicate text, show mark highlights only */
+  z-index: 1;
+  overflow-y: hidden; /* scroll synced via JS */
+  pointer-events: none; /* passes all pointer interactions to textarea */
+}
+
+.editor-backdrop mark {
+  background-color: rgba(139, 92, 246, 0.3); /* Purple for general matches */
+  color: transparent;
+  border-radius: 2px;
+}
+
+.editor-backdrop mark.active-match {
+  background-color: rgba(234, 179, 8, 0.5) !important; /* Yellow for active match */
 }
 
 .editor-textarea::selection {
