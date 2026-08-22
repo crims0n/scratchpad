@@ -16,7 +16,7 @@ An opinionated, cross-platform, high-efficiency desktop text editor designed to 
 - 📁 **Sidebar Scratch Manager**: Create, delete, reorder (via drag & drop, context menu, or `Alt+↑`/`Alt+↓`), and search across multiple drafts on the fly.
 - ⚡ **Auto-Renaming**: Scratchpads auto-rename themselves based on the first line of text you write, unless you manually lock the title.
 - 🧘 **Focus Mode**: Press `Cmd+Shift+F` to clear all sidebars, status bars, and menus for a pure, distraction-free writing environment.
-- 🎨 **Adaptive Design System**: System-adaptive dark and light modes (respecting system theme transitions, with manual override pinning).
+- 🎨 **Terminal-Grade Color Theme Engine**: Built-in developer themes (*Dracula, Catppuccin Mocha, Nord, Tokyo Night, Monokai Pro, One Dark Pro, Solarized, GitHub Dark*), plus native import/export for `.json` and `.toml` custom color schemes.
 
 ---
 

@@ -112,6 +112,8 @@
               </svg>
             </button>
             <div class="dropdown-content" id="actions-dropdown-content">
+              <button class="dropdown-item" id="theme-picker-btn">Color Themes...</button>
+              <div class="dropdown-divider"></div>
               <button class="dropdown-item" id="copy-markdown">Copy Markdown</button>
               <button class="dropdown-item" id="copy-html">Copy HTML Preview</button>
               <div class="dropdown-divider"></div>
@@ -432,6 +434,43 @@ function hello() {
 --- (Horizontal Divider)</pre>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Color Themes Modal -->
+  <div class="help-modal-backdrop" id="theme-modal-backdrop" style="display: none;">
+    <div class="help-modal theme-modal" id="theme-modal">
+      <div class="help-modal-header">
+        <div class="theme-modal-title">
+          <span class="theme-modal-icon">🎨</span>
+          <h3>Color Themes</h3>
+        </div>
+        <div class="theme-modal-actions">
+          <button class="theme-action-btn" id="theme-import-btn" title="Import a .json or .toml theme file">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            <span>Import Theme...</span>
+          </button>
+          <button class="theme-action-btn" id="theme-export-btn" title="Export current theme as JSON">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            <span>Export Theme</span>
+          </button>
+          <button class="close-help-btn" id="close-theme-btn" title="Close (Escape)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="help-modal-body">
+        <div class="theme-grid" id="theme-grid">
+          <!-- Dynamically populated theme cards -->
         </div>
       </div>
     </div>

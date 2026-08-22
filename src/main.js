@@ -85,6 +85,127 @@ const paneShortcuts = document.getElementById("pane-shortcuts");
 const paneMarkdown = document.getElementById("pane-markdown");
 const splitDropOverlay = document.getElementById("split-drop-overlay");
 
+const themePickerBtn = document.getElementById("theme-picker-btn");
+const themeModalBackdrop = document.getElementById("theme-modal-backdrop");
+const closeThemeBtn = document.getElementById("close-theme-btn");
+const themeImportBtn = document.getElementById("theme-import-btn");
+const themeExportBtn = document.getElementById("theme-export-btn");
+const themeGrid = document.getElementById("theme-grid");
+
+// Built-in Developer Palette Presets
+const PRESET_THEMES = [
+  {
+    id: "default-dark",
+    name: "Default Dark",
+    background: "#090d16",
+    foreground: "#f3f4f6",
+    sidebar: "#111625",
+    accent: "#3b82f6",
+    border: "#1e2640",
+    selection: "#1d283d"
+  },
+  {
+    id: "default-light",
+    name: "Default Light",
+    background: "#f8fafc",
+    foreground: "#0f172a",
+    sidebar: "#ffffff",
+    accent: "#3b82f6",
+    border: "#e2e8f0",
+    selection: "#eff6ff"
+  },
+  {
+    id: "dracula",
+    name: "Dracula",
+    background: "#282a36",
+    foreground: "#f8f8f2",
+    sidebar: "#21222c",
+    accent: "#bd93f9",
+    border: "#44475a",
+    selection: "#44475a"
+  },
+  {
+    id: "catppuccin-mocha",
+    name: "Catppuccin Mocha",
+    background: "#1e1e2e",
+    foreground: "#cdd6f4",
+    sidebar: "#181825",
+    accent: "#89b4fa",
+    border: "#313244",
+    selection: "#45475a"
+  },
+  {
+    id: "nord",
+    name: "Nord",
+    background: "#2e3440",
+    foreground: "#eceff4",
+    sidebar: "#242933",
+    accent: "#88c0d0",
+    border: "#3b4252",
+    selection: "#434c5e"
+  },
+  {
+    id: "tokyo-night",
+    name: "Tokyo Night",
+    background: "#1a1b26",
+    foreground: "#a9b1d6",
+    sidebar: "#16161e",
+    accent: "#7aa2f7",
+    border: "#292e42",
+    selection: "#283457"
+  },
+  {
+    id: "monokai-pro",
+    name: "Monokai Pro",
+    background: "#2d2a2e",
+    foreground: "#fcfcfa",
+    sidebar: "#221f22",
+    accent: "#ffd866",
+    border: "#403e41",
+    selection: "#49464e"
+  },
+  {
+    id: "one-dark-pro",
+    name: "One Dark Pro",
+    background: "#282c34",
+    foreground: "#abb2bf",
+    sidebar: "#21252b",
+    accent: "#61afef",
+    border: "#3e4451",
+    selection: "#3e4451"
+  },
+  {
+    id: "solarized-dark",
+    name: "Solarized Dark",
+    background: "#002b36",
+    foreground: "#839496",
+    sidebar: "#073642",
+    accent: "#268bd2",
+    border: "#073642",
+    selection: "#073642"
+  },
+  {
+    id: "solarized-light",
+    name: "Solarized Light",
+    background: "#fdf6e3",
+    foreground: "#657b83",
+    sidebar: "#eee8d5",
+    accent: "#268bd2",
+    border: "#d33682",
+    selection: "#eee8d5"
+  },
+  {
+    id: "github-dark",
+    name: "GitHub Dark",
+    background: "#0d1117",
+    foreground: "#c9d1d9",
+    sidebar: "#010409",
+    accent: "#58a6ff",
+    border: "#30363d",
+    selection: "#1f6feb"
+  }
+];
+
 // State
 let notes = [];
 let activeNoteId = null;
@@ -96,6 +217,9 @@ let activeDbPath = null;
 let currentLayoutMode = "edit"; // edit, split, preview
 let isFocusMode = false;
 let isHelpModalOpen = false;
+let isThemeModalOpen = false;
+let customThemes = [];
+let activeThemeId = "default-dark";
 let findMatches = [];
 let activeMatchIndex = -1;
 let isFindBarOpen = false;
@@ -111,7 +235,8 @@ async function init() {
   // 1. Attach all event listeners immediately so all UI buttons and keyboard shortcuts are live
   attachEventListeners();
 
-  // 2. Load dark/light theme & layout mode
+  // 2. Load custom color schemes, dark/light theme & layout mode
+  loadSavedThemes();
   initTheme();
   const savedLayoutMode = localStorage.getItem("scratchpad_layout_mode");
   if (savedLayoutMode) {
@@ -897,6 +1022,18 @@ function attachEventListeners() {
   // Theme toggle
   themeToggleBtn.addEventListener("click", toggleTheme);
 
+  // Theme Picker Modal
+  themePickerBtn.addEventListener("click", () => {
+    toggleActionsDropdown(false);
+    openThemeModal();
+  });
+  closeThemeBtn.addEventListener("click", closeThemeModal);
+  themeModalBackdrop.addEventListener("click", (e) => {
+    if (e.target === themeModalBackdrop) closeThemeModal();
+  });
+  themeImportBtn.addEventListener("click", importThemeFile);
+  themeExportBtn.addEventListener("click", exportCurrentTheme);
+
   // Actions menu
   actionsBtn.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -1034,7 +1171,10 @@ function attachEventListeners() {
       toggleFocusMode();
     }
     if (e.key === "Escape") {
-      if (isHelpModalOpen) {
+      if (isThemeModalOpen) {
+        e.preventDefault();
+        closeThemeModal();
+      } else if (isHelpModalOpen) {
         e.preventDefault();
         closeHelpModal();
       } else if (isFindBarOpen) {
@@ -1838,6 +1978,315 @@ function switchHelpTab(tabName) {
     paneShortcuts.classList.add("active");
     paneMarkdown.classList.remove("active");
   }
+}
+
+// ----------------------------------------------------
+// Color Themes & Palette Engine
+// ----------------------------------------------------
+function openThemeModal() {
+  isThemeModalOpen = true;
+  themeModalBackdrop.style.display = "flex";
+  renderThemeGrid();
+}
+
+function closeThemeModal() {
+  isThemeModalOpen = false;
+  themeModalBackdrop.style.display = "none";
+}
+
+function loadSavedThemes() {
+  try {
+    const saved = localStorage.getItem("scratchpad_custom_themes");
+    if (saved) {
+      customThemes = JSON.parse(saved);
+    }
+  } catch (e) {}
+
+  const savedThemeId = localStorage.getItem("scratchpad_active_theme");
+  if (savedThemeId) {
+    applyTheme(savedThemeId);
+  }
+}
+
+function applyTheme(themeId) {
+  activeThemeId = themeId;
+  localStorage.setItem("scratchpad_active_theme", themeId);
+
+  const root = document.documentElement;
+
+  if (themeId === "default-dark") {
+    clearCustomThemeStyles();
+    setTheme("dark");
+    renderThemeGrid();
+    return;
+  }
+  if (themeId === "default-light") {
+    clearCustomThemeStyles();
+    setTheme("light");
+    renderThemeGrid();
+    return;
+  }
+
+  const allThemes = [...PRESET_THEMES, ...customThemes];
+  const theme = allThemes.find(t => t.id === themeId);
+  if (!theme) return;
+
+  const isDark = isColorDark(theme.background);
+  if (isDark) {
+    document.documentElement.classList.add("theme-dark");
+    document.documentElement.classList.remove("theme-light");
+    themeToggleBtn.querySelector(".light-icon").style.display = "none";
+    themeToggleBtn.querySelector(".dark-icon").style.display = "block";
+    themeToggleBtn.querySelector(".btn-text").textContent = "Dark Mode";
+  } else {
+    document.documentElement.classList.add("theme-light");
+    document.documentElement.classList.remove("theme-dark");
+    themeToggleBtn.querySelector(".light-icon").style.display = "block";
+    themeToggleBtn.querySelector(".dark-icon").style.display = "none";
+    themeToggleBtn.querySelector(".btn-text").textContent = "Light Mode";
+  }
+
+  root.style.setProperty("--bg-app", theme.background);
+  root.style.setProperty("--editor-bg", theme.background);
+  root.style.setProperty("--editor-text", theme.foreground);
+  root.style.setProperty("--preview-bg", theme.background);
+  root.style.setProperty("--preview-text", theme.foreground);
+  root.style.setProperty("--bg-sidebar", theme.sidebar || theme.background);
+  root.style.setProperty("--sidebar-bg", theme.sidebar || theme.background);
+  root.style.setProperty("--statusbar-bg", theme.sidebar || theme.background);
+  root.style.setProperty("--topbar-bg", theme.sidebar || theme.background);
+  root.style.setProperty("--dropdown-bg", theme.sidebar || theme.background);
+  root.style.setProperty("--border-color", theme.border || "rgba(128,128,128,0.2)");
+  root.style.setProperty("--text-primary", theme.foreground);
+  root.style.setProperty("--accent-color", theme.accent || "#3b82f6");
+  root.style.setProperty("--accent-hover", theme.accent || "#3b82f6");
+  root.style.setProperty("--bg-note-active", theme.selection || "rgba(59,130,246,0.15)");
+  root.style.setProperty("--border-note-active", theme.accent || "#3b82f6");
+
+  renderThemeGrid();
+}
+
+function clearCustomThemeStyles() {
+  const root = document.documentElement;
+  const props = [
+    "--bg-app", "--editor-bg", "--editor-text", "--preview-bg", "--preview-text",
+    "--bg-sidebar", "--sidebar-bg", "--statusbar-bg", "--topbar-bg", "--dropdown-bg",
+    "--border-color", "--text-primary", "--accent-color", "--accent-hover",
+    "--bg-note-active", "--border-note-active"
+  ];
+  props.forEach(p => root.style.removeProperty(p));
+}
+
+function isColorDark(hex) {
+  if (!hex || !hex.startsWith("#")) return true;
+  const c = hex.substring(1);
+  const rgb = parseInt(c.length === 3 ? c.split('').map(x => x + x).join('') : c, 16);
+  if (isNaN(rgb)) return true;
+  const r = (rgb >> 16) & 0xff;
+  const g = (rgb >> 8) & 0xff;
+  const b = (rgb >> 0) & 0xff;
+  const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luma < 128;
+}
+
+function renderThemeGrid() {
+  if (!themeGrid) return;
+  themeGrid.innerHTML = "";
+
+  const allThemes = [...PRESET_THEMES, ...customThemes];
+
+  allThemes.forEach(theme => {
+    const card = document.createElement("div");
+    card.className = `theme-card ${theme.id === activeThemeId ? "active" : ""}`;
+    
+    card.innerHTML = `
+      <div class="theme-card-header">
+        <span class="theme-card-name">${escapeHTML(theme.name)}</span>
+        ${theme.id === activeThemeId ? '<span class="theme-card-badge">Active</span>' : ''}
+      </div>
+      <div class="theme-card-preview" style="background-color: ${theme.background};">
+        <div class="theme-preview-sidebar" style="background-color: ${theme.sidebar || theme.background}; border-right: 1px solid ${theme.border || 'rgba(128,128,128,0.2)'};">
+          <div class="theme-preview-line" style="background-color: ${theme.accent}; width: 60%;"></div>
+          <div class="theme-preview-line" style="background-color: ${theme.foreground}; opacity: 0.5;"></div>
+          <div class="theme-preview-line" style="background-color: ${theme.foreground}; opacity: 0.3;"></div>
+        </div>
+        <div class="theme-preview-editor" style="background-color: ${theme.background};">
+          <div class="theme-preview-accent" style="background-color: ${theme.accent};"></div>
+          <div class="theme-preview-line" style="background-color: ${theme.foreground}; opacity: 0.8; width: 90%;"></div>
+          <div class="theme-preview-line" style="background-color: ${theme.foreground}; opacity: 0.5; width: 70%;"></div>
+        </div>
+      </div>
+      ${theme.isCustom ? `
+        <button class="theme-card-delete" title="Delete custom theme">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      ` : ''}
+    `;
+
+    card.addEventListener("click", () => {
+      applyTheme(theme.id);
+      showNotification(`Theme set to ${theme.name}`);
+    });
+
+    if (theme.isCustom) {
+      const delBtn = card.querySelector(".theme-card-delete");
+      if (delBtn) {
+        delBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          deleteCustomTheme(theme.id);
+        });
+      }
+    }
+
+    themeGrid.appendChild(card);
+  });
+}
+
+function deleteCustomTheme(themeId) {
+  customThemes = customThemes.filter(t => t.id !== themeId);
+  localStorage.setItem("scratchpad_custom_themes", JSON.stringify(customThemes));
+  if (activeThemeId === themeId) {
+    applyTheme("default-dark");
+  } else {
+    renderThemeGrid();
+  }
+  showNotification("Custom theme deleted");
+}
+
+async function importThemeFile() {
+  try {
+    let fileContent = "";
+    let fileName = "";
+
+    if (window.__TAURI__) {
+      const selected = await invoke("import_file_native");
+      if (!selected || !selected.content) return;
+      fileContent = selected.content;
+      fileName = selected.name || "imported_theme.json";
+    } else {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = ".json,.toml,.yaml,.yml,.conf,.txt";
+      input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        fileName = file.name;
+        fileContent = await file.text();
+        processImportedTheme(fileContent, fileName);
+      };
+      input.click();
+      return;
+    }
+
+    processImportedTheme(fileContent, fileName);
+  } catch (err) {
+    console.error("Theme import failed:", err);
+    showNotification("Failed to import theme file");
+  }
+}
+
+function processImportedTheme(content, fileName) {
+  const theme = parseThemeContent(content, fileName);
+  if (!theme) {
+    showNotification("Unsupported or invalid theme format");
+    return;
+  }
+
+  const existingIdx = customThemes.findIndex(t => t.id === theme.id || t.name === theme.name);
+  if (existingIdx !== -1) {
+    customThemes[existingIdx] = theme;
+  } else {
+    customThemes.push(theme);
+  }
+
+  localStorage.setItem("scratchpad_custom_themes", JSON.stringify(customThemes));
+  applyTheme(theme.id);
+  showNotification(`Imported & applied "${theme.name}"`);
+}
+
+function parseThemeContent(content, fileName) {
+  const cleanName = fileName.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
+
+  // 1. Try JSON
+  try {
+    const data = JSON.parse(content);
+    const colors = data.colors || data;
+    const bg = colors.background || colors["editor.background"] || colors.bg || colors.editor_bg || "#1e1e2e";
+    const fg = colors.foreground || colors["editor.foreground"] || colors.fg || colors.editor_text || "#cdd6f4";
+    const sb = colors.sidebar || colors["sideBar.background"] || colors.sidebar_bg || colors["activityBar.background"] || bg;
+    const accent = colors.accent || colors.cursor || colors["activityBar.foreground"] || colors["editorCursor.foreground"] || "#89b4fa";
+    const border = colors.border || colors["panel.border"] || colors["sideBar.border"] || "rgba(128,128,128,0.2)";
+    const sel = colors.selection || colors["editor.selectionBackground"] || colors["list.activeSelectionBackground"] || "rgba(59,130,246,0.2)";
+
+    return {
+      id: "custom_" + Date.now(),
+      name: data.name || cleanName,
+      background: bg,
+      foreground: fg,
+      sidebar: sb,
+      accent: accent,
+      border: border,
+      selection: sel,
+      isCustom: true
+    };
+  } catch (e) {}
+
+  // 2. Try TOML / Key-Value / Alacritty style
+  const lines = content.split("\n");
+  const kv = {};
+  for (const line of lines) {
+    const clean = line.trim();
+    if (!clean || clean.startsWith("#")) continue;
+    const match = clean.match(/^([a-zA-Z0-9_.-]+)\s*[:=]\s*["']?([^"'\r\n]+)["']?/);
+    if (match) {
+      kv[match[1].toLowerCase()] = match[2].trim();
+    }
+  }
+
+  if (kv.background || kv.bg || kv.foreground || kv.fg) {
+    const bg = kv.background || kv.bg || "#1e1e2e";
+    const fg = kv.foreground || kv.fg || "#cdd6f4";
+    return {
+      id: "custom_" + Date.now(),
+      name: kv.name || cleanName,
+      background: bg,
+      foreground: fg,
+      sidebar: kv.sidebar || kv.sidebar_bg || bg,
+      accent: kv.accent || kv.cursor || "#89b4fa",
+      border: kv.border || "rgba(128,128,128,0.2)",
+      selection: kv.selection || "rgba(59,130,246,0.2)",
+      isCustom: true
+    };
+  }
+
+  return null;
+}
+
+function exportCurrentTheme() {
+  const allThemes = [...PRESET_THEMES, ...customThemes];
+  const active = allThemes.find(t => t.id === activeThemeId) || PRESET_THEMES[0];
+
+  const exportData = {
+    name: active.name,
+    background: active.background,
+    foreground: active.foreground,
+    sidebar: active.sidebar,
+    accent: active.accent,
+    border: active.border,
+    selection: active.selection
+  };
+
+  const jsonStr = JSON.stringify(exportData, null, 2);
+  const blob = new Blob([jsonStr], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${active.name.toLowerCase().replace(/\s+/g, "-")}-theme.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showNotification(`Exported "${active.name}" theme`);
 }
 
 // Boot up!
