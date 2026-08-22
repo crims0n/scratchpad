@@ -885,16 +885,20 @@ body {
    ---------------------------------------------------- */
 .find-bar {
   display: none;
+  position: absolute;
+  top: 12px;
+  right: 24px;
   align-items: center;
   gap: 8px;
   background-color: var(--sidebar-bg);
-  border-bottom: 1px solid var(--border-color);
-  padding: 8px 16px;
-  height: 40px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 6px 12px;
+  height: 38px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   box-sizing: border-box;
   animation: slideDown 0.15s ease-out;
-  flex-shrink: 0;
-  z-index: 4;
+  z-index: 100;
 }
 
 @keyframes slideDown {

@@ -912,18 +912,20 @@ function runFind() {
   
   if (findMatches.length > 0) {
     activeMatchIndex = 0;
-    selectMatch(0);
+    selectMatch(0, false); // Do not steal focus from search input
   } else {
     updateFindCount();
   }
 }
 
-function selectMatch(index) {
+function selectMatch(index, focusEditor = false) {
   if (index < 0 || index >= findMatches.length) return;
   activeMatchIndex = index;
   const match = findMatches[index];
   
-  editorTextarea.focus();
+  if (focusEditor) {
+    editorTextarea.focus();
+  }
   editorTextarea.setSelectionRange(match.start, match.end);
   
   // Custom scroll calculation to scroll selected match into view
