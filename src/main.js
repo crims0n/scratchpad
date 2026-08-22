@@ -355,11 +355,22 @@ function setSavedState() {
 }
 
 function updateWordCharCount() {
-  const text = editorTextarea.value.trim();
-  const words = text ? text.split(/\s+/).filter(Boolean).length : 0;
-  const chars = text.length;
+  const text = editorTextarea.value;
+  const totalWords = text.trim() ? text.trim().split(/\s+/).filter(Boolean).length : 0;
+  const totalChars = text.length;
   
-  wordCharCount.textContent = `${words} word${words !== 1 ? 's' : ''} • ${chars} character${chars !== 1 ? 's' : ''}`;
+  const start = editorTextarea.selectionStart;
+  const end = editorTextarea.selectionEnd;
+  
+  if (start !== end && start !== undefined && end !== undefined) {
+    const selectedText = text.substring(start, end);
+    const selectedWords = selectedText.trim() ? selectedText.trim().split(/\s+/).filter(Boolean).length : 0;
+    const selectedChars = selectedText.length;
+    
+    wordCharCount.textContent = `${selectedWords} of ${totalWords} word${totalWords !== 1 ? 's' : ''} • ${selectedChars} of ${totalChars} character${totalChars !== 1 ? 's' : ''} selected`;
+  } else {
+    wordCharCount.textContent = `${totalWords} word${totalWords !== 1 ? 's' : ''} • ${totalChars} character${totalChars !== 1 ? 's' : ''}`;
+  }
 }
 
 function updateMarkdownPreview() {
@@ -515,6 +526,9 @@ function showNotification(msg) {
 function attachEventListeners() {
   // Editor and Title inputs
   editorTextarea.addEventListener("input", handleEditorInput);
+  editorTextarea.addEventListener("select", updateWordCharCount);
+  editorTextarea.addEventListener("mouseup", updateWordCharCount);
+  editorTextarea.addEventListener("keyup", updateWordCharCount);
   noteTitleInput.addEventListener("input", handleTitleInput);
 
   // Sidebar toggle
