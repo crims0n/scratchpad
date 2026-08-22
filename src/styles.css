@@ -377,12 +377,21 @@ body {
   border: 2px dashed var(--accent-color);
 }
 
+.note-item.drag-avatar {
+  background-color: var(--sidebar-bg) !important;
+  border: 1px solid var(--accent-color) !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4) !important;
+  transform: scale(1.02);
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+
 .note-item.drag-over-top {
-  border-top: 2px solid var(--accent-color) !important;
+  border-top: 3px solid var(--accent-color) !important;
 }
 
 .note-item.drag-over-bottom {
-  border-bottom: 2px solid var(--accent-color) !important;
+  border-bottom: 3px solid var(--accent-color) !important;
 }
 
 .note-item-header {

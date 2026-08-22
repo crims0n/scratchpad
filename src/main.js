@@ -368,70 +368,104 @@ function renderNoteList(filter = "") {
       showContextMenu(e, note.id);
     });
 
-    // Drag and Drop reordering events
-    item.addEventListener("dragstart", (e) => {
-      draggedNoteId = note.id;
-      item.classList.add("dragging");
-      e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData("text/plain", note.id);
-    });
+    // Pointer-based drag and drop for rock-solid reordering in desktop webviews
+    item.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || e.target.closest(".note-item-delete")) return;
+      
+      const startX = e.clientX;
+      const startY = e.clientY;
+      let hasDragged = false;
+      let dragAvatar = null;
+      let dropTarget = null;
+      let dropPosition = "bottom";
 
-    item.addEventListener("dragend", () => {
-      draggedNoteId = null;
-      item.classList.remove("dragging");
-      document.querySelectorAll(".note-item").forEach(el => {
-        el.classList.remove("drag-over-top", "drag-over-bottom");
-      });
-    });
+      function onPointerMove(moveEvent) {
+        const dx = moveEvent.clientX - startX;
+        const dy = moveEvent.clientY - startY;
 
-    item.addEventListener("dragover", (e) => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-      if (!draggedNoteId || draggedNoteId === note.id) return;
-      
-      const rect = item.getBoundingClientRect();
-      const offset = e.clientY - rect.top;
-      const isTop = offset < rect.height / 2;
-      
-      item.classList.toggle("drag-over-top", isTop);
-      item.classList.toggle("drag-over-bottom", !isTop);
-    });
+        // 4px threshold to distinguish normal click from dragging
+        if (!hasDragged && Math.hypot(dx, dy) > 4) {
+          hasDragged = true;
+          item.classList.add("dragging");
 
-    item.addEventListener("dragleave", (e) => {
-      if (e.relatedTarget && item.contains(e.relatedTarget)) return;
-      item.classList.remove("drag-over-top", "drag-over-bottom");
-    });
+          dragAvatar = item.cloneNode(true);
+          dragAvatar.className = "note-item drag-avatar";
+          dragAvatar.style.width = `${item.offsetWidth}px`;
+          dragAvatar.style.position = "fixed";
+          dragAvatar.style.pointerEvents = "none";
+          dragAvatar.style.zIndex = "9999";
+          dragAvatar.style.opacity = "0.9";
+          dragAvatar.style.left = `${moveEvent.clientX - 20}px`;
+          dragAvatar.style.top = `${moveEvent.clientY - 20}px`;
+          document.body.appendChild(dragAvatar);
+        }
 
-    item.addEventListener("drop", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      item.classList.remove("drag-over-top", "drag-over-bottom");
-      
-      const sourceId = draggedNoteId || e.dataTransfer.getData("text/plain");
-      if (!sourceId || sourceId === note.id) return;
-      
-      const fromIndex = notes.findIndex(n => n.id === sourceId);
-      const toIndex = notes.findIndex(n => n.id === note.id);
-      if (fromIndex === -1 || toIndex === -1) return;
-      
-      const rect = item.getBoundingClientRect();
-      const isTop = (e.clientY - rect.top) < (rect.height / 2);
-      
-      // Remove dragged note from list
-      const [draggedNote] = notes.splice(fromIndex, 1);
-      
-      // Re-find target note's current index after splice
-      let targetIndex = notes.findIndex(n => n.id === note.id);
-      if (!isTop) {
-        targetIndex += 1;
+        if (hasDragged && dragAvatar) {
+          dragAvatar.style.left = `${moveEvent.clientX - 20}px`;
+          dragAvatar.style.top = `${moveEvent.clientY - 20}px`;
+
+          // Hit test underneath the cursor
+          dragAvatar.style.display = "none";
+          const elemBelow = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
+          dragAvatar.style.display = "flex";
+
+          const targetItem = elemBelow ? elemBelow.closest(".note-item:not(.drag-avatar)") : null;
+
+          document.querySelectorAll(".note-item").forEach(el => {
+            el.classList.remove("drag-over-top", "drag-over-bottom");
+          });
+
+          if (targetItem && targetItem !== item) {
+            dropTarget = targetItem;
+            const rect = targetItem.getBoundingClientRect();
+            const isTop = (moveEvent.clientY - rect.top) < (rect.height / 2);
+            dropPosition = isTop ? "top" : "bottom";
+            targetItem.classList.toggle("drag-over-top", isTop);
+            targetItem.classList.toggle("drag-over-bottom", !isTop);
+          } else {
+            dropTarget = null;
+          }
+        }
       }
-      
-      notes.splice(targetIndex, 0, draggedNote);
-      
-      saveNotesToStorage();
-      renderNoteList(searchInput.value);
-      populateSecondaryNoteSelect();
-      showNotification("Notes reordered");
+
+      function onPointerUp() {
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerup", onPointerUp);
+
+        if (dragAvatar) {
+          dragAvatar.remove();
+          dragAvatar = null;
+        }
+
+        document.querySelectorAll(".note-item").forEach(el => {
+          el.classList.remove("drag-over-top", "drag-over-bottom", "dragging");
+        });
+
+        if (hasDragged && dropTarget) {
+          const targetId = dropTarget.getAttribute("data-id");
+          if (targetId && targetId !== note.id) {
+            const fromIndex = notes.findIndex(n => n.id === note.id);
+            const toIndex = notes.findIndex(n => n.id === targetId);
+
+            if (fromIndex !== -1 && toIndex !== -1) {
+              const [draggedNote] = notes.splice(fromIndex, 1);
+              let targetIndex = notes.findIndex(n => n.id === targetId);
+              if (dropPosition === "bottom") {
+                targetIndex += 1;
+              }
+              notes.splice(targetIndex, 0, draggedNote);
+
+              saveNotesToStorage();
+              renderNoteList(searchInput.value);
+              populateSecondaryNoteSelect();
+              showNotification("Notes reordered");
+            }
+          }
+        }
+      }
+
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
     });
     
     // Delete listener
