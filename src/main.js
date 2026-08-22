@@ -49,6 +49,13 @@ const replaceOneBtn = document.getElementById("replace-one-btn");
 const replaceAllBtn = document.getElementById("replace-all-btn");
 const editorBackdrop = document.getElementById("editor-backdrop");
 
+const customContextMenu = document.getElementById("custom-context-menu");
+const ctxCutBtn = document.getElementById("ctx-cut");
+const ctxCopyBtn = document.getElementById("ctx-copy");
+const ctxPasteBtn = document.getElementById("ctx-paste");
+const ctxSelectAllBtn = document.getElementById("ctx-select-all");
+const ctxFindBtn = document.getElementById("ctx-find");
+
 // State
 let notes = [];
 let activeNoteId = null;
@@ -58,6 +65,7 @@ let isFocusMode = false;
 let findMatches = [];
 let activeMatchIndex = -1;
 let isFindBarOpen = false;
+let contextMenuTarget = null;
 let isRegexMode = false;
 let isReplaceOpen = false;
 let saveDebounceTimer = null;
@@ -693,10 +701,16 @@ function attachEventListeners() {
   dbConnectBtn.addEventListener("click", connectDatabase);
   dbDisconnectBtn.addEventListener("click", disconnectDatabase);
 
-  // Disable default browser context menu (Right Click -> Inspect Element, Reload, Back, Forward)
-  document.addEventListener("contextmenu", (e) => {
-    e.preventDefault();
-  });
+  // Custom Context Menu Events
+  document.addEventListener("contextmenu", showContextMenu);
+  document.addEventListener("click", hideContextMenu);
+  window.addEventListener("blur", hideContextMenu);
+
+  ctxCutBtn.addEventListener("click", handleContextCut);
+  ctxCopyBtn.addEventListener("click", handleContextCopy);
+  ctxPasteBtn.addEventListener("click", handleContextPaste);
+  ctxSelectAllBtn.addEventListener("click", handleContextSelectAll);
+  ctxFindBtn.addEventListener("click", handleContextFind);
 
   // Find & Replace Widget events
   findInput.addEventListener("input", runFind);
@@ -1186,6 +1200,116 @@ function updateHighlights() {
   }
   
   editorBackdrop.innerHTML = html;
+}
+
+// ----------------------------------------------------
+// Custom Context Menu Logic
+// ----------------------------------------------------
+function showContextMenu(e) {
+  e.preventDefault();
+  
+  const target = e.target.closest("textarea, input[type='text'], .markdown-preview");
+  if (!target) {
+    hideContextMenu();
+    return;
+  }
+  
+  contextMenuTarget = target;
+  
+  let hasSelection = false;
+  if (target.tagName === "TEXTAREA" || target.tagName === "INPUT") {
+    hasSelection = target.selectionStart !== target.selectionEnd;
+  } else {
+    hasSelection = Boolean(window.getSelection().toString());
+  }
+  
+  ctxCutBtn.disabled = !hasSelection;
+  ctxCopyBtn.disabled = !hasSelection;
+  
+  const menuWidth = 180;
+  const menuHeight = 180;
+  let x = e.clientX;
+  let y = e.clientY;
+  
+  if (x + menuWidth > window.innerWidth) {
+    x = window.innerWidth - menuWidth - 8;
+  }
+  if (y + menuHeight > window.innerHeight) {
+    y = window.innerHeight - menuHeight - 8;
+  }
+  
+  customContextMenu.style.left = `${Math.max(8, x)}px`;
+  customContextMenu.style.top = `${Math.max(8, y)}px`;
+  customContextMenu.style.display = "flex";
+}
+
+function hideContextMenu() {
+  customContextMenu.style.display = "none";
+}
+
+async function handleContextCut() {
+  if (!contextMenuTarget) return;
+  hideContextMenu();
+  
+  if (contextMenuTarget.tagName === "TEXTAREA" || contextMenuTarget.tagName === "INPUT") {
+    const start = contextMenuTarget.selectionStart;
+    const end = contextMenuTarget.selectionEnd;
+    const text = contextMenuTarget.value.substring(start, end);
+    if (text) {
+      await navigator.clipboard.writeText(text);
+      contextMenuTarget.value = contextMenuTarget.value.substring(0, start) + contextMenuTarget.value.substring(end);
+      contextMenuTarget.selectionStart = contextMenuTarget.selectionEnd = start;
+      contextMenuTarget.dispatchEvent(new Event("input"));
+    }
+  }
+}
+
+async function handleContextCopy() {
+  if (!contextMenuTarget) return;
+  hideContextMenu();
+  
+  let text = "";
+  if (contextMenuTarget.tagName === "TEXTAREA" || contextMenuTarget.tagName === "INPUT") {
+    text = contextMenuTarget.value.substring(contextMenuTarget.selectionStart, contextMenuTarget.selectionEnd);
+  } else {
+    text = window.getSelection().toString();
+  }
+  
+  if (text) {
+    await navigator.clipboard.writeText(text);
+  }
+}
+
+async function handleContextPaste() {
+  if (!contextMenuTarget) return;
+  hideContextMenu();
+  
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text && (contextMenuTarget.tagName === "TEXTAREA" || contextMenuTarget.tagName === "INPUT")) {
+      const start = contextMenuTarget.selectionStart;
+      const end = contextMenuTarget.selectionEnd;
+      contextMenuTarget.value = contextMenuTarget.value.substring(0, start) + text + contextMenuTarget.value.substring(end);
+      contextMenuTarget.selectionStart = contextMenuTarget.selectionEnd = start + text.length;
+      contextMenuTarget.dispatchEvent(new Event("input"));
+    }
+  } catch (err) {
+    console.error("Paste failed", err);
+  }
+}
+
+function handleContextSelectAll() {
+  if (!contextMenuTarget) return;
+  hideContextMenu();
+  
+  if (contextMenuTarget.tagName === "TEXTAREA" || contextMenuTarget.tagName === "INPUT") {
+    contextMenuTarget.select();
+  }
+}
+
+function handleContextFind() {
+  hideContextMenu();
+  toggleFindBar();
 }
 
 // Boot up!
