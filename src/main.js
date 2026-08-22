@@ -752,7 +752,7 @@ function connectDatabase() {
   
   const createNew = confirm("Do you want to CREATE a new SQLite database file?\n\nClick OK to create a new database file, or Cancel to open an existing database file.");
   
-  invoke("select_db_file", { createNew: createNew })
+  invoke("select_db_file", { create_new: createNew })
     .then((path) => {
       if (path) {
         activeDbPath = path;
