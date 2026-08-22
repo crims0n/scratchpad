@@ -7,6 +7,7 @@ An opinionated, cross-platform, high-efficiency desktop text editor designed to 
 
 - 💾 **Instant Auto-Save**: Never lose a thought. Every keystroke is saved automatically to local storage, debounced to maintain maximum system efficiency.
 - 🗄️ **SQLite DB Workspace Mode**: Connect to a local SQLite database file (`.db` or `.sqlite`) to save, sync, and persist your notes list natively. Automatically seeds new database files with your current LocalStorage drafts.
+- 🔍 **Find & Replace with Regex**: Powerful document search with real-time match highlighting, single/bulk replace, and regular expression mode (`.*`) supporting full capture groups.
 - 📝 **Live Markdown Preview**: Toggle between full editor view, split pane (sync-scrolled edit and preview), and full preview.
 - 📊 **Contextual Highlighting Stats**: Displays overall word and character counts. Highlighting text displays selection stats (e.g. `5 words • 30 characters selected`) on the right next to the Save indicator.
 - 📥 **Native File Import**: Pick and import Markdown (`.md`/`.markdown`) and text (`.txt`) files from your filesystem to create new scratchpads.
@@ -24,8 +25,12 @@ An opinionated, cross-platform, high-efficiency desktop text editor designed to 
 | --- | --- |
 | `Cmd + N` or `Ctrl + N` | Create a new scratchpad |
 | `Cmd + B` or `Ctrl + B` | Toggle sidebar visibility |
+| `Cmd + F` or `Ctrl + F` | Toggle Find bar |
+| `Cmd + H` or `Ctrl + H` | Toggle Find & Replace |
+| `Alt + R` | Toggle Regular Expression mode in Find |
+| `Enter` / `Shift + Enter` | Jump to next / previous search match |
 | `Cmd + Shift + F` or `Ctrl + Shift + F` | Toggle distraction-free Focus Mode |
-| `Escape` | Exit Focus Mode |
+| `Escape` | Close Find / Exit Focus Mode |
 
 ---
 
