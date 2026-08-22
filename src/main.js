@@ -693,6 +693,11 @@ function attachEventListeners() {
   dbConnectBtn.addEventListener("click", connectDatabase);
   dbDisconnectBtn.addEventListener("click", disconnectDatabase);
 
+  // Disable default browser context menu (Right Click -> Inspect Element, Reload, Back, Forward)
+  document.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+  });
+
   // Find & Replace Widget events
   findInput.addEventListener("input", runFind);
   findInput.addEventListener("keydown", (e) => {
@@ -732,6 +737,16 @@ function attachEventListeners() {
   document.addEventListener("keydown", (e) => {
     const isMeta = e.metaKey || e.ctrlKey;
     const isShift = e.shiftKey;
+
+    // Disable browser inspect shortcuts and accidental page reloads (F12, Cmd+Opt+I, Ctrl+Shift+I, Cmd+R)
+    if (
+      e.key === "F12" ||
+      (isMeta && e.altKey && e.key.toLowerCase() === "i") ||
+      (isMeta && isShift && e.key.toLowerCase() === "i") ||
+      (isMeta && e.key.toLowerCase() === "r")
+    ) {
+      e.preventDefault();
+    }
 
     if (isMeta && e.key === "b") {
       e.preventDefault();
