@@ -345,6 +345,8 @@ body {
   gap: 4px;
   position: relative;
   border: 1px solid transparent;
+  transition: opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+  user-select: none;
 }
 
 .note-item:hover {
@@ -354,6 +356,20 @@ body {
 .note-item.active {
   background-color: var(--bg-note-active);
   border-color: var(--border-note-active);
+}
+
+.note-item.dragging {
+  opacity: 0.4;
+  background-color: var(--bg-input);
+  border: 1px dashed var(--accent-color);
+}
+
+.note-item.drag-over-top {
+  border-top: 2px solid var(--accent-color) !important;
+}
+
+.note-item.drag-over-bottom {
+  border-bottom: 2px solid var(--accent-color) !important;
 }
 
 .note-item-header {

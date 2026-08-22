@@ -71,6 +71,9 @@ const ctxPasteBtn = document.getElementById("ctx-paste");
 const ctxSelectAllBtn = document.getElementById("ctx-select-all");
 const ctxFindBtn = document.getElementById("ctx-find");
 const ctxOpenSideBtn = document.getElementById("ctx-open-side");
+const ctxSidebarDivider = document.getElementById("ctx-sidebar-divider");
+const ctxMoveUpBtn = document.getElementById("ctx-move-up");
+const ctxMoveDownBtn = document.getElementById("ctx-move-down");
 
 // State
 let notes = [];
@@ -78,6 +81,7 @@ let activeNoteId = null;
 let secondaryNoteId = null;
 let activePane = "primary"; // "primary" or "secondary"
 let isSplitNoteMode = false;
+let draggedNoteId = null;
 let activeDbPath = null;
 let currentLayoutMode = "edit"; // edit, split, preview
 let isFocusMode = false;
@@ -316,6 +320,7 @@ function renderNoteList(filter = "") {
     const item = document.createElement("li");
     item.className = `note-item ${note.id === activeNoteId ? "active" : ""}`;
     item.setAttribute("data-id", note.id);
+    item.setAttribute("draggable", "true");
     
     // Snippet formatting
     const firstLine = note.content.trim().split("\n")[0] || "";
@@ -356,11 +361,74 @@ function renderNoteList(filter = "") {
       }
     });
 
-    // Right click to open in side pane
+    // Right click for context menu (Open to the side, move up/down)
     item.addEventListener("contextmenu", (e) => {
       e.stopPropagation();
       contextMenuNoteId = note.id;
       showContextMenu(e, note.id);
+    });
+
+    // Drag and Drop reordering events
+    item.addEventListener("dragstart", (e) => {
+      draggedNoteId = note.id;
+      item.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", note.id);
+    });
+
+    item.addEventListener("dragend", () => {
+      draggedNoteId = null;
+      item.classList.remove("dragging");
+      document.querySelectorAll(".note-item").forEach(el => {
+        el.classList.remove("drag-over-top", "drag-over-bottom");
+      });
+    });
+
+    item.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      if (!draggedNoteId || draggedNoteId === note.id) return;
+      
+      const rect = item.getBoundingClientRect();
+      const offset = e.clientY - rect.top;
+      const isTop = offset < rect.height / 2;
+      
+      item.classList.toggle("drag-over-top", isTop);
+      item.classList.toggle("drag-over-bottom", !isTop);
+    });
+
+    item.addEventListener("dragleave", () => {
+      item.classList.remove("drag-over-top", "drag-over-bottom");
+    });
+
+    item.addEventListener("drop", (e) => {
+      e.preventDefault();
+      item.classList.remove("drag-over-top", "drag-over-bottom");
+      if (!draggedNoteId || draggedNoteId === note.id) return;
+      
+      const fromIndex = notes.findIndex(n => n.id === draggedNoteId);
+      const toIndex = notes.findIndex(n => n.id === note.id);
+      if (fromIndex === -1 || toIndex === -1) return;
+      
+      const rect = item.getBoundingClientRect();
+      const offset = e.clientY - rect.top;
+      const isTop = offset < rect.height / 2;
+      
+      // Remove dragged note from list
+      const [draggedNote] = notes.splice(fromIndex, 1);
+      
+      // Re-find target note's current index after splice
+      let targetIndex = notes.findIndex(n => n.id === note.id);
+      if (!isTop) {
+        targetIndex += 1;
+      }
+      
+      notes.splice(targetIndex, 0, draggedNote);
+      
+      saveNotesToStorage();
+      renderNoteList(searchInput.value);
+      populateSecondaryNoteSelect();
+      showNotification("Notes reordered");
     });
     
     // Delete listener
@@ -767,6 +835,18 @@ function attachEventListeners() {
       openNoteInSecondaryPane(contextMenuNoteId);
     }
   });
+  ctxMoveUpBtn.addEventListener("click", () => {
+    hideContextMenu();
+    if (contextMenuNoteId) {
+      moveNoteUp(contextMenuNoteId);
+    }
+  });
+  ctxMoveDownBtn.addEventListener("click", () => {
+    hideContextMenu();
+    if (contextMenuNoteId) {
+      moveNoteDown(contextMenuNoteId);
+    }
+  });
 
   // Find & Replace Widget events
   findInput.addEventListener("input", runFind);
@@ -841,6 +921,14 @@ function attachEventListeners() {
     if (isMeta && (e.key === "\\" || e.key === "|")) {
       e.preventDefault();
       toggleSplitNoteMode();
+    }
+    if (e.altKey && e.key === "ArrowUp") {
+      e.preventDefault();
+      moveNoteUp();
+    }
+    if (e.altKey && e.key === "ArrowDown") {
+      e.preventDefault();
+      moveNoteDown();
     }
     if (isMeta && isShift && e.key.toLowerCase() === "f") {
       e.preventDefault();
@@ -1285,6 +1373,14 @@ function showContextMenu(e, noteId = null) {
   if (noteId) {
     contextMenuNoteId = noteId;
     ctxOpenSideBtn.style.display = "flex";
+    ctxSidebarDivider.style.display = "block";
+    ctxMoveUpBtn.style.display = "flex";
+    ctxMoveDownBtn.style.display = "flex";
+    
+    const noteIndex = notes.findIndex(n => n.id === noteId);
+    ctxMoveUpBtn.disabled = noteIndex <= 0;
+    ctxMoveDownBtn.disabled = noteIndex === -1 || noteIndex >= notes.length - 1;
+    
     ctxCutBtn.style.display = "none";
     ctxCopyBtn.style.display = "none";
     ctxPasteBtn.style.display = "none";
@@ -1293,6 +1389,10 @@ function showContextMenu(e, noteId = null) {
   } else {
     contextMenuNoteId = null;
     ctxOpenSideBtn.style.display = "none";
+    ctxSidebarDivider.style.display = "none";
+    ctxMoveUpBtn.style.display = "none";
+    ctxMoveDownBtn.style.display = "none";
+    
     ctxCutBtn.style.display = "flex";
     ctxCopyBtn.style.display = "flex";
     ctxPasteBtn.style.display = "flex";
@@ -1572,6 +1672,34 @@ function updateWordCharCountForText(el) {
   } else {
     selectionCount.style.display = "none";
   }
+}
+
+function moveNoteUp(noteId) {
+  const targetId = noteId || activeNoteId;
+  const index = notes.findIndex(n => n.id === targetId);
+  if (index <= 0) return;
+  
+  const [note] = notes.splice(index, 1);
+  notes.splice(index - 1, 0, note);
+  
+  saveNotesToStorage();
+  renderNoteList(searchInput.value);
+  populateSecondaryNoteSelect();
+  showNotification("Note moved up");
+}
+
+function moveNoteDown(noteId) {
+  const targetId = noteId || activeNoteId;
+  const index = notes.findIndex(n => n.id === targetId);
+  if (index === -1 || index >= notes.length - 1) return;
+  
+  const [note] = notes.splice(index, 1);
+  notes.splice(index + 1, 0, note);
+  
+  saveNotesToStorage();
+  renderNoteList(searchInput.value);
+  populateSecondaryNoteSelect();
+  showNotification("Note moved down");
 }
 
 // Boot up!

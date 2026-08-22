@@ -13,7 +13,7 @@ An opinionated, cross-platform, high-efficiency desktop text editor designed to 
 - 📊 **Contextual Highlighting Stats**: Displays overall word and character counts. Highlighting text displays selection stats (e.g. `5 words • 30 characters selected`) on the right next to the Save indicator.
 - 📥 **Native File Import**: Pick and import Markdown, source code, text files, and extensionless documents with automatic validation and alerts.
 - 📤 **Custom Directory File Export**: Export your notes to any directory on your filesystem using native OS directory save dialogs.
-- 📁 **Sidebar Scratch Manager**: Create, delete, and search across multiple drafts/notes on the fly.
+- 📁 **Sidebar Scratch Manager**: Create, delete, reorder (via drag & drop, context menu, or `Alt+↑`/`Alt+↓`), and search across multiple drafts on the fly.
 - ⚡ **Auto-Renaming**: Scratchpads auto-rename themselves based on the first line of text you write, unless you manually lock the title.
 - 🧘 **Focus Mode**: Press `Cmd+Shift+F` to clear all sidebars, status bars, and menus for a pure, distraction-free writing environment.
 - 🎨 **Adaptive Design System**: System-adaptive dark and light modes (respecting system theme transitions, with manual override pinning).
@@ -27,6 +27,7 @@ An opinionated, cross-platform, high-efficiency desktop text editor designed to 
 | `Cmd + N` or `Ctrl + N` | Create a new scratchpad |
 | `Cmd + B` or `Ctrl + B` | Toggle sidebar visibility |
 | `Cmd + \` or `Ctrl + \` | Toggle Dual-Note Split View (Side-by-Side) |
+| `Alt + ↑` / `Alt + ↓` | Move active note up / down in sidebar |
 | `Cmd + F` or `Ctrl + F` | Toggle Find bar |
 | `Cmd + H` or `Ctrl + H` | Toggle Find & Replace |
 | `Alt + R` | Toggle Regular Expression mode in Find |
