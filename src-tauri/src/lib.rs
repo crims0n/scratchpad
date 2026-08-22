@@ -68,9 +68,15 @@ fn import_file_native() -> Result<Option<ImportedFile>, String> {
 
 // Database commands
 #[tauri::command]
-fn select_db_file(create_new: bool) -> Result<Option<String>, String> {
+fn select_db_file() -> Result<Option<String>, String> {
+    let ask_create = rfd::MessageDialog::new()
+        .set_title("Database Workspace")
+        .set_description("Do you want to CREATE a new SQLite database file?\n\nClick 'Yes' to create a new database, or 'No' to select an existing database.")
+        .set_buttons(rfd::MessageButtons::YesNo)
+        .show();
+
     let dialog = rfd::FileDialog::new().add_filter("SQLite Database", &["db", "sqlite"]);
-    let file_path = if create_new {
+    let file_path = if ask_create == rfd::MessageDialogResult::Yes {
         dialog.save_file()
     } else {
         dialog.pick_file()
