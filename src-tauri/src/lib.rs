@@ -173,6 +173,15 @@ fn delete_note_db(db_path: String, id: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn show_alert_dialog(title: String, message: String) {
+    rfd::MessageDialog::new()
+        .set_title(&title)
+        .set_description(&message)
+        .set_buttons(rfd::MessageButtons::Ok)
+        .show();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -186,7 +195,8 @@ pub fn run() {
             select_db_file,
             load_db_notes,
             save_note_db,
-            delete_note_db
+            delete_note_db,
+            show_alert_dialog
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

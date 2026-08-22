@@ -45,14 +45,12 @@
       </div>
 
       <div class="sidebar-footer">
-        <button class="sidebar-action-btn" id="theme-toggle" title="Toggle theme">
-          <svg class="theme-icon light-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        <button class="sidebar-action-btn" id="theme-toggle" title="Color Themes & Palettes">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 3a9 9 0 0 0 0 18v-9h9a9 9 0 0 0-9-9z" />
           </svg>
-          <svg class="theme-icon dark-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-          </svg>
-          <span class="btn-text">Light Mode</span>
+          <span class="btn-text" id="theme-btn-text">Theme: Default Dark</span>
         </button>
       </div>
     </aside>

@@ -1019,8 +1019,8 @@ function attachEventListeners() {
   editorTextarea.addEventListener("focus", () => setActivePane("primary"));
   secondaryNoteTitle.addEventListener("input", handleSecondaryTitleInput);
 
-  // Theme toggle
-  themeToggleBtn.addEventListener("click", toggleTheme);
+  // Theme selector button in sidebar footer
+  themeToggleBtn.addEventListener("click", openThemeModal);
 
   // Theme Picker Modal
   themePickerBtn.addEventListener("click", () => {
@@ -2013,16 +2013,19 @@ function applyTheme(themeId) {
   localStorage.setItem("scratchpad_active_theme", themeId);
 
   const root = document.documentElement;
+  const themeBtnText = document.getElementById("theme-btn-text");
 
   if (themeId === "default-dark") {
     clearCustomThemeStyles();
     setTheme("dark");
+    if (themeBtnText) themeBtnText.textContent = "Theme: Default Dark";
     renderThemeGrid();
     return;
   }
   if (themeId === "default-light") {
     clearCustomThemeStyles();
     setTheme("light");
+    if (themeBtnText) themeBtnText.textContent = "Theme: Default Light";
     renderThemeGrid();
     return;
   }
@@ -2035,15 +2038,9 @@ function applyTheme(themeId) {
   if (isDark) {
     document.documentElement.classList.add("theme-dark");
     document.documentElement.classList.remove("theme-light");
-    themeToggleBtn.querySelector(".light-icon").style.display = "none";
-    themeToggleBtn.querySelector(".dark-icon").style.display = "block";
-    themeToggleBtn.querySelector(".btn-text").textContent = "Dark Mode";
   } else {
     document.documentElement.classList.add("theme-light");
     document.documentElement.classList.remove("theme-dark");
-    themeToggleBtn.querySelector(".light-icon").style.display = "block";
-    themeToggleBtn.querySelector(".dark-icon").style.display = "none";
-    themeToggleBtn.querySelector(".btn-text").textContent = "Light Mode";
   }
 
   root.style.setProperty("--bg-app", theme.background);
@@ -2063,6 +2060,10 @@ function applyTheme(themeId) {
   root.style.setProperty("--bg-note-active", theme.selection || "rgba(59,130,246,0.15)");
   root.style.setProperty("--border-note-active", theme.accent || "#3b82f6");
 
+  if (themeBtnText) {
+    themeBtnText.textContent = `Theme: ${theme.name}`;
+  }
+
   renderThemeGrid();
 }
 
@@ -2078,7 +2079,7 @@ function clearCustomThemeStyles() {
 }
 
 function isColorDark(hex) {
-  if (!hex || !hex.startsWith("#")) return true;
+  if (!hex || typeof hex !== "string" || !hex.startsWith("#")) return true;
   const c = hex.substring(1);
   const rgb = parseInt(c.length === 3 ? c.split('').map(x => x + x).join('') : c, 16);
   if (isNaN(rgb)) return true;
@@ -2087,6 +2088,26 @@ function isColorDark(hex) {
   const b = (rgb >> 0) & 0xff;
   const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
   return luma < 128;
+}
+
+function isValidColor(str) {
+  if (!str || typeof str !== "string") return false;
+  const s = str.trim();
+  // Valid HEX (#fff, #ffffff, #ffffffff)
+  if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(s)) return true;
+  // Valid rgb/rgba/hsl/hsla
+  if (/^(rgb|rgba|hsl|hsla)\([^)]+\)$/i.test(s)) return true;
+  return false;
+}
+
+async function promptImportError(title, message) {
+  if (window.__TAURI__) {
+    try {
+      await invoke("show_alert_dialog", { title, message });
+      return;
+    } catch (e) {}
+  }
+  alert(`${title}\n\n${message}`);
 }
 
 function renderThemeGrid() {
@@ -2127,7 +2148,6 @@ function renderThemeGrid() {
 
     card.addEventListener("click", () => {
       applyTheme(theme.id);
-      showNotification(`Theme set to ${theme.name}`);
     });
 
     if (theme.isCustom) {
@@ -2152,7 +2172,6 @@ function deleteCustomTheme(themeId) {
   } else {
     renderThemeGrid();
   }
-  showNotification("Custom theme deleted");
 }
 
 async function importThemeFile() {
@@ -2164,7 +2183,7 @@ async function importThemeFile() {
       const selected = await invoke("import_file_native");
       if (!selected || !selected.content) return;
       fileContent = selected.content;
-      fileName = selected.name || "imported_theme.json";
+      fileName = selected.title || "imported_theme.json";
     } else {
       const input = document.createElement("input");
       input.type = "file";
@@ -2174,27 +2193,39 @@ async function importThemeFile() {
         if (!file) return;
         fileName = file.name;
         fileContent = await file.text();
-        processImportedTheme(fileContent, fileName);
+        await processImportedTheme(fileContent, fileName);
       };
       input.click();
       return;
     }
 
-    processImportedTheme(fileContent, fileName);
+    await processImportedTheme(fileContent, fileName);
   } catch (err) {
     console.error("Theme import failed:", err);
-    showNotification("Failed to import theme file");
+    await promptImportError("Theme Import Error", `Failed to read theme file: ${err}`);
   }
 }
 
-function processImportedTheme(content, fileName) {
-  const theme = parseThemeContent(content, fileName);
-  if (!theme) {
-    showNotification("Unsupported or invalid theme format");
+async function processImportedTheme(content, fileName) {
+  if (!content || !content.trim()) {
+    await promptImportError(
+      "Theme Import Error",
+      `The file "${fileName}" is empty.`
+    );
     return;
   }
 
-  const existingIdx = customThemes.findIndex(t => t.id === theme.id || t.name === theme.name);
+  const result = parseThemeContent(content, fileName);
+  if (!result.success) {
+    await promptImportError(
+      "Invalid Theme File",
+      `Could not import "${fileName}".\n\nReason: ${result.error}\n\nPlease ensure your file is a valid JSON or TOML color scheme with valid HEX or RGB color codes for "background" and "foreground".`
+    );
+    return;
+  }
+
+  const theme = result.theme;
+  const existingIdx = customThemes.findIndex(t => t.id === theme.id || t.name.toLowerCase() === theme.name.toLowerCase());
   if (existingIdx !== -1) {
     customThemes[existingIdx] = theme;
   } else {
@@ -2203,7 +2234,6 @@ function processImportedTheme(content, fileName) {
 
   localStorage.setItem("scratchpad_custom_themes", JSON.stringify(customThemes));
   applyTheme(theme.id);
-  showNotification(`Imported & applied "${theme.name}"`);
 }
 
 function parseThemeContent(content, fileName) {
@@ -2212,56 +2242,95 @@ function parseThemeContent(content, fileName) {
   // 1. Try JSON
   try {
     const data = JSON.parse(content);
+    if (typeof data !== "object" || data === null) {
+      return { success: false, error: "Root JSON is not an object" };
+    }
+
     const colors = data.colors || data;
-    const bg = colors.background || colors["editor.background"] || colors.bg || colors.editor_bg || "#1e1e2e";
-    const fg = colors.foreground || colors["editor.foreground"] || colors.fg || colors.editor_text || "#cdd6f4";
+    const bg = colors.background || colors["editor.background"] || colors.bg || colors.editor_bg;
+    const fg = colors.foreground || colors["editor.foreground"] || colors.fg || colors.editor_text;
+
+    if (!bg || !fg) {
+      return { success: false, error: "Missing required 'background' or 'foreground' color properties" };
+    }
+    if (!isValidColor(bg)) {
+      return { success: false, error: `Invalid background color value: "${bg}"` };
+    }
+    if (!isValidColor(fg)) {
+      return { success: false, error: `Invalid foreground color value: "${fg}"` };
+    }
+
     const sb = colors.sidebar || colors["sideBar.background"] || colors.sidebar_bg || colors["activityBar.background"] || bg;
-    const accent = colors.accent || colors.cursor || colors["activityBar.foreground"] || colors["editorCursor.foreground"] || "#89b4fa";
+    const accent = colors.accent || colors.cursor || colors["activityBar.foreground"] || colors["editorCursor.foreground"] || "#3b82f6";
     const border = colors.border || colors["panel.border"] || colors["sideBar.border"] || "rgba(128,128,128,0.2)";
     const sel = colors.selection || colors["editor.selectionBackground"] || colors["list.activeSelectionBackground"] || "rgba(59,130,246,0.2)";
 
     return {
-      id: "custom_" + Date.now(),
-      name: data.name || cleanName,
-      background: bg,
-      foreground: fg,
-      sidebar: sb,
-      accent: accent,
-      border: border,
-      selection: sel,
-      isCustom: true
+      success: true,
+      theme: {
+        id: "custom_" + Date.now(),
+        name: data.name || cleanName,
+        background: bg,
+        foreground: fg,
+        sidebar: isValidColor(sb) ? sb : bg,
+        accent: isValidColor(accent) ? accent : "#3b82f6",
+        border: border,
+        selection: sel,
+        isCustom: true
+      }
     };
-  } catch (e) {}
+  } catch (e) {
+    // If not valid JSON, proceed to TOML / Key-Value check
+  }
 
-  // 2. Try TOML / Key-Value / Alacritty style
+  // 2. Try TOML / Key-Value / Alacritty / Ghostty style
   const lines = content.split("\n");
   const kv = {};
   for (const line of lines) {
     const clean = line.trim();
     if (!clean || clean.startsWith("#")) continue;
-    const match = clean.match(/^([a-zA-Z0-9_.-]+)\s*[:=]\s*["']?([^"'\r\n]+)["']?/);
+    const match = clean.match(/^([a-zA-Z0-9_.-]+)\s*[:=]\s*["']?([^"'\r\n#]+)["']?/);
     if (match) {
       kv[match[1].toLowerCase()] = match[2].trim();
     }
   }
 
-  if (kv.background || kv.bg || kv.foreground || kv.fg) {
-    const bg = kv.background || kv.bg || "#1e1e2e";
-    const fg = kv.foreground || kv.fg || "#cdd6f4";
+  const bg = kv.background || kv.bg || kv.editor_bg;
+  const fg = kv.foreground || kv.fg || kv.editor_text;
+
+  if (bg && fg) {
+    if (!isValidColor(bg)) {
+      return { success: false, error: `Invalid background color value: "${bg}"` };
+    }
+    if (!isValidColor(fg)) {
+      return { success: false, error: `Invalid foreground color value: "${fg}"` };
+    }
+
+    const sb = kv.sidebar || kv.sidebar_bg || bg;
+    const accent = kv.accent || kv.cursor || "#3b82f6";
+    const border = kv.border || "rgba(128,128,128,0.2)";
+    const sel = kv.selection || "rgba(59,130,246,0.2)";
+
     return {
-      id: "custom_" + Date.now(),
-      name: kv.name || cleanName,
-      background: bg,
-      foreground: fg,
-      sidebar: kv.sidebar || kv.sidebar_bg || bg,
-      accent: kv.accent || kv.cursor || "#89b4fa",
-      border: kv.border || "rgba(128,128,128,0.2)",
-      selection: kv.selection || "rgba(59,130,246,0.2)",
-      isCustom: true
+      success: true,
+      theme: {
+        id: "custom_" + Date.now(),
+        name: kv.name || cleanName,
+        background: bg,
+        foreground: fg,
+        sidebar: isValidColor(sb) ? sb : bg,
+        accent: isValidColor(accent) ? accent : "#3b82f6",
+        border: border,
+        selection: sel,
+        isCustom: true
+      }
     };
   }
 
-  return null;
+  return { 
+    success: false, 
+    error: "File could not be parsed as valid JSON or TOML/Key-Value color scheme with valid 'background' and 'foreground' color codes" 
+  };
 }
 
 function exportCurrentTheme() {
@@ -2286,7 +2355,6 @@ function exportCurrentTheme() {
   a.download = `${active.name.toLowerCase().replace(/\s+/g, "-")}-theme.json`;
   a.click();
   URL.revokeObjectURL(url);
-  showNotification(`Exported "${active.name}" theme`);
 }
 
 // Boot up!
