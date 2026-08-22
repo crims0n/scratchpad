@@ -27,6 +27,7 @@
 :root {
   --bg-app: #f8fafc;
   --bg-sidebar: #ffffff;
+  --sidebar-bg: #ffffff;
   --bg-input: #f1f5f9;
   --border-color: #e2e8f0;
   
@@ -67,6 +68,7 @@
   :root {
     --bg-app: #090d16;
     --bg-sidebar: #111625;
+    --sidebar-bg: #111625;
     --bg-input: #1a2035;
     --border-color: #1e2640;
     
@@ -105,6 +107,7 @@
 html.theme-light {
   --bg-app: #f8fafc;
   --bg-sidebar: #ffffff;
+  --sidebar-bg: #ffffff;
   --bg-input: #f1f5f9;
   --border-color: #e2e8f0;
   
@@ -144,6 +147,7 @@ html.theme-light {
 html.theme-dark {
   --bg-app: #090d16;
   --bg-sidebar: #111625;
+  --sidebar-bg: #111625;
   --bg-input: #1a2035;
   --border-color: #1e2640;
   
