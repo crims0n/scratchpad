@@ -852,6 +852,15 @@ body {
   align-items: center;
 }
 
+.selection-count-text {
+  margin-right: 12px;
+  color: var(--text-secondary);
+  border-right: 1px solid var(--border-color);
+  padding-right: 12px;
+  display: none;
+  font-weight: 400;
+}
+
 #save-status {
   display: flex;
   align-items: center;

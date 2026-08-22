@@ -14,6 +14,7 @@ const noteTitleInput = document.getElementById("note-title");
 const editorTextarea = document.getElementById("editor-textarea");
 const markdownPreview = document.getElementById("markdown-preview");
 const wordCharCount = document.getElementById("word-char-count");
+const selectionCount = document.getElementById("selection-count");
 const saveStatus = document.getElementById("save-status");
 const themeToggleBtn = document.getElementById("theme-toggle");
 const focusBtn = document.getElementById("focus-btn");
@@ -359,6 +360,9 @@ function updateWordCharCount() {
   const totalWords = text.trim() ? text.trim().split(/\s+/).filter(Boolean).length : 0;
   const totalChars = text.length;
   
+  // Always update global count on the left
+  wordCharCount.textContent = `${totalWords} word${totalWords !== 1 ? 's' : ''} • ${totalChars} character${totalChars !== 1 ? 's' : ''}`;
+
   const start = editorTextarea.selectionStart;
   const end = editorTextarea.selectionEnd;
   
@@ -367,9 +371,12 @@ function updateWordCharCount() {
     const selectedWords = selectedText.trim() ? selectedText.trim().split(/\s+/).filter(Boolean).length : 0;
     const selectedChars = selectedText.length;
     
-    wordCharCount.textContent = `${selectedWords} of ${totalWords} word${totalWords !== 1 ? 's' : ''} • ${selectedChars} of ${totalChars} character${totalChars !== 1 ? 's' : ''} selected`;
+    // Show and update selection count on the right
+    selectionCount.textContent = `${selectedWords} word${selectedWords !== 1 ? 's' : ''} • ${selectedChars} character${selectedChars !== 1 ? 's' : ''} selected`;
+    selectionCount.style.display = "inline-block";
   } else {
-    wordCharCount.textContent = `${totalWords} word${totalWords !== 1 ? 's' : ''} • ${totalChars} character${totalChars !== 1 ? 's' : ''}`;
+    // Hide selection count on the right
+    selectionCount.style.display = "none";
   }
 }
 
