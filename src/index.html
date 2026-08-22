@@ -5,10 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Scratchpad</title>
   <link rel="stylesheet" href="styles.css" />
-  <!-- Google Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
   <!-- Offline-ready Markdown Parser -->
   <script src="marked.min.js"></script>
   <script type="module" src="main.js" defer></script>
@@ -46,10 +42,6 @@
 
       <div class="sidebar-footer">
         <button class="sidebar-action-btn" id="theme-toggle" title="Color Themes & Palettes">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-            <circle cx="12" cy="12" r="9" />
-            <path d="M12 3a9 9 0 0 0 0 18v-9h9a9 9 0 0 0-9-9z" />
-          </svg>
           <span class="btn-text" id="theme-btn-text">Theme: Default Dark</span>
         </button>
       </div>
@@ -118,8 +110,8 @@
               <button class="dropdown-item" id="import-btn">Import File</button>
               <button class="dropdown-item" id="export-btn">Export as File</button>
               <div class="dropdown-divider" id="db-divider"></div>
-              <button class="dropdown-item" id="db-connect-btn">Connect SQLite Database...</button>
-              <button class="dropdown-item" id="db-disconnect-btn" style="display: none;">Disconnect SQLite Database</button>
+              <button class="dropdown-item" id="db-connect-btn">Connect Workspace...</button>
+              <button class="dropdown-item" id="db-disconnect-btn" style="display: none;">Disconnect Workspace</button>
             </div>
           </div>
         </div>
@@ -275,9 +267,9 @@
   <div class="help-modal-backdrop" id="help-modal-backdrop" style="display: none;">
     <div class="help-modal" id="help-modal">
       <div class="help-modal-header">
-        <div class="help-tabs">
-          <button class="help-tab-btn active" id="tab-shortcuts-btn">⌨️ Keyboard Shortcuts</button>
-          <button class="help-tab-btn" id="tab-markdown-btn">📝 Markdown Cheatsheet</button>
+        <div class="help-tabs" role="tablist" aria-label="Help topics">
+          <button class="help-tab-btn active" id="tab-shortcuts-btn" role="tab" aria-selected="true" aria-controls="pane-shortcuts">⌨️ Keyboard Shortcuts</button>
+          <button class="help-tab-btn" id="tab-markdown-btn" role="tab" aria-selected="false" aria-controls="pane-markdown" tabindex="-1">📝 Markdown Cheatsheet</button>
         </div>
         <button class="close-help-btn" id="close-help-btn" title="Close (Escape)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
@@ -288,7 +280,7 @@
 
       <div class="help-modal-body">
         <!-- Shortcuts Pane -->
-        <div class="help-pane active" id="pane-shortcuts">
+        <div class="help-pane active" id="pane-shortcuts" role="tabpanel" aria-labelledby="tab-shortcuts-btn">
           <div class="shortcuts-section">
             <h4 class="shortcuts-heading">Workspace & Notes</h4>
             <div class="shortcut-row">
@@ -318,6 +310,10 @@
             <div class="shortcut-row">
               <span class="shortcut-desc">Help & Cheatsheet</span>
               <div class="shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>/</kbd></div>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Switch Help Topic</span>
+              <div class="shortcut-keys"><kbd>Tab</kbd><span class="key-plus">/</span><kbd>Shift</kbd><span class="key-plus">+</span><kbd>Tab</kbd></div>
             </div>
           </div>
 
@@ -371,7 +367,7 @@
         </div>
 
         <!-- Markdown Cheatsheet Pane -->
-        <div class="help-pane" id="pane-markdown">
+        <div class="help-pane" id="pane-markdown" role="tabpanel" aria-labelledby="tab-markdown-btn">
           <div class="cheatsheet-grid">
             <div class="cheatsheet-card">
               <div class="cheatsheet-card-title">Headers</div>

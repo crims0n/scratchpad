@@ -195,6 +195,16 @@ const PRESET_THEMES = [
     selection: "#eee8d5"
   },
   {
+    id: "amber-crt",
+    name: "Amber CRT",
+    background: "#120f08",
+    foreground: "#f6c453",
+    sidebar: "#1b160b",
+    accent: "#ffb000",
+    border: "#4a3814",
+    selection: "#5c4315"
+  },
+  {
     id: "github-dark",
     name: "GitHub Dark",
     background: "#0d1117",
@@ -212,11 +222,11 @@ let activeNoteId = null;
 let secondaryNoteId = null;
 let activePane = "primary"; // "primary" or "secondary"
 let isSplitNoteMode = false;
-let draggedNoteId = null;
 let activeDbPath = null;
 let currentLayoutMode = "edit"; // edit, split, preview
 let isFocusMode = false;
 let isHelpModalOpen = false;
+let helpModalPreviousFocus = null;
 let isThemeModalOpen = false;
 let customThemes = [];
 let activeThemeId = "default-dark";
@@ -227,8 +237,9 @@ let contextMenuTarget = null;
 let contextMenuNoteId = null;
 let isRegexMode = false;
 let isReplaceOpen = false;
-let saveDebounceTimer = null;
+const noteSaveDebounceTimers = new Map();
 let previewDebounceTimer = null;
+let dbSaveQueue = Promise.resolve();
 
 // Initialize app
 async function init() {
@@ -256,15 +267,12 @@ async function init() {
         notes = dbNotes;
       } else if (notes.length > 0) {
         // Seed empty SQLite database with existing LocalStorage notes
-        notes.forEach(note => {
-          invoke("save_note_db", { dbPath: activeDbPath, note: note })
-            .catch(err => console.error("Failed to seed note to SQLite DB", err));
-        });
+        await invoke("save_notes_db", { dbPath: activeDbPath, notes });
       }
       updateDbUiState(true);
     } catch (err) {
       console.error("Failed to load notes from SQLite DB on boot", err);
-      showNotification("SQLite DB error: switched to local storage");
+      showNotification("Workspace error: using local notes");
       activeDbPath = null;
       localStorage.removeItem("scratchpad_active_db");
       updateDbUiState(false);
@@ -366,13 +374,6 @@ function setTheme(theme, pin = true) {
   }
 }
 
-function toggleTheme() {
-  const isCurrentlyDark = document.documentElement.classList.contains("theme-dark") || 
-    (!document.documentElement.classList.contains("theme-light") && window.matchMedia("(prefers-color-scheme: dark)").matches);
-  
-  setTheme(isCurrentlyDark ? "light" : "dark");
-}
-
 // ----------------------------------------------------
 // Note Management Logic
 // ----------------------------------------------------
@@ -388,7 +389,7 @@ function createNote(title = "Untitled Scratchpad", content = "") {
   notes.unshift(newNote);
   activeNoteId = newNote.id;
   
-  saveNotesToStorage();
+  saveNotesToStorage({ syncWorkspace: true });
   renderNoteList();
   loadActiveNote();
   
@@ -405,12 +406,6 @@ function deleteNote(id, event) {
   
   notes.splice(index, 1);
   
-  // If database is active, delete it there
-  if (activeDbPath) {
-    invoke("delete_note_db", { dbPath: activeDbPath, id: id })
-      .catch(err => console.error("Failed to delete note from SQLite DB", err));
-  }
-  
   // Handle active note deletion
   if (activeNoteId === id) {
     if (notes.length > 0) {
@@ -422,7 +417,7 @@ function deleteNote(id, event) {
     }
   }
   
-  saveNotesToStorage();
+  saveNotesToStorage({ syncWorkspace: true });
   renderNoteList();
   loadActiveNote();
 }
@@ -629,7 +624,7 @@ function renderNoteList(filter = "") {
               }
               notes.splice(targetIndex, 0, draggedNote);
 
-              saveNotesToStorage();
+              saveNotesToStorage({ syncWorkspace: true });
               renderNoteList(searchInput.value);
               populateSecondaryNoteSelect();
               showNotification("Notes reordered");
@@ -651,19 +646,47 @@ function renderNoteList(filter = "") {
   });
 }
 
-function saveNotesToStorage() {
+function saveNotesToStorage({ noteId = activeNoteId, syncWorkspace = false } = {}) {
   localStorage.setItem("scratchpad_notes", JSON.stringify(notes));
   
-  if (activeDbPath && activeNoteId) {
-    const activeNote = notes.find(n => n.id === activeNoteId);
-    if (activeNote) {
-      invoke("save_note_db", { dbPath: activeDbPath, note: activeNote })
-        .catch(err => {
-          console.error("Failed to save note to SQLite DB", err);
-          showNotification("SQLite DB save failed!");
-        });
+  if (activeDbPath) {
+    const dbPath = activeDbPath;
+    let command;
+    let payload;
+
+    if (syncWorkspace) {
+      command = "save_notes_db";
+      payload = { dbPath, notes: notes.map(note => ({ ...note })) };
+    } else {
+      const sortOrder = notes.findIndex(note => note.id === noteId);
+      if (sortOrder === -1) return;
+      command = "save_note_db";
+      payload = { dbPath, note: { ...notes[sortOrder] }, sortOrder };
     }
+
+    // Serialize writes so a slower, older save cannot overwrite a newer edit
+    // or structural workspace change.
+    dbSaveQueue = dbSaveQueue
+      .then(() => {
+        if (activeDbPath !== dbPath) return;
+        return invoke(command, payload);
+      })
+      .catch(err => {
+        console.error("Failed to save notes to SQLite DB", err);
+        showNotification("Workspace save failed!");
+      });
   }
+}
+
+function scheduleNoteSave(noteId, afterSave) {
+  clearTimeout(noteSaveDebounceTimers.get(noteId));
+  const timer = setTimeout(() => {
+    noteSaveDebounceTimers.delete(noteId);
+    saveNotesToStorage({ noteId });
+    if (afterSave) afterSave();
+    if (noteSaveDebounceTimers.size === 0) setSavedState();
+  }, 400);
+  noteSaveDebounceTimers.set(noteId, timer);
 }
 
 // ----------------------------------------------------
@@ -695,12 +718,9 @@ function handleEditorInput() {
   triggerSavingState();
 
   // Save notes locally
-  clearTimeout(saveDebounceTimer);
-  saveDebounceTimer = setTimeout(() => {
-    saveNotesToStorage();
+  scheduleNoteSave(activeNote.id, () => {
     renderNoteList(searchInput.value);
-    setSavedState();
-  }, 400);
+  });
 
   // Live markdown compilation
   clearTimeout(previewDebounceTimer);
@@ -720,12 +740,9 @@ function handleTitleInput() {
 
   triggerSavingState();
   
-  clearTimeout(saveDebounceTimer);
-  saveDebounceTimer = setTimeout(() => {
-    saveNotesToStorage();
+  scheduleNoteSave(activeNote.id, () => {
     renderNoteList(searchInput.value);
-    setSavedState();
-  }, 400);
+  });
 }
 
 function triggerSavingState() {
@@ -736,7 +753,7 @@ function triggerSavingState() {
 function setSavedState() {
   if (activeDbPath) {
     const fileName = activeDbPath.split(/[/\\]/).pop();
-    saveStatus.textContent = `Saved (SQLite: ${fileName})`;
+    saveStatus.textContent = `Saved (${fileName})`;
   } else {
     saveStatus.textContent = "Saved";
   }
@@ -780,9 +797,9 @@ function updateMarkdownPreview() {
     try {
       let html = "";
       if (typeof window.marked.parse === "function") {
-        html = window.marked.parse(rawText || "*Empty scratchpad*");
+        html = renderMarkdown(rawText, "*Empty scratchpad*");
       } else if (typeof window.marked === "function") {
-        html = window.marked(rawText || "*Empty scratchpad*");
+        html = sanitizeMarkdownHtml(window.marked(rawText || "*Empty scratchpad*"));
       } else {
         throw new Error("window.marked is neither a function nor contains a parse function");
       }
@@ -869,7 +886,7 @@ function copyHtmlToClipboard() {
   // Render temporary markdown if in full edit mode
   let html = markdownPreview.innerHTML;
   if (currentLayoutMode === "edit" && window.marked) {
-    html = window.marked.parse(editorTextarea.value);
+    html = renderMarkdown(editorTextarea.value);
   }
   
   navigator.clipboard.writeText(html).then(() => {
@@ -1120,6 +1137,12 @@ function attachEventListeners() {
     const isMeta = e.metaKey || e.ctrlKey;
     const isShift = e.shiftKey;
 
+    if (isHelpModalOpen && e.key === "Tab" && !isMeta && !e.altKey) {
+      e.preventDefault();
+      cycleHelpTab(isShift);
+      return;
+    }
+
     // Disable browser inspect shortcuts and accidental page reloads (F12, Cmd+Opt+I, Ctrl+Shift+I, Cmd+R)
     if (
       e.key === "F12" ||
@@ -1231,6 +1254,119 @@ function escapeHTML(str) {
   );
 }
 
+const MARKDOWN_ALLOWED_TAGS = new Set([
+  "a", "blockquote", "br", "code", "del", "em", "h1", "h2", "h3", "h4",
+  "h5", "h6", "hr", "img", "input", "li", "ol", "p", "pre", "strong",
+  "table", "tbody", "td", "th", "thead", "tr", "ul"
+]);
+
+const MARKDOWN_DROP_CONTENT_TAGS = new Set([
+  "audio", "base", "button", "canvas", "embed", "form", "iframe", "link",
+  "math", "meta", "object", "script", "select", "style", "svg", "textarea",
+  "video"
+]);
+
+const MARKDOWN_ALLOWED_ATTRIBUTES = {
+  a: new Set(["href", "title"]),
+  code: new Set(["class"]),
+  img: new Set(["alt", "src", "title"]),
+  input: new Set(["checked", "disabled", "type"]),
+  ol: new Set(["start"]),
+  td: new Set(["align"]),
+  th: new Set(["align"])
+};
+
+function isSafeMarkdownUrl(value, isImage = false) {
+  const compact = value.trim().replace(/[\u0000-\u0020\u007f]+/g, "").toLowerCase();
+  if (!compact) return false;
+  if (!isImage && compact.startsWith("#")) return true;
+  if (compact.startsWith("https://") || compact.startsWith("http://")) return true;
+  if (!isImage && compact.startsWith("mailto:")) return true;
+  return isImage && /^data:image\/(png|gif|jpe?g|webp);base64,/.test(compact);
+}
+
+function sanitizeMarkdownHtml(html) {
+  const template = document.createElement("template");
+  template.innerHTML = html;
+
+  const elements = Array.from(template.content.querySelectorAll("*"));
+  elements.forEach(element => {
+    const tag = element.tagName.toLowerCase();
+
+    if (MARKDOWN_DROP_CONTENT_TAGS.has(tag)) {
+      element.remove();
+      return;
+    }
+    if (!MARKDOWN_ALLOWED_TAGS.has(tag)) {
+      element.replaceWith(...element.childNodes);
+      return;
+    }
+
+    const allowedAttributes = MARKDOWN_ALLOWED_ATTRIBUTES[tag] || new Set();
+    Array.from(element.attributes).forEach(attribute => {
+      if (!allowedAttributes.has(attribute.name.toLowerCase())) {
+        element.removeAttribute(attribute.name);
+      }
+    });
+
+    if (tag === "a") {
+      const href = element.getAttribute("href");
+      if (!href || !isSafeMarkdownUrl(href)) {
+        element.removeAttribute("href");
+      } else {
+        element.setAttribute("target", "_blank");
+        element.setAttribute("rel", "noopener noreferrer");
+      }
+    }
+
+    if (tag === "img") {
+      const src = element.getAttribute("src");
+      if (!src || !isSafeMarkdownUrl(src, true)) {
+        element.remove();
+        return;
+      }
+      element.setAttribute("loading", "lazy");
+      element.setAttribute("referrerpolicy", "no-referrer");
+    }
+
+    if (tag === "input" && element.getAttribute("type") !== "checkbox") {
+      element.remove();
+    }
+
+    if ((tag === "td" || tag === "th") && element.hasAttribute("align")) {
+      const align = element.getAttribute("align").toLowerCase();
+      if (!["left", "center", "right"].includes(align)) {
+        element.removeAttribute("align");
+      }
+    }
+
+    if (tag === "code" && element.hasAttribute("class")) {
+      const safeClasses = element.className
+        .split(/\s+/)
+        .filter(className => /^language-[a-z0-9_-]+$/i.test(className));
+      if (safeClasses.length > 0) {
+        element.className = safeClasses.join(" ");
+      } else {
+        element.removeAttribute("class");
+      }
+    }
+  });
+
+  return template.innerHTML;
+}
+
+function renderMarkdown(rawText, emptyFallback = "") {
+  if (!window.marked) return "";
+  const source = rawText || emptyFallback;
+  if (typeof window.marked.parse === "function") {
+    return sanitizeMarkdownHtml(window.marked.parse(source));
+  }
+  if (typeof window.marked === "function") {
+    return sanitizeMarkdownHtml(window.marked(source));
+  }
+  throw new Error("Markdown parser is unavailable");
+}
+
 // Database helpers
 function loadNotesFromLocalStorage() {
   const savedNotes = localStorage.getItem("scratchpad_notes");
@@ -1250,8 +1386,8 @@ function updateDbUiState(isConnected) {
     dbDisconnectBtn.style.display = "block";
     
     const fileName = activeDbPath.split(/[/\\]/).pop();
-    saveStatus.textContent = `Saved (SQLite: ${fileName})`;
-    saveStatus.title = `Database File: ${activeDbPath}`;
+    saveStatus.textContent = `Saved (${fileName})`;
+    saveStatus.title = `Workspace: ${activeDbPath}`;
   } else {
     dbConnectBtn.style.display = "block";
     dbDisconnectBtn.style.display = "none";
@@ -1261,60 +1397,70 @@ function updateDbUiState(isConnected) {
   }
 }
 
-function connectDatabase() {
+async function connectDatabase() {
   if (!window.__TAURI__) {
-    showNotification("SQLite is only available in Desktop App mode!");
+    showNotification("Workspaces are only available in the desktop app");
     return;
   }
-  
-  invoke("select_db_file")
-    .then((path) => {
-      if (path) {
-        activeDbPath = path;
-        localStorage.setItem("scratchpad_active_db", path);
-        
-        // Load notes from the selected database
-        invoke("load_db_notes", { dbPath: path })
-          .then((dbNotes) => {
-            notes = dbNotes;
-            updateDbUiState(true);
-            
-            // If the database is completely empty, seed it with current LocalStorage notes
-            if (notes.length === 0) {
-              const savedNotes = localStorage.getItem("scratchpad_notes");
-              if (savedNotes) {
-                try {
-                  const fallbackNotes = JSON.parse(savedNotes);
-                  if (fallbackNotes.length > 0) {
-                    notes = fallbackNotes;
-                    notes.forEach((note) => {
-                      invoke("save_note_db", { dbPath: path, note: note })
-                        .catch(err => console.error("Failed to seed note to SQLite DB", err));
-                    });
-                  }
-                } catch (e) {}
-              }
-            }
-            
-            if (notes.length === 0) {
-              createNote();
-            } else {
-              activeNoteId = notes[0].id;
-              renderNoteList();
-              loadActiveNote();
-            }
-            
-            showNotification("SQLite database connected!");
-          })
-          .catch((err) => {
-            showNotification("Failed to read database: " + err);
-            disconnectDatabase();
-          });
+
+  let path;
+  try {
+    path = await invoke("select_db_file");
+  } catch (err) {
+    showNotification("Database selection failed: " + err);
+    return;
+  }
+  if (!path) return;
+
+  activeDbPath = path;
+  localStorage.setItem("scratchpad_active_db", path);
+
+  try {
+    notes = await invoke("load_db_notes", { dbPath: path });
+
+    // If the database is completely empty, seed it with current LocalStorage notes.
+    if (notes.length === 0) {
+      const savedNotes = localStorage.getItem("scratchpad_notes");
+      if (savedNotes) {
+        try {
+          const fallbackNotes = JSON.parse(savedNotes);
+          if (Array.isArray(fallbackNotes) && fallbackNotes.length > 0) {
+            notes = fallbackNotes;
+            await invoke("save_notes_db", { dbPath: path, notes });
+          }
+        } catch (err) {
+          console.error("Failed to seed notes to SQLite DB", err);
+        }
       }
-    })
-    .catch((err) => {
-      showNotification("Database selection failed: " + err);
-    });
+    }
+
+    updateDbUiState(true);
+    if (notes.length === 0) {
+      createNote();
+    } else {
+      activeNoteId = notes[0].id;
+      renderNoteList();
+      loadActiveNote();
+    }
+
+    showNotification("Workspace connected!");
+  } catch (err) {
+    console.error("Failed to read SQLite database", err);
+    activeDbPath = null;
+    localStorage.removeItem("scratchpad_active_db");
+    loadNotesFromLocalStorage();
+
+    if (notes.length === 0) {
+      createNote();
+    } else {
+      activeNoteId = notes[0].id;
+      renderNoteList();
+      loadActiveNote();
+    }
+
+    updateDbUiState(false);
+    showNotification("Could not open workspace; using local notes");
+  }
 }
 
 function disconnectDatabase() {
@@ -1332,7 +1478,7 @@ function disconnectDatabase() {
   }
   
   updateDbUiState(false);
-  showNotification("Switched to LocalStorage");
+  showNotification("Workspace disconnected; using local notes");
 }
 
 // Find & Replace Widget functions
@@ -1839,12 +1985,9 @@ function handleSecondaryEditorInput() {
 
   triggerSavingState();
 
-  clearTimeout(saveDebounceTimer);
-  saveDebounceTimer = setTimeout(() => {
-    saveNotesToStorage();
+  scheduleNoteSave(note.id, () => {
     renderNoteList(searchInput.value);
-    setSavedState();
-  }, 400);
+  });
 
   clearTimeout(previewDebounceTimer);
   previewDebounceTimer = setTimeout(() => {
@@ -1865,19 +2008,16 @@ function handleSecondaryTitleInput() {
 
   triggerSavingState();
 
-  clearTimeout(saveDebounceTimer);
-  saveDebounceTimer = setTimeout(() => {
-    saveNotesToStorage();
+  scheduleNoteSave(note.id, () => {
     renderNoteList(searchInput.value);
     populateSecondaryNoteSelect();
-    setSavedState();
-  }, 400);
+  });
 }
 
 function updateSecondaryMarkdownPreview() {
   if (currentLayoutMode === "edit") return;
   if (window.marked) {
-    secondaryMarkdownPreview.innerHTML = window.marked.parse(secondaryEditorTextarea.value);
+    secondaryMarkdownPreview.innerHTML = renderMarkdown(secondaryEditorTextarea.value);
   }
 }
 
@@ -1924,7 +2064,7 @@ function moveNoteUp(noteId) {
   const [note] = notes.splice(index, 1);
   notes.splice(index - 1, 0, note);
   
-  saveNotesToStorage();
+  saveNotesToStorage({ syncWorkspace: true });
   renderNoteList(searchInput.value);
   populateSecondaryNoteSelect();
   showNotification("Note moved up");
@@ -1938,7 +2078,7 @@ function moveNoteDown(noteId) {
   const [note] = notes.splice(index, 1);
   notes.splice(index + 1, 0, note);
   
-  saveNotesToStorage();
+  saveNotesToStorage({ syncWorkspace: true });
   renderNoteList(searchInput.value);
   populateSecondaryNoteSelect();
   showNotification("Note moved down");
@@ -1948,14 +2088,19 @@ function moveNoteDown(noteId) {
 // Help & Reference Modal Logic
 // ----------------------------------------------------
 function openHelpModal(defaultTab = "shortcuts") {
+  helpModalPreviousFocus = document.activeElement;
   isHelpModalOpen = true;
   helpModalBackdrop.style.display = "flex";
-  switchHelpTab(defaultTab);
+  switchHelpTab(defaultTab, true);
 }
 
 function closeHelpModal() {
   isHelpModalOpen = false;
   helpModalBackdrop.style.display = "none";
+  if (helpModalPreviousFocus && helpModalPreviousFocus.isConnected) {
+    helpModalPreviousFocus.focus({ preventScroll: true });
+  }
+  helpModalPreviousFocus = null;
 }
 
 function toggleHelpModal() {
@@ -1966,18 +2111,33 @@ function toggleHelpModal() {
   }
 }
 
-function switchHelpTab(tabName) {
-  if (tabName === "markdown") {
-    tabMarkdownBtn.classList.add("active");
-    tabShortcutsBtn.classList.remove("active");
-    paneMarkdown.classList.add("active");
-    paneShortcuts.classList.remove("active");
-  } else {
-    tabShortcutsBtn.classList.add("active");
-    tabMarkdownBtn.classList.remove("active");
-    paneShortcuts.classList.add("active");
-    paneMarkdown.classList.remove("active");
+function switchHelpTab(tabName, focusTab = false) {
+  const isMarkdown = tabName === "markdown";
+
+  tabMarkdownBtn.classList.toggle("active", isMarkdown);
+  tabShortcutsBtn.classList.toggle("active", !isMarkdown);
+  paneMarkdown.classList.toggle("active", isMarkdown);
+  paneShortcuts.classList.toggle("active", !isMarkdown);
+
+  tabMarkdownBtn.setAttribute("aria-selected", String(isMarkdown));
+  tabShortcutsBtn.setAttribute("aria-selected", String(!isMarkdown));
+  tabMarkdownBtn.tabIndex = isMarkdown ? 0 : -1;
+  tabShortcutsBtn.tabIndex = isMarkdown ? -1 : 0;
+  paneMarkdown.setAttribute("aria-hidden", String(!isMarkdown));
+  paneShortcuts.setAttribute("aria-hidden", String(isMarkdown));
+
+  if (focusTab) {
+    (isMarkdown ? tabMarkdownBtn : tabShortcutsBtn).focus({ preventScroll: true });
   }
+}
+
+function cycleHelpTab(backwards = false) {
+  const tabs = ["shortcuts", "markdown"];
+  const currentTab = tabMarkdownBtn.classList.contains("active") ? "markdown" : "shortcuts";
+  const currentIndex = tabs.indexOf(currentTab);
+  const direction = backwards ? -1 : 1;
+  const nextIndex = (currentIndex + direction + tabs.length) % tabs.length;
+  switchHelpTab(tabs[nextIndex], true);
 }
 
 // ----------------------------------------------------
@@ -1998,7 +2158,13 @@ function loadSavedThemes() {
   try {
     const saved = localStorage.getItem("scratchpad_custom_themes");
     if (saved) {
-      customThemes = JSON.parse(saved);
+      const parsedThemes = JSON.parse(saved);
+      if (Array.isArray(parsedThemes)) {
+        customThemes = parsedThemes
+          .map((theme, index) => normalizeCustomTheme(theme, index))
+          .filter(Boolean);
+        localStorage.setItem("scratchpad_custom_themes", JSON.stringify(customThemes));
+      }
     }
   } catch (e) {}
 
@@ -2093,11 +2259,26 @@ function isColorDark(hex) {
 function isValidColor(str) {
   if (!str || typeof str !== "string") return false;
   const s = str.trim();
-  // Valid HEX (#fff, #ffffff, #ffffffff)
-  if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(s)) return true;
-  // Valid rgb/rgba/hsl/hsla
-  if (/^(rgb|rgba|hsl|hsla)\([^)]+\)$/i.test(s)) return true;
-  return false;
+  if (/["'<>;&\\\u0000-\u001f\u007f]/.test(s)) return false;
+  return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(s) ||
+    (typeof CSS !== "undefined" && CSS.supports("color", s));
+}
+
+function normalizeCustomTheme(theme, index = 0) {
+  if (!theme || typeof theme !== "object") return null;
+  if (!isValidColor(theme.background) || !isValidColor(theme.foreground)) return null;
+
+  return {
+    id: typeof theme.id === "string" && theme.id ? theme.id : `custom_saved_${index}`,
+    name: typeof theme.name === "string" && theme.name.trim() ? theme.name.trim() : `Custom Theme ${index + 1}`,
+    background: theme.background.trim(),
+    foreground: theme.foreground.trim(),
+    sidebar: isValidColor(theme.sidebar) ? theme.sidebar.trim() : theme.background.trim(),
+    accent: isValidColor(theme.accent) ? theme.accent.trim() : "#3b82f6",
+    border: isValidColor(theme.border) ? theme.border.trim() : "rgba(128,128,128,0.2)",
+    selection: isValidColor(theme.selection) ? theme.selection.trim() : "rgba(59,130,246,0.2)",
+    isCustom: true
+  };
 }
 
 async function promptImportError(title, message) {
@@ -2274,8 +2455,8 @@ function parseThemeContent(content, fileName) {
         foreground: fg,
         sidebar: isValidColor(sb) ? sb : bg,
         accent: isValidColor(accent) ? accent : "#3b82f6",
-        border: border,
-        selection: sel,
+        border: isValidColor(border) ? border : "rgba(128,128,128,0.2)",
+        selection: isValidColor(sel) ? sel : "rgba(59,130,246,0.2)",
         isCustom: true
       }
     };
@@ -2320,8 +2501,8 @@ function parseThemeContent(content, fileName) {
         foreground: fg,
         sidebar: isValidColor(sb) ? sb : bg,
         accent: isValidColor(accent) ? accent : "#3b82f6",
-        border: border,
-        selection: sel,
+        border: isValidColor(border) ? border : "rgba(128,128,128,0.2)",
+        selection: isValidColor(sel) ? sel : "rgba(59,130,246,0.2)",
         isCustom: true
       }
     };
