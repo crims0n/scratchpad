@@ -3,6 +3,8 @@
 // Handles state, events, markdown compiling, and theme
 // ----------------------------------------------------
 
+const { invoke } = window.__TAURI__ ? window.__TAURI__.core : { invoke: () => Promise.resolve() };
+
 // Select DOM elements
 const appContainer = document.getElementById("app");
 const sidebar = document.getElementById("sidebar");
@@ -498,19 +500,34 @@ function exportAsMarkdownFile() {
   const content = activeNote.content;
   const fileName = activeNote.title.toLowerCase().replace(/[^a-z0-9]+/g, "-") + ".md";
   
-  // Safe web-based blob download compatible across systems
-  const blob = new Blob([content], { type: "text/markdown;charset=utf-8;" });
-  const link = document.createElement("a");
-  
-  if (link.download !== undefined) {
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", fileName);
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    showNotification(`Exported as ${fileName}`);
+  if (window.__TAURI__) {
+    // Show a saving state
+    saveStatus.textContent = "Exporting...";
+    invoke("save_file_native", { content: content, defaultName: fileName })
+      .then((path) => {
+        showNotification("Saved successfully");
+      })
+      .catch((err) => {
+        if (err !== "Cancelled") {
+          showNotification("Export failed: " + err);
+        } else {
+          setSavedState(); // Restore Saved indicator
+        }
+      });
+  } else {
+    // Safe web-based blob download fallback compatible across systems
+    const blob = new Blob([content], { type: "text/markdown;charset=utf-8;" });
+    const link = document.createElement("a");
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", fileName);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showNotification(`Exported as ${fileName}`);
+    }
   }
 }
 
