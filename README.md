@@ -1,9 +1,6 @@
 # Scratchpad
 
 A minimalist, cross-platform, and high-efficiency desktop text editor designed to be the ultimate developer scratchpad. Built with **Tauri v2** and vanilla HTML/CSS/JS, it has a near-zero memory footprint and starts instantly.
-
-![Scratchpad Demo](https://github.com/crims0n/scratchpad/raw/main/src/assets/tauri.svg) *(Placeholder image)*
-
 ---
 
 ## ✨ Features
