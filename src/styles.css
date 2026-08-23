@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+
 /* ----------------------------------------------------
    Scratchpad - CSS Stylesheet
    Designed with premium dark/light themes, typography,
@@ -1560,6 +1562,13 @@ kbd {
   word-break: break-word;
 }
 
+.cheatsheet-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
 /* ----------------------------------------------------
    Color Themes Modal & Gallery
    ---------------------------------------------------- */
@@ -1637,6 +1646,12 @@ kbd {
   transform: translateY(-2px);
   border-color: var(--accent-color);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+.theme-card:focus-visible,
+.note-item:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
 }
 
 .theme-card.active {

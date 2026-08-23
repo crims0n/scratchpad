@@ -1,0 +1,34 @@
+name: Bug report
+description: Report a reproducible problem in Scratchpad.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include private notes, workspace files, or credentials. Report security issues through the private process in SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: Scratchpad version
+      placeholder: 0.1.1
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options: [macOS, Windows, Linux]
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Include clear steps to reproduce the problem and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      render: shell

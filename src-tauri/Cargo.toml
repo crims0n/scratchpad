@@ -1,9 +1,11 @@
 [package]
 name = "scratchpad"
-version = "0.1.1"
+version = "0.2.0"
 description = "A lightweight, offline-first Markdown scratchpad for the desktop."
+license = "GPL-3.0-or-later"
 authors = ["crims0n"]
 repository = "https://github.com/crims0n/scratchpad"
+homepage = "https://github.com/crims0n/scratchpad"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -20,10 +22,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
-tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri-plugin-dialog = "2.7.2"
-tauri-plugin-fs = "2.5.1"
 rfd = { version = "0.17.2", features = ["common-controls-v6"] }
 rusqlite = { version = "0.40.2", features = ["bundled"] }

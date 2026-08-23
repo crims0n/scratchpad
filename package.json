@@ -1,18 +1,35 @@
 {
   "name": "scratchpad",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "A lightweight, offline-first Markdown scratchpad for the desktop.",
+  "license": "GPL-3.0-or-later",
   "author": "crims0n",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/crims0n/scratchpad.git"
   },
+  "homepage": "https://github.com/crims0n/scratchpad#readme",
+  "bugs": {
+    "url": "https://github.com/crims0n/scratchpad/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "type": "module",
   "scripts": {
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "vendor:marked": "node scripts/vendor-marked.mjs",
+    "check:versions": "node scripts/check-versions.mjs",
+    "check:js": "node --check src/main.js && node --check src/markdown.js && node --check src/note-preview.js && node --check src/storage.js",
+    "test": "node --test",
+    "check": "npm run check:versions && npm run check:js && npm test"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2"
+    "@tauri-apps/cli": "^2",
+    "jsdom": "26.1.0"
+  },
+  "dependencies": {
+    "marked": "18.0.10"
   }
 }

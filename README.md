@@ -4,54 +4,52 @@
 
 # Scratchpad
 
-Scratchpad is a fast, local-first desktop editor for notes, snippets, and Markdown. It is built with Tauri v2 and a vanilla HTML, CSS, and JavaScript frontend, with no account or cloud service required.
+[![CI](https://github.com/crims0n/scratchpad/actions/workflows/ci.yml/badge.svg)](https://github.com/crims0n/scratchpad/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/crims0n/scratchpad?include_prereleases)](https://github.com/crims0n/scratchpad/releases)
+[![License: GPL v3 or later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
+
+Scratchpad is a lightweight, open-source, local-first desktop editor for notes, snippets, and Markdown. It runs on macOS, Windows, and Linux with no account, cloud service, or telemetry.
+
+## Install
+
+Scratchpad is in beta. Download the newest prerelease from [GitHub Releases](https://github.com/crims0n/scratchpad/releases):
+
+- **macOS:** open the `.dmg` and drag Scratchpad Beta to Applications.
+- **Windows:** run the `.msi` or `.exe` installer.
+- **Linux:** install the `.deb`, or make the `.AppImage` executable and run it.
+
+Beta packages are not yet production-signed. macOS and Windows may show a security warning, so only install artifacts downloaded from this repository. Back up important workspace files before testing.
+
+<p align="center">
+  <img src="images/preview.png" alt="Scratchpad application preview" width="900">
+</p>
 
 ## Features
 
-### Writing and editing
-
-- Multiple automatically saved scratchpads
-- Automatic titles derived from the first line until a title is edited manually
+- Multiple scratchpads with automatic saving and titles derived from the first line
 - Edit, synchronized edit/preview, and full Markdown preview layouts
-- Two-note side-by-side editing via the toolbar, context menu, shortcut, or drag-to-split
-- Word and character counts for the document and current selection
-- Focus mode for distraction-free writing
-- Copy as Markdown or rendered HTML
+- Two-note side-by-side editing with drag-to-split
+- Sidebar search, note reordering, word counts, and distraction-free Focus Mode
+- Find and replace with regular-expression support and live highlighting
+- Native text-file import and Markdown export
+- Copy as Markdown or sanitized rendered HTML
+- Optional portable workspace files that reopen automatically
+- Built-in and importable color themes
+- Keyboard shortcut reference and Markdown cheatsheet
 
-### Finding and organizing
+## Storage and privacy
 
-- Sidebar search across note titles and contents
-- Note reordering by drag and drop, context menu, or keyboard
-- Case-insensitive find and replace with live match highlighting
-- Regular-expression search and replacement, including capture groups
-- Native import for Markdown, source code, configuration, and other UTF-8 text files
-- Native Markdown export with a generated filename
+By default, notes stay in the desktop webview's local storage. Scratchpad also supports optional portable workspace files for a durable collection of notes and their sidebar order. Workspace files use SQLite internally and may have a `.db` or `.sqlite` extension.
 
-### Storage and workspaces
+Changes are mirrored locally and serialized to the connected workspace. Pending workspace changes are flushed before the desktop window closes; if that save fails, Scratchpad cancels the close and reports the error. Connecting an empty workspace seeds it with the notes already available in the app.
 
-- Local-first persistence with debounced saves
-- Optional portable workspace files that preserve notes and sidebar order
-- Explicit flows for opening an existing workspace or creating a new one
-- Native last-workspace preference shared across development and packaged launch modes
-- Automatic migration of workspace files created by earlier versions
-- Local mirroring while a workspace is connected
+Scratchpad has no analytics, advertising, accounts, or sync service. Markdown is parsed on-device, preview HTML is sanitized, and remote images are blocked so merely previewing a note does not contact an image host. Following an ordinary web link is still an explicit network action and may contact that destination.
 
-Workspace files use SQLite internally and accept `.db` or `.sqlite` extensions. Connecting an empty workspace seeds it with the notes currently available in Scratchpad.
-
-### Themes and help
-
-- Built-in dark and light themes
-- Developer-oriented presets: Dracula, Catppuccin Mocha, Nord, Tokyo Night, Monokai Pro, One Dark Pro, Solarized Dark, Solarized Light, Amber CRT, Green CRT, Pastel Daydream, Macintosh System 6, Mac OS 9 Platinum, Windows Classic, and GitHub Dark
-- Import custom JSON or TOML/key-value color themes
-- Export the active theme as JSON
-- Built-in keyboard shortcut reference and Markdown cheatsheet
-- Keyboard navigation between help topics with `Tab` and `Shift+Tab`
-
-Markdown is parsed locally with a bundled copy of marked. Preview output is sanitized before rendering, and the desktop window uses a restrictive content security policy.
+Back up important workspace files like any other local document. Local-only notes remain tied to the app data stored by the operating system and may be lost if that data is cleared.
 
 ## Keyboard shortcuts
 
-Use `Cmd` on macOS and `Ctrl` on Windows or Linux.
+The app displays `Cmd` on macOS and `Ctrl` on Windows or Linux.
 
 | Shortcut | Action |
 | --- | --- |
@@ -68,9 +66,11 @@ Use `Cmd` on macOS and `Ctrl` on Windows or Linux.
 | `Tab` / `Shift + Tab` | Switch topics while Help is open |
 | `Escape` | Close the active modal or Find bar, or leave Focus Mode |
 
-## Custom themes
+## Themes
 
-A JSON theme requires `background` and `foreground`. The remaining colors are optional and receive safe defaults when omitted.
+Scratchpad includes Default Dark and Light, Dracula, Catppuccin Mocha, Nord, Tokyo Night, Monokai Pro, One Dark Pro, Solarized Dark and Light, Amber CRT, Green CRT, Pastel Daydream, Macintosh System 6, Mac OS 9 Platinum, Windows Classic, and GitHub Dark.
+
+A custom JSON theme requires `background` and `foreground`. Other colors receive defaults when omitted:
 
 ```json
 {
@@ -84,15 +84,15 @@ A JSON theme requires `background` and `foreground`. The remaining colors are op
 }
 ```
 
-Scratchpad also accepts simple TOML/key-value themes using the same property names. Imported color values are validated before the theme is stored or rendered.
+Simple TOML/key-value theme files using the same names are also accepted. Imported colors are validated before they are stored or rendered.
 
 ## Development
 
 ### Prerequisites
 
-- Node.js 18 or newer
-- A current stable Rust toolchain with Cargo
-- The platform dependencies listed in the [Tauri prerequisites guide](https://tauri.app/start/prerequisites/)
+- Node.js 20 or newer
+- Rust 1.98.0 (also declared in `rust-toolchain.toml`)
+- The dependencies in the [Tauri prerequisites guide](https://tauri.app/start/prerequisites/)
 
 ### Run locally
 
@@ -103,36 +103,32 @@ npm install
 npm run tauri -- dev
 ```
 
-The frontend is served directly from `src/`; there is no framework-specific build step or development server.
+The frontend is served directly from `src/`; there is no framework-specific development server.
 
 ### Validate changes
 
 ```bash
-node --check src/main.js
-cargo fmt --check --manifest-path src-tauri/Cargo.toml
+npm run check
+cargo fmt --manifest-path src-tauri/Cargo.toml --check
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-### Build a release
+### Build locally
 
 ```bash
 npm run tauri -- build
 ```
 
-Application bundles and installers are written beneath `src-tauri/target/release/bundle/`.
+Bundles and installers are written beneath `src-tauri/target/release/bundle/`.
 
-### Build or publish a beta
+## Releases
 
-Beta builds use a separate app name, identifier, and preferences directory so they can be installed alongside the stable app:
+The **CI** workflow validates every push to `main` and every pull request. The manually triggered **Beta Release** workflow validates the project, builds macOS, Windows, and Linux packages, and attaches them to a draft prerelease.
 
-```bash
-npm run tauri -- build --config src-tauri/tauri.beta.conf.json
-```
+Before triggering a beta release, update the version in `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`. The validation command checks that all three match, and the workflow refuses to overwrite an existing release tag. Review the generated draft and its assets before publishing it.
 
-The **Beta Release** workflow in GitHub Actions builds macOS, Windows, and Linux installers and attaches them to a draft prerelease. Run it manually from the repository's **Actions** tab. Before creating another beta, update the version in `src-tauri/tauri.conf.json`; the workflow uses that version for the release tag and title.
-
-The macOS beta is ad-hoc signed for early testing. Public distribution should use platform signing and notarization credentials configured as repository secrets.
+Production distribution will also require platform signing and, on macOS, notarization credentials configured as repository secrets.
 
 ## Architecture
 
@@ -140,17 +136,16 @@ The macOS beta is ad-hoc signed for early testing. Public distribution should us
 | --- | --- |
 | Desktop runtime | Tauri v2 and Rust |
 | Frontend | Vanilla HTML, CSS, and JavaScript |
-| Markdown | Bundled marked parser with an allowlist sanitizer |
-| Local persistence | Webview local storage |
+| Markdown | Bundled Marked parser with an allowlist sanitizer |
+| Local persistence | Desktop webview local storage |
 | Workspace persistence | Bundled SQLite through `rusqlite` |
 | Native preferences | JSON in the platform app configuration directory |
-| Native integration | Rust commands and native file/message dialogs |
 | Themes | CSS custom properties with JSON and TOML/key-value import |
 
-The main project files are:
+## Contributing and security
 
-- `src/index.html` — application structure and built-in help content
-- `src/styles.css` — layout modes, components, and theme tokens
-- `src/main.js` — editor state, persistence coordination, commands, and interactions
-- `src-tauri/src/lib.rs` — native dialogs, file operations, and workspace persistence
-- `src-tauri/tauri.conf.json` — desktop window, bundle, and security configuration
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow. Please report suspected vulnerabilities privately using the process in [SECURITY.md](SECURITY.md).
+
+## License
+
+Scratchpad is free software licensed under [GPL-3.0-or-later](LICENSE). The bundled Marked parser is provided under the MIT License; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

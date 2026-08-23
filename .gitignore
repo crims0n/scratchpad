@@ -11,6 +11,13 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
+.env.*
+!.env.example
+*.p12
+*.pfx
+*.mobileprovision
+*.key
 
 # Editor directories and files
 .vscode/

@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import { persistNotesLocally } from "./storage.js";
+import { renderMarkdown, sanitizeMarkdownHtml } from "./markdown.js";
+import { getNotePreview } from "./note-preview.js";
+
 // ----------------------------------------------------
 // Scratchpad - Core Application Logic
 // Handles state, events, markdown compiling, and theme
@@ -87,6 +93,7 @@ const splitDropOverlay = document.getElementById("split-drop-overlay");
 
 const themePickerBtn = document.getElementById("theme-picker-btn");
 const themeModalBackdrop = document.getElementById("theme-modal-backdrop");
+const themeModal = document.getElementById("theme-modal");
 const closeThemeBtn = document.getElementById("close-theme-btn");
 const themeImportBtn = document.getElementById("theme-import-btn");
 const themeExportBtn = document.getElementById("theme-export-btn");
@@ -284,6 +291,7 @@ let isFocusMode = false;
 let isHelpModalOpen = false;
 let helpModalPreviousFocus = null;
 let isThemeModalOpen = false;
+let themeModalPreviousFocus = null;
 let customThemes = [];
 let activeThemeId = "default-dark";
 let findMatches = [];
@@ -296,6 +304,27 @@ let isReplaceOpen = false;
 const noteSaveDebounceTimers = new Map();
 let previewDebounceTimer = null;
 let dbSaveQueue = Promise.resolve();
+let isClosing = false;
+let localMirrorFailureNotified = false;
+let notificationSequence = 0;
+
+function applyPlatformShortcutLabels() {
+  const platform = navigator.userAgentData?.platform || navigator.platform || navigator.userAgent || "";
+  if (/mac|iphone|ipad|ipod/i.test(platform)) return;
+
+  document.querySelectorAll("[title]").forEach((element) => {
+    const title = element.getAttribute("title");
+    if (title?.includes("Cmd")) {
+      element.setAttribute("title", title.replaceAll("Cmd", "Ctrl"));
+    }
+  });
+
+  document.querySelectorAll("kbd, .shortcut-hint").forEach((element) => {
+    if (element.textContent.includes("Cmd")) {
+      element.textContent = element.textContent.replaceAll("Cmd", "Ctrl");
+    }
+  });
+}
 
 async function loadRememberedWorkspacePath() {
   const legacyPath = localStorage.getItem("scratchpad_active_db");
@@ -313,8 +342,10 @@ async function loadRememberedWorkspacePath() {
 
 // Initialize app
 async function init() {
-  // 1. Attach all event listeners immediately so all UI buttons and keyboard shortcuts are live
+  // 1. Localize shortcut labels and attach event listeners immediately.
+  applyPlatformShortcutLabels();
   attachEventListeners();
+  await registerCloseHandler();
 
   // 2. Load the saved theme (Default Dark on first launch) and layout mode
   loadSavedThemes();
@@ -487,10 +518,11 @@ function renderNoteList(filter = "") {
     const item = document.createElement("li");
     item.className = `note-item ${note.id === activeNoteId ? "active" : ""}`;
     item.setAttribute("data-id", note.id);
+    item.tabIndex = 0;
+    item.setAttribute("aria-label", `Open ${note.title}`);
+    if (note.id === activeNoteId) item.setAttribute("aria-current", "true");
     
-    // Snippet formatting
-    const firstLine = note.content.trim().split("\n")[0] || "";
-    const snippet = firstLine.replace(/[#*`>_\-]/g, "").trim() || "Empty scratchpad...";
+    const snippet = getNotePreview(note);
     
     const formattedDate = new Date(note.updatedAt).toLocaleDateString(undefined, {
       month: "short",
@@ -502,7 +534,7 @@ function renderNoteList(filter = "") {
     item.innerHTML = `
       <div class="note-item-header">
         <span class="note-item-title">${escapeHTML(note.title)}</span>
-        <button class="note-item-delete" title="Delete scratchpad">
+        <button class="note-item-delete" title="Delete scratchpad" aria-label="Delete ${escapeHTML(note.title)}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
@@ -530,6 +562,13 @@ function renderNoteList(filter = "") {
         activeNoteId = note.id;
         renderNoteList(searchInput.value);
         loadActiveNote();
+      }
+    });
+
+    item.addEventListener("keydown", (e) => {
+      if ((e.key === "Enter" || e.key === " ") && !e.target.closest(".note-item-delete")) {
+        e.preventDefault();
+        item.click();
       }
     });
 
@@ -683,7 +722,19 @@ function renderNoteList(filter = "") {
 }
 
 function saveNotesToStorage({ noteId = activeNoteId, syncWorkspace = false } = {}) {
-  localStorage.setItem("scratchpad_notes", JSON.stringify(notes));
+  const localResult = persistNotesLocally(localStorage, notes);
+
+  if (localResult.ok) {
+    localMirrorFailureNotified = false;
+  } else {
+    console.error("Failed to save the local notes mirror", localResult.error);
+    if (!localMirrorFailureNotified) {
+      showNotification(activeDbPath
+        ? "Local mirror unavailable; workspace saves will continue"
+        : "Local save failed; free some disk space or connect a workspace");
+      localMirrorFailureNotified = true;
+    }
+  }
   
   if (activeDbPath) {
     const dbPath = activeDbPath;
@@ -695,34 +746,101 @@ function saveNotesToStorage({ noteId = activeNoteId, syncWorkspace = false } = {
       payload = { dbPath, notes: notes.map(note => ({ ...note })) };
     } else {
       const sortOrder = notes.findIndex(note => note.id === noteId);
-      if (sortOrder === -1) return;
+      if (sortOrder === -1) return Promise.resolve(localResult.ok);
       command = "save_note_db";
       payload = { dbPath, note: { ...notes[sortOrder] }, sortOrder };
     }
 
     // Serialize writes so a slower, older save cannot overwrite a newer edit
     // or structural workspace change.
-    dbSaveQueue = dbSaveQueue
+    const workspaceSave = dbSaveQueue
       .then(() => {
-        if (activeDbPath !== dbPath) return;
-        return invoke(command, payload);
+        if (activeDbPath !== dbPath) return localResult.ok;
+        return invoke(command, payload).then(() => true);
       })
       .catch(err => {
         console.error("Failed to save notes to SQLite DB", err);
-        showNotification("Workspace save failed!");
+        setSaveFailedState();
+        return false;
       });
+
+    dbSaveQueue = workspaceSave.then(() => undefined);
+    return workspaceSave;
   }
+
+  return Promise.resolve(localResult.ok);
 }
 
 function scheduleNoteSave(noteId, afterSave) {
   clearTimeout(noteSaveDebounceTimers.get(noteId));
   const timer = setTimeout(() => {
     noteSaveDebounceTimers.delete(noteId);
-    saveNotesToStorage({ noteId });
+    const saveResult = saveNotesToStorage({ noteId });
     if (afterSave) afterSave();
-    if (noteSaveDebounceTimers.size === 0) setSavedState();
+    saveResult.then((saved) => {
+      if (noteSaveDebounceTimers.size > 0) return;
+      if (saved) {
+        setSavedState();
+      } else {
+        setSaveFailedState();
+      }
+    });
   }, 400);
   noteSaveDebounceTimers.set(noteId, timer);
+}
+
+function setSaveFailedState() {
+  saveStatus.textContent = "Save failed";
+  saveStatus.title = "Scratchpad could not persist the latest changes";
+  saveStatus.classList.add("unsaved");
+}
+
+function clearPendingSaveTimers() {
+  noteSaveDebounceTimers.forEach(timer => clearTimeout(timer));
+  noteSaveDebounceTimers.clear();
+}
+
+async function flushPendingSaves() {
+  clearPendingSaveTimers();
+  return saveNotesToStorage({ syncWorkspace: true });
+}
+
+function persistLocalMirrorBeforePageExit() {
+  const result = persistNotesLocally(localStorage, notes);
+  if (!result.ok) {
+    console.error("Failed to flush notes during page exit", result.error);
+  }
+}
+
+async function registerCloseHandler() {
+  const getCurrentWindow = window.__TAURI__?.window?.getCurrentWindow;
+  if (typeof getCurrentWindow !== "function") return;
+
+  try {
+    const appWindow = getCurrentWindow();
+    await appWindow.onCloseRequested(async (event) => {
+      if (isClosing) return;
+
+      event.preventDefault();
+      const saved = await flushPendingSaves();
+      if (!saved) {
+        setSaveFailedState();
+        showNotification("Could not save the latest changes; close cancelled");
+        return;
+      }
+
+      isClosing = true;
+      try {
+        await appWindow.destroy();
+      } catch (error) {
+        isClosing = false;
+        console.error("Failed to close Scratchpad after saving", error);
+        showNotification("Could not close Scratchpad");
+      }
+    });
+  } catch (error) {
+    console.error("Failed to register the close-save handler", error);
+  }
 }
 
 // ----------------------------------------------------
@@ -736,7 +854,7 @@ function handleEditorInput() {
   activeNote.updatedAt = Date.now();
   updateHighlights();
 
-  // Premium feature: auto-rename title from first line of text
+  // Auto-rename the title from the first line until the user edits it manually.
   if (!activeNote.isTitleLocked) {
     const lines = editorTextarea.value.trim().split("\n");
     let firstLine = lines[0] || "";
@@ -783,6 +901,7 @@ function handleTitleInput() {
 
 function triggerSavingState() {
   saveStatus.textContent = "Saving...";
+  saveStatus.title = "Scratchpad is saving the latest changes";
   saveStatus.classList.add("unsaved");
 }
 
@@ -790,8 +909,10 @@ function setSavedState() {
   if (activeDbPath) {
     const fileName = activeDbPath.split(/[/\\]/).pop();
     saveStatus.textContent = `Saved (${fileName})`;
+    saveStatus.title = `Workspace: ${activeDbPath}`;
   } else {
     saveStatus.textContent = "Saved";
+    saveStatus.title = "Saved to local webview storage";
   }
   saveStatus.classList.remove("unsaved");
 }
@@ -825,9 +946,6 @@ function updateMarkdownPreview() {
   if (currentLayoutMode === "edit" || isSplitNoteMode) return; // don't render if not visible or in dual-note split mode
 
   const rawText = editorTextarea.value;
-  
-  // Debug log to console
-  console.log("window.marked state:", typeof window.marked, window.marked);
   
   if (window.marked) {
     try {
@@ -867,6 +985,9 @@ function setLayoutMode(mode) {
   modeEditBtn.classList.remove("active");
   modeSplitBtn.classList.remove("active");
   modePreviewBtn.classList.remove("active");
+  modeEditBtn.setAttribute("aria-pressed", String(mode === "edit"));
+  modeSplitBtn.setAttribute("aria-pressed", String(mode === "split"));
+  modePreviewBtn.setAttribute("aria-pressed", String(mode === "preview"));
 
   if (mode === "split") {
     appContainer.classList.add("mode-split");
@@ -883,16 +1004,20 @@ function setLayoutMode(mode) {
 
 function toggleSidebar() {
   sidebar.classList.toggle("collapsed");
+  toggleSidebarBtn.setAttribute("aria-expanded", String(!sidebar.classList.contains("collapsed")));
 }
 
 function toggleFocusMode() {
   isFocusMode = !isFocusMode;
+  focusBtn.setAttribute("aria-pressed", String(isFocusMode));
   if (isFocusMode) {
     appContainer.classList.add("focus-mode");
     sidebar.classList.add("collapsed");
+    toggleSidebarBtn.setAttribute("aria-expanded", "false");
   } else {
     appContainer.classList.remove("focus-mode");
     sidebar.classList.remove("collapsed");
+    toggleSidebarBtn.setAttribute("aria-expanded", "true");
   }
 }
 
@@ -907,6 +1032,7 @@ function toggleActionsDropdown(show) {
   } else {
     actionsDropdown.classList.remove("show");
   }
+  actionsBtn.setAttribute("aria-expanded", String(actionsDropdown.classList.contains("show")));
 }
 
 function copyMarkdownToClipboard() {
@@ -1008,15 +1134,19 @@ function importFile() {
 }
 
 function showNotification(msg) {
+  const sequence = ++notificationSequence;
   const originalStatus = saveStatus.textContent;
   const originalClass = saveStatus.className;
+  const originalTitle = saveStatus.title;
   
   saveStatus.textContent = msg;
   saveStatus.className = ""; // clear unsaved indicator during alert
   
   setTimeout(() => {
+    if (sequence !== notificationSequence || saveStatus.textContent !== msg) return;
     saveStatus.textContent = originalStatus;
     saveStatus.className = originalClass;
+    saveStatus.title = originalTitle;
   }, 2000);
 }
 
@@ -1108,6 +1238,7 @@ function attachEventListeners() {
   document.addEventListener("contextmenu", showContextMenu);
   document.addEventListener("click", hideContextMenu);
   window.addEventListener("blur", hideContextMenu);
+  window.addEventListener("pagehide", persistLocalMirrorBeforePageExit);
 
   ctxCutBtn.addEventListener("click", handleContextCut);
   ctxCopyBtn.addEventListener("click", handleContextCopy);
@@ -1172,6 +1303,19 @@ function attachEventListeners() {
   document.addEventListener("keydown", (e) => {
     const isMeta = e.metaKey || e.ctrlKey;
     const isShift = e.shiftKey;
+
+    if (isThemeModalOpen && e.key === "Tab" && !isMeta && !e.altKey) {
+      const focusable = [...themeModal.querySelectorAll("button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])")]
+        .filter((element) => element.offsetParent !== null);
+      if (focusable.length > 0) {
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if ((isShift && document.activeElement === first) || (!isShift && document.activeElement === last)) {
+          e.preventDefault();
+          (isShift ? last : first).focus();
+        }
+      }
+    }
 
     if (isHelpModalOpen && e.key === "Tab" && !isMeta && !e.altKey) {
       e.preventDefault();
@@ -1288,119 +1432,6 @@ function escapeHTML(str) {
       '"': '&quot;'
     }[tag] || tag)
   );
-}
-
-const MARKDOWN_ALLOWED_TAGS = new Set([
-  "a", "blockquote", "br", "code", "del", "em", "h1", "h2", "h3", "h4",
-  "h5", "h6", "hr", "img", "input", "li", "ol", "p", "pre", "strong",
-  "table", "tbody", "td", "th", "thead", "tr", "ul"
-]);
-
-const MARKDOWN_DROP_CONTENT_TAGS = new Set([
-  "audio", "base", "button", "canvas", "embed", "form", "iframe", "link",
-  "math", "meta", "object", "script", "select", "style", "svg", "textarea",
-  "video"
-]);
-
-const MARKDOWN_ALLOWED_ATTRIBUTES = {
-  a: new Set(["href", "title"]),
-  code: new Set(["class"]),
-  img: new Set(["alt", "src", "title"]),
-  input: new Set(["checked", "disabled", "type"]),
-  ol: new Set(["start"]),
-  td: new Set(["align"]),
-  th: new Set(["align"])
-};
-
-function isSafeMarkdownUrl(value, isImage = false) {
-  const compact = value.trim().replace(/[\u0000-\u0020\u007f]+/g, "").toLowerCase();
-  if (!compact) return false;
-  if (!isImage && compact.startsWith("#")) return true;
-  if (compact.startsWith("https://") || compact.startsWith("http://")) return true;
-  if (!isImage && compact.startsWith("mailto:")) return true;
-  return isImage && /^data:image\/(png|gif|jpe?g|webp);base64,/.test(compact);
-}
-
-function sanitizeMarkdownHtml(html) {
-  const template = document.createElement("template");
-  template.innerHTML = html;
-
-  const elements = Array.from(template.content.querySelectorAll("*"));
-  elements.forEach(element => {
-    const tag = element.tagName.toLowerCase();
-
-    if (MARKDOWN_DROP_CONTENT_TAGS.has(tag)) {
-      element.remove();
-      return;
-    }
-    if (!MARKDOWN_ALLOWED_TAGS.has(tag)) {
-      element.replaceWith(...element.childNodes);
-      return;
-    }
-
-    const allowedAttributes = MARKDOWN_ALLOWED_ATTRIBUTES[tag] || new Set();
-    Array.from(element.attributes).forEach(attribute => {
-      if (!allowedAttributes.has(attribute.name.toLowerCase())) {
-        element.removeAttribute(attribute.name);
-      }
-    });
-
-    if (tag === "a") {
-      const href = element.getAttribute("href");
-      if (!href || !isSafeMarkdownUrl(href)) {
-        element.removeAttribute("href");
-      } else {
-        element.setAttribute("target", "_blank");
-        element.setAttribute("rel", "noopener noreferrer");
-      }
-    }
-
-    if (tag === "img") {
-      const src = element.getAttribute("src");
-      if (!src || !isSafeMarkdownUrl(src, true)) {
-        element.remove();
-        return;
-      }
-      element.setAttribute("loading", "lazy");
-      element.setAttribute("referrerpolicy", "no-referrer");
-    }
-
-    if (tag === "input" && element.getAttribute("type") !== "checkbox") {
-      element.remove();
-    }
-
-    if ((tag === "td" || tag === "th") && element.hasAttribute("align")) {
-      const align = element.getAttribute("align").toLowerCase();
-      if (!["left", "center", "right"].includes(align)) {
-        element.removeAttribute("align");
-      }
-    }
-
-    if (tag === "code" && element.hasAttribute("class")) {
-      const safeClasses = element.className
-        .split(/\s+/)
-        .filter(className => /^language-[a-z0-9_-]+$/i.test(className));
-      if (safeClasses.length > 0) {
-        element.className = safeClasses.join(" ");
-      } else {
-        element.removeAttribute("class");
-      }
-    }
-  });
-
-  return template.innerHTML;
-}
-
-function renderMarkdown(rawText, emptyFallback = "") {
-  if (!window.marked) return "";
-  const source = rawText || emptyFallback;
-  if (typeof window.marked.parse === "function") {
-    return sanitizeMarkdownHtml(window.marked.parse(source));
-  }
-  if (typeof window.marked === "function") {
-    return sanitizeMarkdownHtml(window.marked(source));
-  }
-  throw new Error("Markdown parser is unavailable");
 }
 
 // Database helpers
@@ -1584,6 +1615,7 @@ function toggleReplace(forceState) {
   isReplaceOpen = typeof forceState === "boolean" ? forceState : !isReplaceOpen;
   replaceRow.style.display = isReplaceOpen ? "flex" : "none";
   findToggleReplaceBtn.classList.toggle("expanded", isReplaceOpen);
+  findToggleReplaceBtn.setAttribute("aria-expanded", String(isReplaceOpen));
   if (isReplaceOpen) {
     replaceInput.focus();
   }
@@ -1592,6 +1624,7 @@ function toggleReplace(forceState) {
 function toggleRegexMode() {
   isRegexMode = !isRegexMode;
   findRegexToggleBtn.classList.toggle("active", isRegexMode);
+  findRegexToggleBtn.setAttribute("aria-pressed", String(isRegexMode));
   runFind();
 }
 
@@ -1950,6 +1983,7 @@ function handleContextFind() {
 // ----------------------------------------------------
 function toggleSplitNoteMode(forceState) {
   isSplitNoteMode = typeof forceState === "boolean" ? forceState : !isSplitNoteMode;
+  splitNoteBtn.setAttribute("aria-pressed", String(isSplitNoteMode));
   
   if (isSplitNoteMode) {
     appContainer.classList.add("dual-note-active");
@@ -2144,12 +2178,16 @@ function openHelpModal(defaultTab = "shortcuts") {
   helpModalPreviousFocus = document.activeElement;
   isHelpModalOpen = true;
   helpModalBackdrop.style.display = "flex";
+  helpModalBackdrop.setAttribute("aria-hidden", "false");
+  helpBtn.setAttribute("aria-expanded", "true");
   switchHelpTab(defaultTab, true);
 }
 
 function closeHelpModal() {
   isHelpModalOpen = false;
   helpModalBackdrop.style.display = "none";
+  helpModalBackdrop.setAttribute("aria-hidden", "true");
+  helpBtn.setAttribute("aria-expanded", "false");
   if (helpModalPreviousFocus && helpModalPreviousFocus.isConnected) {
     helpModalPreviousFocus.focus({ preventScroll: true });
   }
@@ -2197,14 +2235,28 @@ function cycleHelpTab(backwards = false) {
 // Color Themes & Palette Engine
 // ----------------------------------------------------
 function openThemeModal() {
+  themeModalPreviousFocus = actionsDropdown.contains(document.activeElement)
+    ? actionsBtn
+    : document.activeElement;
   isThemeModalOpen = true;
   themeModalBackdrop.style.display = "flex";
+  themeModalBackdrop.setAttribute("aria-hidden", "false");
+  themeToggleBtn.setAttribute("aria-expanded", "true");
+  themePickerBtn.setAttribute("aria-expanded", "true");
   renderThemeGrid();
+  closeThemeBtn.focus({ preventScroll: true });
 }
 
 function closeThemeModal() {
   isThemeModalOpen = false;
   themeModalBackdrop.style.display = "none";
+  themeModalBackdrop.setAttribute("aria-hidden", "true");
+  themeToggleBtn.setAttribute("aria-expanded", "false");
+  themePickerBtn.setAttribute("aria-expanded", "false");
+  if (themeModalPreviousFocus && themeModalPreviousFocus.isConnected) {
+    themeModalPreviousFocus.focus({ preventScroll: true });
+  }
+  themeModalPreviousFocus = null;
 }
 
 function loadSavedThemes() {
@@ -2369,6 +2421,10 @@ function renderThemeGrid() {
   allThemes.forEach(theme => {
     const card = document.createElement("div");
     card.className = `theme-card ${theme.id === activeThemeId ? "active" : ""}`;
+    card.tabIndex = 0;
+    card.setAttribute("role", "button");
+    card.setAttribute("aria-label", `Use ${theme.name} theme`);
+    card.setAttribute("aria-pressed", String(theme.id === activeThemeId));
     
     card.innerHTML = `
       <div class="theme-card-header">
@@ -2388,7 +2444,7 @@ function renderThemeGrid() {
         </div>
       </div>
       ${theme.isCustom ? `
-        <button class="theme-card-delete" title="Delete custom theme">
+        <button class="theme-card-delete" title="Delete custom theme" aria-label="Delete ${escapeHTML(theme.name)} theme">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
@@ -2398,6 +2454,13 @@ function renderThemeGrid() {
 
     card.addEventListener("click", () => {
       applyTheme(theme.id);
+    });
+
+    card.addEventListener("keydown", (event) => {
+      if ((event.key === "Enter" || event.key === " ") && !event.target.closest(".theme-card-delete")) {
+        event.preventDefault();
+        applyTheme(theme.id);
+      }
     });
 
     if (theme.isCustom) {

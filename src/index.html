@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -6,7 +7,7 @@
   <title>Scratchpad</title>
   <link rel="stylesheet" href="styles.css" />
   <!-- Offline-ready Markdown Parser -->
-  <script src="marked.min.js"></script>
+  <script src="vendor/marked.umd.js"></script>
   <script type="module" src="main.js" defer></script>
 </head>
 <body>
@@ -20,7 +21,7 @@
           </svg>
           <span>Scratchpad</span>
         </div>
-        <button class="icon-btn" id="new-note-btn" title="Create new scratch (Cmd+N)">
+        <button class="icon-btn" id="new-note-btn" title="Create new scratch (Cmd+N)" aria-label="Create new scratch">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
           </svg>
@@ -31,7 +32,7 @@
         <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
-        <input type="text" id="search-input" placeholder="Search scratchpads..." autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
+        <input type="text" id="search-input" aria-label="Search scratchpads" placeholder="Search scratchpads..." autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
       </div>
 
       <div class="note-list-container">
@@ -41,7 +42,7 @@
       </div>
 
       <div class="sidebar-footer">
-        <button class="sidebar-action-btn" id="theme-toggle" title="Color Themes & Palettes">
+        <button class="sidebar-action-btn" id="theme-toggle" title="Color Themes & Palettes" aria-haspopup="dialog" aria-expanded="false">
           <span class="btn-text" id="theme-btn-text">Theme: Default Dark</span>
         </button>
       </div>
@@ -52,24 +53,24 @@
       <!-- Top Bar / Header -->
       <header class="topbar">
         <div class="topbar-left">
-          <button class="icon-btn toggle-sidebar-btn" id="toggle-sidebar" title="Toggle Sidebar (Cmd+B)">
+          <button class="icon-btn toggle-sidebar-btn" id="toggle-sidebar" title="Toggle Sidebar (Cmd+B)" aria-label="Toggle sidebar" aria-expanded="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7" />
             </svg>
           </button>
-          <input type="text" class="note-title-input" id="note-title" placeholder="Untitled Scratchpad" autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
+          <input type="text" class="note-title-input" id="note-title" aria-label="Scratchpad title" placeholder="Untitled Scratchpad" autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
         </div>
 
         <!-- Mode Selectors -->
         <div class="layout-controls">
-          <button class="layout-btn active" id="mode-edit" data-mode="edit">Edit</button>
-          <button class="layout-btn" id="mode-split" data-mode="split">Split</button>
-          <button class="layout-btn" id="mode-preview" data-mode="preview">Preview</button>
+          <button class="layout-btn active" id="mode-edit" data-mode="edit" aria-pressed="true">Edit</button>
+          <button class="layout-btn" id="mode-split" data-mode="split" aria-pressed="false">Split</button>
+          <button class="layout-btn" id="mode-preview" data-mode="preview" aria-pressed="false">Preview</button>
         </div>
 
         <div class="topbar-right">
           <!-- Split Note View Toggle -->
-          <button class="icon-btn" id="split-note-btn" title="Toggle Dual Note Split View (Cmd+\)">
+          <button class="icon-btn" id="split-note-btn" title="Toggle Dual Note Split View (Cmd+\)" aria-label="Toggle two-note split view" aria-pressed="false">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
               <line x1="12" y1="3" x2="12" y2="21" />
@@ -77,14 +78,14 @@
           </button>
 
           <!-- Focus Mode -->
-          <button class="icon-btn" id="focus-btn" title="Focus Mode (Cmd+Shift+F)">
+          <button class="icon-btn" id="focus-btn" title="Focus Mode (Cmd+Shift+F)" aria-label="Toggle focus mode" aria-pressed="false">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75v4.5m0-4.5h-4.5m4.5 0L15 9m5.25 11.25v-4.5m0 4.5h-4.5m4.5 0L15 15" />
             </svg>
           </button>
 
           <!-- Help & Reference Modal -->
-          <button class="icon-btn" id="help-btn" title="Help & Reference (Cmd+/)">
+          <button class="icon-btn" id="help-btn" title="Help & Reference (Cmd+/)" aria-label="Open help and reference" aria-haspopup="dialog" aria-expanded="false">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="9.5" />
               <path d="M9.5 9a2.5 2.5 0 0 1 4.5 1.5c0 1.25-1.5 1.75-1.5 2.75v.5" />
@@ -94,15 +95,15 @@
           
           <!-- Actions Menu -->
           <div class="actions-dropdown">
-            <button class="icon-btn" id="actions-btn" title="Actions Menu">
+            <button class="icon-btn" id="actions-btn" title="Actions Menu" aria-label="Open actions menu" aria-haspopup="true" aria-expanded="false" aria-controls="actions-dropdown-content">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="4" y1="6" x2="20" y2="6" stroke-linecap="round" stroke-linejoin="round" />
                 <line x1="4" y1="12" x2="20" y2="12" stroke-linecap="round" stroke-linejoin="round" />
                 <line x1="4" y1="18" x2="20" y2="18" stroke-linecap="round" stroke-linejoin="round" />
               </svg>
             </button>
-            <div class="dropdown-content" id="actions-dropdown-content">
-              <button class="dropdown-item" id="theme-picker-btn">Color Themes...</button>
+            <div class="dropdown-content" id="actions-dropdown-content" aria-label="Scratchpad actions">
+              <button class="dropdown-item" id="theme-picker-btn" aria-haspopup="dialog" aria-expanded="false">Color Themes...</button>
               <div class="dropdown-divider"></div>
               <button class="dropdown-item" id="copy-markdown">Copy Markdown</button>
               <button class="dropdown-item" id="copy-html">Copy HTML Preview</button>
@@ -125,27 +126,27 @@
             <!-- Find & Replace Bar -->
             <div class="find-bar" id="find-bar">
               <div class="find-row">
-                <button class="find-btn find-toggle-replace" id="find-toggle-replace" title="Toggle Replace (Cmd+H)">
+                <button class="find-btn find-toggle-replace" id="find-toggle-replace" title="Toggle Replace (Cmd+H)" aria-label="Toggle replace controls" aria-expanded="false">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="9 18 15 12 9 6" />
                   </svg>
                 </button>
                 <div class="find-input-wrapper">
-                  <input type="text" id="find-input" placeholder="Find in document..." autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
-                  <button class="find-option-btn" id="find-regex-toggle" title="Use Regular Expression (Alt+R)">.*</button>
+                  <input type="text" id="find-input" aria-label="Find in document" placeholder="Find in document..." autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
+                  <button class="find-option-btn" id="find-regex-toggle" title="Use Regular Expression (Alt+R)" aria-pressed="false">.*</button>
                 </div>
                 <span class="find-count" id="find-count">0 of 0</span>
-                <button class="find-btn" id="find-prev" title="Previous Match (Shift+Enter)">
+                <button class="find-btn" id="find-prev" title="Previous Match (Shift+Enter)" aria-label="Previous match">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="18 15 12 9 6 15" />
                   </svg>
                 </button>
-                <button class="find-btn" id="find-next" title="Next Match (Enter)">
+                <button class="find-btn" id="find-next" title="Next Match (Enter)" aria-label="Next match">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="6 9 12 15 18 9" />
                   </svg>
                 </button>
-                <button class="find-btn find-close" id="find-close" title="Close (Esc)">
+                <button class="find-btn find-close" id="find-close" title="Close (Esc)" aria-label="Close find controls">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="18" y1="6" x2="6" y2="18" />
                     <line x1="6" y1="6" x2="18" y2="18" />
@@ -154,7 +155,7 @@
               </div>
               <div class="replace-row" id="replace-row" style="display: none;">
                 <div class="find-input-wrapper replace-input-wrapper">
-                  <input type="text" id="replace-input" placeholder="Replace with..." autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
+                  <input type="text" id="replace-input" aria-label="Replacement text" placeholder="Replace with..." autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
                 </div>
                 <button class="find-action-btn" id="replace-one-btn" title="Replace Current Match">Replace</button>
                 <button class="find-action-btn" id="replace-all-btn" title="Replace All Matches">Replace All</button>
@@ -163,7 +164,7 @@
             <!-- Edit Area -->
             <div class="editor-wrapper" id="editor-wrapper">
               <div class="editor-backdrop" id="editor-backdrop"></div>
-              <textarea class="editor-textarea" id="editor-textarea" placeholder="Type something here... Supports Markdown formatting." spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off"></textarea>
+              <textarea class="editor-textarea" id="editor-textarea" aria-label="Scratchpad content" placeholder="Type something here... Supports Markdown formatting." spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off"></textarea>
             </div>
 
             <!-- Divider line (visible in split mode) -->
@@ -179,9 +180,9 @@
         <!-- Secondary Pane (Split Note View) -->
         <div class="pane-wrapper secondary-pane-wrapper" id="secondary-pane-wrapper" style="display: none;">
           <div class="secondary-pane-header">
-            <select class="secondary-note-select" id="secondary-note-select" title="Switch Secondary Note"></select>
-            <input type="text" class="note-title-input secondary-title-input" id="secondary-note-title" placeholder="Untitled Scratchpad" autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
-            <button class="icon-btn close-secondary-btn" id="close-secondary-btn" title="Close Split View (Cmd+\)">
+            <select class="secondary-note-select" id="secondary-note-select" title="Switch Secondary Note" aria-label="Secondary scratchpad"></select>
+            <input type="text" class="note-title-input secondary-title-input" id="secondary-note-title" aria-label="Secondary scratchpad title" placeholder="Untitled Scratchpad" autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
+            <button class="icon-btn close-secondary-btn" id="close-secondary-btn" title="Close Split View (Cmd+\)" aria-label="Close split view">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
@@ -191,7 +192,7 @@
           <div class="editor-pane" id="secondary-editor-pane">
             <div class="editor-wrapper" id="secondary-editor-wrapper">
               <div class="editor-backdrop" id="secondary-editor-backdrop"></div>
-              <textarea class="editor-textarea" id="secondary-editor-textarea" placeholder="Type something here... Supports Markdown formatting." spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off"></textarea>
+              <textarea class="editor-textarea" id="secondary-editor-textarea" aria-label="Secondary scratchpad content" placeholder="Type something here... Supports Markdown formatting." spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off"></textarea>
             </div>
             <div class="editor-divider" id="secondary-editor-divider"></div>
             <div class="preview-wrapper" id="secondary-preview-wrapper">
@@ -219,7 +220,7 @@
         </div>
         <div class="statusbar-right">
           <span id="selection-count" class="selection-count-text"></span>
-          <span id="save-status">Saved</span>
+          <span id="save-status" role="status" aria-live="polite">Saved</span>
         </div>
       </footer>
     </main>
@@ -264,14 +265,14 @@
   </div>
 
   <!-- Help & Reference Modal -->
-  <div class="help-modal-backdrop" id="help-modal-backdrop" style="display: none;">
-    <div class="help-modal" id="help-modal">
+  <div class="help-modal-backdrop" id="help-modal-backdrop" style="display: none;" aria-hidden="true">
+    <div class="help-modal" id="help-modal" role="dialog" aria-modal="true" aria-label="Help and reference">
       <div class="help-modal-header">
         <div class="help-tabs" role="tablist" aria-label="Help topics">
           <button class="help-tab-btn active" id="tab-shortcuts-btn" role="tab" aria-selected="true" aria-controls="pane-shortcuts">⌨️ Keyboard Shortcuts</button>
           <button class="help-tab-btn" id="tab-markdown-btn" role="tab" aria-selected="false" aria-controls="pane-markdown" tabindex="-1">📝 Markdown Cheatsheet</button>
         </div>
-        <button class="close-help-btn" id="close-help-btn" title="Close (Escape)">
+        <button class="close-help-btn" id="close-help-btn" title="Close (Escape)" aria-label="Close help">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
@@ -367,7 +368,7 @@
         </div>
 
         <!-- Markdown Cheatsheet Pane -->
-        <div class="help-pane" id="pane-markdown" role="tabpanel" aria-labelledby="tab-markdown-btn">
+        <div class="help-pane" id="pane-markdown" role="tabpanel" aria-labelledby="tab-markdown-btn" aria-hidden="true">
           <div class="cheatsheet-grid">
             <div class="cheatsheet-card">
               <div class="cheatsheet-card-title">Headers</div>
@@ -416,7 +417,8 @@ function hello() {
             <div class="cheatsheet-card">
               <div class="cheatsheet-card-title">Links & Images</div>
               <pre class="cheatsheet-code">[Link Text](https://example.com)
-![Image Alt](https://example.com/img.png)</pre>
+![Image Alt](data:image/png;base64,...)</pre>
+              <p class="cheatsheet-note">For privacy, previews block images loaded from the internet.</p>
             </div>
 
             <div class="cheatsheet-card full-width">
@@ -434,12 +436,12 @@ function hello() {
   </div>
 
   <!-- Color Themes Modal -->
-  <div class="help-modal-backdrop" id="theme-modal-backdrop" style="display: none;">
-    <div class="help-modal theme-modal" id="theme-modal">
+  <div class="help-modal-backdrop" id="theme-modal-backdrop" style="display: none;" aria-hidden="true">
+    <div class="help-modal theme-modal" id="theme-modal" role="dialog" aria-modal="true" aria-labelledby="theme-modal-heading">
       <div class="help-modal-header">
         <div class="theme-modal-title">
           <span class="theme-modal-icon">🎨</span>
-          <h3>Color Themes</h3>
+          <h3 id="theme-modal-heading">Color Themes</h3>
         </div>
         <div class="theme-modal-actions">
           <button class="theme-action-btn" id="theme-import-btn" title="Import a .json or .toml theme file">
@@ -454,7 +456,7 @@ function hello() {
             </svg>
             <span>Export Theme</span>
           </button>
-          <button class="close-help-btn" id="close-theme-btn" title="Close (Escape)">
+          <button class="close-help-btn" id="close-theme-btn" title="Close (Escape)" aria-label="Close color themes">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
               <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
