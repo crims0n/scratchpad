@@ -365,8 +365,9 @@ async function init() {
     setLayoutMode(savedLayoutMode);
   }
 
-  // 3. Always load existing LocalStorage notes first as guaranteed baseline
+  // 3. Always load the local-only collection first as guaranteed baseline
   loadNotesFromLocalStorage();
+  adoptLegacyStashedNotes();
 
   // 4. Check if a native workspace preference is configured. Existing
   // localStorage preferences are migrated once for origin-independent startup.
@@ -390,26 +391,16 @@ async function init() {
     } catch (err) {
       console.error("Failed to load notes from SQLite DB on boot", err);
       activeDbPath = null;
-      // Disconnect is the only other way back to the set-aside notes, and its
-      // button is hidden while no workspace is active.
-      const restored = rememberedWorkspace.known && restoreStashedLocalNotes();
+      // `notes` still holds the local-only collection: it is only replaced once
+      // the workspace has answered. Editing it here cannot be undone by the
+      // workspace opening on a later launch.
       updateDbUiState(false);
-      showNotification(restored
-        ? "Workspace unavailable; local notes restored"
-        : "Workspace error: using local notes");
+      showNotification("Workspace unavailable; using local notes");
     }
   } else {
-    // Reached whenever start-up ends without a workspace, including after a
-    // failed preference write left notes set aside with nothing to restore them.
-    // Hand them back only when start-up is certain no workspace is configured;
-    // consuming them on an unreadable preference would leave nothing to restore
-    // once that workspace opens again.
-    if (rememberedWorkspace.known) {
-      restoreStashedLocalNotes();
-    }
     updateDbUiState(false);
-    if (!rememberedWorkspace.known && hasStashedLocalNotes()) {
-      showNotification("Workspace settings unreadable; local notes kept aside");
+    if (!rememberedWorkspace.known) {
+      showNotification("Workspace settings unreadable; using local notes");
     }
   }
 
@@ -753,21 +744,10 @@ function renderNoteList(filter = "") {
   });
 }
 
+// A workspace owns its own storage. Local storage holds the local-only
+// collection and nothing else, so a workspace session never writes over notes
+// it does not contain.
 function saveNotesToStorage({ noteId = activeNoteId, syncWorkspace = false } = {}) {
-  const localResult = persistNotesLocally(localStorage, notes);
-
-  if (localResult.ok) {
-    localMirrorFailureNotified = false;
-  } else {
-    console.error("Failed to save the local notes mirror", localResult.error);
-    if (!localMirrorFailureNotified) {
-      showNotification(activeDbPath
-        ? "Local mirror unavailable; workspace saves will continue"
-        : "Local save failed; free some disk space or connect a workspace");
-      localMirrorFailureNotified = true;
-    }
-  }
-  
   if (activeDbPath) {
     const dbPath = activeDbPath;
     let command;
@@ -778,7 +758,7 @@ function saveNotesToStorage({ noteId = activeNoteId, syncWorkspace = false } = {
       payload = { dbPath, notes: notes.map(note => ({ ...note })) };
     } else {
       const sortOrder = notes.findIndex(note => note.id === noteId);
-      if (sortOrder === -1) return Promise.resolve(localResult.ok);
+      if (sortOrder === -1) return Promise.resolve(true);
       command = "save_note_db";
       payload = { dbPath, note: { ...notes[sortOrder] }, sortOrder };
     }
@@ -787,7 +767,7 @@ function saveNotesToStorage({ noteId = activeNoteId, syncWorkspace = false } = {
     // or structural workspace change.
     const workspaceSave = dbSaveQueue
       .then(() => {
-        if (activeDbPath !== dbPath) return localResult.ok;
+        if (activeDbPath !== dbPath) return true;
         return invoke(command, payload).then(() => true);
       })
       .catch(err => {
@@ -798,6 +778,18 @@ function saveNotesToStorage({ noteId = activeNoteId, syncWorkspace = false } = {
 
     dbSaveQueue = workspaceSave.then(() => undefined);
     return workspaceSave;
+  }
+
+  const localResult = persistNotesLocally(localStorage, notes);
+
+  if (localResult.ok) {
+    localMirrorFailureNotified = false;
+  } else {
+    console.error("Failed to save the local notes", localResult.error);
+    if (!localMirrorFailureNotified) {
+      showNotification("Local save failed; free some disk space or connect a workspace");
+      localMirrorFailureNotified = true;
+    }
   }
 
   return Promise.resolve(localResult.ok);
@@ -838,6 +830,10 @@ async function flushPendingSaves() {
 }
 
 function persistLocalMirrorBeforePageExit() {
+  // A workspace session has nothing to flush here, and writing would replace
+  // the local-only collection with the workspace's notes.
+  if (activeDbPath) return;
+
   const result = persistNotesLocally(localStorage, notes);
   if (!result.ok) {
     console.error("Failed to flush notes during page exit", result.error);
@@ -1505,62 +1501,38 @@ function loadNotesFromLocalStorage() {
   }
 }
 
-// Every save mirrors the active collection into local storage, so connecting a
-// workspace would otherwise overwrite the local-only notes with the workspace's
-// contents and leave nothing to come back to. Set them aside first.
-//
-// Reports success only when the notes are genuinely recoverable: either a
-// readable stash is already held — kept as-is so the original local notes
-// survive switching between workspaces — or this one was written and read back.
-// A stash that cannot be parsed is worth no more than none at all.
-function ensureLocalNotesStashed(localNotes) {
-  try {
-    if (readStoredNotes(localStorage.getItem(LOCAL_NOTES_BACKUP_KEY))) return true;
-
-    localStorage.setItem(LOCAL_NOTES_BACKUP_KEY, JSON.stringify(localNotes));
-    return Boolean(readStoredNotes(localStorage.getItem(LOCAL_NOTES_BACKUP_KEY)));
-  } catch (error) {
-    console.error("Failed to preserve local notes before connecting a workspace", error);
-    return false;
-  }
-}
-
-function hasStashedLocalNotes() {
-  try {
-    return Boolean(readStoredNotes(localStorage.getItem(LOCAL_NOTES_BACKUP_KEY)));
-  } catch (error) {
-    console.error("Failed to read the preserved local notes", error);
-    return false;
-  }
-}
-
-// Hands the stashed local-only collection back after a disconnect. Returns
-// false when there is nothing stashed, leaving the caller on the local mirror.
-function restoreStashedLocalNotes() {
+// Notes set aside by an earlier build of this branch, when local storage was
+// shared between the local-only collection and the active workspace. Folded
+// back in once so nothing is stranded; can be dropped after a release carries
+// the current storage layout.
+function adoptLegacyStashedNotes() {
   let stashed = null;
   try {
     stashed = readStoredNotes(localStorage.getItem(LOCAL_NOTES_BACKUP_KEY));
   } catch (error) {
-    console.error("Failed to read the preserved local notes", error);
+    console.error("Failed to read previously set-aside notes", error);
     return false;
   }
   if (!stashed) return false;
 
-  notes = stashed;
+  const byId = new Map(stashed.map(note => [note.id, note]));
+  notes.forEach(note => {
+    const held = byId.get(note.id);
+    if (!held || (note.updatedAt || 0) >= (held.updatedAt || 0)) byId.set(note.id, note);
+  });
+  notes = [...byId.values()];
 
-  // Only drop the stash once the mirror has actually been rewritten, so a
-  // failed write cannot lose the notes it was holding.
-  const mirrored = persistNotesLocally(localStorage, notes);
-  if (mirrored.ok) {
-    try {
-      localStorage.removeItem(LOCAL_NOTES_BACKUP_KEY);
-    } catch (error) {
-      console.error("Failed to clear the preserved local notes", error);
-    }
-  } else {
-    console.error("Failed to restore the local notes mirror", mirrored.error);
+  const merged = persistNotesLocally(localStorage, notes);
+  if (!merged.ok) {
+    console.error("Failed to fold previously set-aside notes back in", merged.error);
+    return false;
   }
 
+  try {
+    localStorage.removeItem(LOCAL_NOTES_BACKUP_KEY);
+  } catch (error) {
+    console.error("Failed to clear previously set-aside notes", error);
+  }
   return true;
 }
 
@@ -1596,8 +1568,7 @@ async function connectDatabase() {
   }
   if (!path) return;
 
-  // Read the local-only notes before anything can overwrite the mirror.
-  const localNotesBeforeConnect = readStoredNotes(localStorage.getItem(LOCAL_NOTES_KEY));
+  const localNotes = readStoredNotes(localStorage.getItem(LOCAL_NOTES_KEY));
 
   // Load into a local until the switch is known to be safe, so a failure here
   // leaves the active collection untouched.
@@ -1618,26 +1589,15 @@ async function connectDatabase() {
     return;
   }
 
-  // A populated workspace replaces the local collection rather than merging
-  // with it. Refuse to switch until those notes are recoverable, otherwise the
-  // next mirror write destroys them.
-  let localNotesStashed = false;
-  if (workspaceNotes.length > 0 && localNotesBeforeConnect) {
-    localNotesStashed = ensureLocalNotesStashed(localNotesBeforeConnect);
-    if (!localNotesStashed) {
-      showNotification("Could not preserve local notes; workspace not connected");
-      return;
-    }
-  }
-
   activeDbPath = path;
 
+  // The local-only collection stays where it is. Nothing needs setting aside,
+  // because a workspace session no longer writes to local storage at all.
   if (workspaceNotes.length > 0) {
     notes = workspaceNotes;
-  } else if (localNotesBeforeConnect) {
-    // Seed an empty workspace with the notes already in the app. Both
-    // collections match afterwards, so there is nothing to set aside.
-    notes = localNotesBeforeConnect;
+  } else if (localNotes) {
+    // Seed an empty workspace with the notes already in the app.
+    notes = localNotes;
     try {
       await invoke("save_notes_db", { dbPath: path, notes });
     } catch (err) {
@@ -1663,25 +1623,18 @@ async function connectDatabase() {
     loadActiveNote();
   }
 
-  if (!preferenceSaved) {
-    showNotification("Workspace connected, but could not be remembered");
-  } else if (localNotesStashed) {
-    showNotification("Workspace connected; local notes kept for disconnect");
-  } else {
-    showNotification("Workspace connected!");
-  }
+  showNotification(preferenceSaved
+    ? "Workspace connected!"
+    : "Workspace connected, but could not be remembered");
 }
 
 async function disconnectDatabase() {
   activeDbPath = null;
   localStorage.removeItem("scratchpad_active_db");
 
-  // Prefer the local-only notes set aside when the workspace was connected;
-  // the mirror holds a copy of the workspace by now.
-  const restoredLocalNotes = restoreStashedLocalNotes();
-  if (!restoredLocalNotes) {
-    loadNotesFromLocalStorage();
-  }
+  // The local-only collection was never written over while the workspace was
+  // connected, so it is simply still there.
+  loadNotesFromLocalStorage();
 
   if (notes.length === 0) {
     createNote();
@@ -1696,9 +1649,7 @@ async function disconnectDatabase() {
     if (window.__TAURI__) {
       await invoke("set_last_workspace", { dbPath: null });
     }
-    showNotification(restoredLocalNotes
-      ? "Workspace disconnected; local notes restored"
-      : "Workspace disconnected; using local notes");
+    showNotification("Workspace disconnected; using local notes");
   } catch (err) {
     console.error("Failed to forget workspace", err);
     showNotification("Disconnected, but the workspace preference could not be cleared");

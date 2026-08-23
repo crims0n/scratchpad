@@ -2,9 +2,9 @@
 
 export const LOCAL_NOTES_KEY = "scratchpad_notes";
 
-// Where the local-only collection is set aside when a workspace's contents take
-// over the local mirror, so disconnecting can hand those notes back instead of
-// a copy of the workspace.
+// Used by earlier builds of this branch to set notes aside while local storage
+// was shared between the local-only collection and the active workspace. Read
+// once at start-up so nothing is stranded; never written to.
 export const LOCAL_NOTES_BACKUP_KEY = "scratchpad_local_notes";
 
 export function persistNotesLocally(storage, notes) {

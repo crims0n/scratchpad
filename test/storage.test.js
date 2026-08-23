@@ -38,7 +38,7 @@ test("local persistence reports quota failures without throwing", () => {
   assert.equal(result.error, quotaError);
 });
 
-test("the preserved local notes use a key of their own", () => {
+test("the legacy set-aside key is distinct from the local collection", () => {
   assert.notEqual(LOCAL_NOTES_BACKUP_KEY, LOCAL_NOTES_KEY);
 });
 

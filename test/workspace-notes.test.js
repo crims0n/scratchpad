@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Connecting and disconnecting a workspace, which is where the local-only notes
-// were previously lost, plus the preview link handling the desktop webview does
-// not provide on its own.
+// Connecting and disconnecting a workspace. The property under test is that a
+// workspace session leaves the local-only collection exactly where it was, so
+// there is always something to come back to.
 
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -18,12 +18,17 @@ const WORKSPACE_NOTES = [
 ];
 
 let workspaceNotes = [];
+const workspaceWrites = [];
 
 const app = await bootApp({
   storage: { scratchpad_notes: LOCAL_NOTES },
   handlers: {
     select_db_file: () => "/tmp/scratchpad-test-workspace.db",
     load_db_notes: () => workspaceNotes,
+    save_note_db: ({ note }) => {
+      workspaceWrites.push(note);
+      return null;
+    },
     save_notes_db: ({ notes }) => {
       workspaceNotes = notes;
       return null;
@@ -35,44 +40,33 @@ test("the local notes load on start-up", () => {
   assert.deepEqual(app.sidebarTitles(), ["Local one", "Local two"]);
 });
 
-test("connecting a populated workspace preserves the local-only notes", async () => {
+test("connecting a populated workspace leaves the local collection alone", async () => {
   workspaceNotes = WORKSPACE_NOTES;
 
   app.click("db-connect-btn");
   await app.settle();
 
   assert.deepEqual(app.sidebarTitles(), ["Workspace note"], "the workspace takes over the editor");
+  assert.deepEqual(app.read("scratchpad_notes"), LOCAL_NOTES, "the local collection is untouched");
+});
+
+test("editing in a workspace writes to the workspace, never to local storage", async () => {
+  await app.type("edited inside the workspace");
+
+  assert.equal(workspaceWrites.at(-1).content, "edited inside the workspace", "the workspace was written");
   assert.deepEqual(
-    app.read("scratchpad_local_notes"),
+    app.read("scratchpad_notes"),
     LOCAL_NOTES,
-    "the local-only notes are set aside"
+    "the local collection still holds the local notes"
   );
 });
 
-test("editing while connected overwrites the local mirror", async () => {
-  const editor = app.dom.window.document.getElementById("editor-textarea");
-  editor.value = "edited inside the workspace";
-  editor.dispatchEvent(new app.dom.window.Event("input"));
-  await app.settle(600);
-
-  assert.equal(
-    app.read("scratchpad_notes")[0].id,
-    "ws-1",
-    "the mirror now holds the workspace, not the local notes"
-  );
-});
-
-test("disconnecting hands the local-only notes back", async () => {
+test("disconnecting returns the local collection", async () => {
   app.click("db-disconnect-btn");
   await app.settle();
 
   assert.deepEqual(app.sidebarTitles(), ["Local one", "Local two"]);
   assert.deepEqual(app.read("scratchpad_notes"), LOCAL_NOTES);
-  assert.equal(
-    app.read("scratchpad_local_notes"),
-    null,
-    "the set-aside copy is consumed once restored"
-  );
 });
 
 test("preview links are opened through the system browser", async () => {

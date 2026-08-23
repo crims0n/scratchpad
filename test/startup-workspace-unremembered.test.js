@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// A workspace was connected but the preference write failed, so the next
-// start-up finds no workspace to reopen. Without a restore here the set-aside
-// notes would sit in storage with no way to reach them: the Disconnect button
-// only exists while a workspace is active.
+// No workspace preference stored — either none was ever set, or the write that
+// would have stored one failed. Start-up runs on the local-only collection.
 
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -14,26 +12,19 @@ const LOCAL_NOTES = [
   { id: "local-2", title: "Local two", content: "local two body", updatedAt: 2, isTitleLocked: true }
 ];
 
-const MIRRORED_WORKSPACE_NOTES = [
-  { id: "ws-1", title: "Workspace note", content: "workspace body", updatedAt: 9, isTitleLocked: true }
-];
-
 const app = await bootApp({
-  storage: {
-    scratchpad_notes: MIRRORED_WORKSPACE_NOTES,
-    scratchpad_local_notes: LOCAL_NOTES
-  },
-  // No workspace preference was ever stored.
+  storage: { scratchpad_notes: LOCAL_NOTES },
   handlers: { load_workspace_preference: () => null }
 });
 
-test("starting without a workspace restores the set-aside notes", () => {
+test("start-up without a workspace shows the local collection", () => {
   assert.deepEqual(app.sidebarTitles(), ["Local one", "Local two"]);
-  assert.deepEqual(app.read("scratchpad_notes"), LOCAL_NOTES, "the mirror is rewritten");
-  assert.equal(app.read("scratchpad_local_notes"), null, "the set-aside copy is consumed");
+  assert.deepEqual(app.read("scratchpad_notes"), LOCAL_NOTES);
 });
 
-test("a plain start-up with nothing set aside is untouched", () => {
-  // Guards against the restore firing when there is nothing to restore.
-  assert.equal(app.invocations.some(({ command }) => command === "save_notes_db"), false);
+test("no workspace command is issued", () => {
+  const commands = app.invocations.map(({ command }) => command);
+
+  assert.equal(commands.includes("load_db_notes"), false);
+  assert.equal(commands.includes("save_notes_db"), false);
 });

@@ -13,15 +13,8 @@ const LOCAL_NOTES = [
   { id: "local-1", title: "Local one", content: "local one body", updatedAt: 1, isTitleLocked: true }
 ];
 
-const MIRRORED_WORKSPACE_NOTES = [
-  { id: "ws-1", title: "Workspace note", content: "workspace body", updatedAt: 9, isTitleLocked: true }
-];
-
 const app = await bootApp({
-  storage: {
-    scratchpad_notes: MIRRORED_WORKSPACE_NOTES,
-    scratchpad_local_notes: LOCAL_NOTES
-  },
+  storage: { scratchpad_notes: LOCAL_NOTES },
   handlers: {
     load_workspace_preference: () => "/tmp/scratchpad-malformed-workspace.db",
     load_db_notes: () => ({ unexpected: "shape" })
@@ -36,10 +29,9 @@ test("a malformed response is never seeded over", () => {
   );
 });
 
-test("start-up falls back to local mode with the notes restored", () => {
+test("start-up falls back to the local collection", () => {
   assert.deepEqual(app.sidebarTitles(), ["Local one"]);
   assert.deepEqual(app.read("scratchpad_notes"), LOCAL_NOTES);
-  assert.equal(app.read("scratchpad_local_notes"), null, "the set-aside copy is consumed");
   assert.equal(
     app.dom.window.document.getElementById("db-disconnect-btn").style.display,
     "none"
