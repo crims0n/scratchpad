@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { persistNotesLocally } from "./storage.js";
-import { renderMarkdown, sanitizeMarkdownHtml } from "./markdown.js";
+import {
+  LOCAL_NOTES_BACKUP_KEY,
+  LOCAL_NOTES_KEY,
+  persistNotesLocally,
+  readStoredNotes
+} from "./storage.js";
+import { renderMarkdown, resolveLinkAction, sanitizeMarkdownHtml } from "./markdown.js";
 import { getNotePreview } from "./note-preview.js";
 
 // ----------------------------------------------------
@@ -326,17 +331,23 @@ function applyPlatformShortcutLabels() {
   });
 }
 
+// Reports the remembered workspace alongside whether it could be determined at
+// all. "Read it, there is no workspace" and "could not read it" look identical
+// from the path alone, and only the first is safe to act on: a preference that
+// failed to read may still name a workspace that opens on a later launch.
 async function loadRememberedWorkspacePath() {
   const legacyPath = localStorage.getItem("scratchpad_active_db");
-  if (!window.__TAURI__) return legacyPath;
+  if (!window.__TAURI__) return { known: true, path: legacyPath };
 
   try {
     const savedPath = await invoke("load_workspace_preference", { legacyPath });
     localStorage.removeItem("scratchpad_active_db");
-    return savedPath;
+    return { known: true, path: savedPath };
   } catch (err) {
     console.error("Failed to load native workspace preference", err);
-    return legacyPath;
+    // Unknown even when a legacy path survives: the native preference takes
+    // precedence over it and may name a different workspace.
+    return { known: false, path: legacyPath };
   }
 }
 
@@ -354,17 +365,23 @@ async function init() {
     setLayoutMode(savedLayoutMode);
   }
 
-  // 3. Always load existing LocalStorage notes first as guaranteed baseline
+  // 3. Always load the local-only collection first as guaranteed baseline
   loadNotesFromLocalStorage();
+  adoptLegacyStashedNotes();
 
   // 4. Check if a native workspace preference is configured. Existing
   // localStorage preferences are migrated once for origin-independent startup.
-  const savedActiveDb = await loadRememberedWorkspacePath();
-  if (savedActiveDb && window.__TAURI__) {
-    activeDbPath = savedActiveDb;
+  const rememberedWorkspace = await loadRememberedWorkspacePath();
+  if (rememberedWorkspace.path && window.__TAURI__) {
+    activeDbPath = rememberedWorkspace.path;
     try {
       const dbNotes = await invoke("load_db_notes", { dbPath: activeDbPath });
-      if (Array.isArray(dbNotes) && dbNotes.length > 0) {
+      // Seeding deletes and rewrites the workspace's rows, so an unreadable
+      // response must not be mistaken for an empty workspace.
+      if (!Array.isArray(dbNotes)) {
+        throw new Error("Workspace returned an unexpected response");
+      }
+      if (dbNotes.length > 0) {
         notes = dbNotes;
       } else if (notes.length > 0) {
         // Seed empty SQLite database with existing LocalStorage notes
@@ -373,12 +390,18 @@ async function init() {
       updateDbUiState(true);
     } catch (err) {
       console.error("Failed to load notes from SQLite DB on boot", err);
-      showNotification("Workspace error: using local notes");
       activeDbPath = null;
+      // `notes` still holds the local-only collection: it is only replaced once
+      // the workspace has answered. Editing it here cannot be undone by the
+      // workspace opening on a later launch.
       updateDbUiState(false);
+      showNotification("Workspace unavailable; using local notes");
     }
   } else {
     updateDbUiState(false);
+    if (!rememberedWorkspace.known) {
+      showNotification("Workspace settings unreadable; using local notes");
+    }
   }
 
   // 5. Create default note if none exist
@@ -721,21 +744,10 @@ function renderNoteList(filter = "") {
   });
 }
 
+// A workspace owns its own storage. Local storage holds the local-only
+// collection and nothing else, so a workspace session never writes over notes
+// it does not contain.
 function saveNotesToStorage({ noteId = activeNoteId, syncWorkspace = false } = {}) {
-  const localResult = persistNotesLocally(localStorage, notes);
-
-  if (localResult.ok) {
-    localMirrorFailureNotified = false;
-  } else {
-    console.error("Failed to save the local notes mirror", localResult.error);
-    if (!localMirrorFailureNotified) {
-      showNotification(activeDbPath
-        ? "Local mirror unavailable; workspace saves will continue"
-        : "Local save failed; free some disk space or connect a workspace");
-      localMirrorFailureNotified = true;
-    }
-  }
-  
   if (activeDbPath) {
     const dbPath = activeDbPath;
     let command;
@@ -746,7 +758,7 @@ function saveNotesToStorage({ noteId = activeNoteId, syncWorkspace = false } = {
       payload = { dbPath, notes: notes.map(note => ({ ...note })) };
     } else {
       const sortOrder = notes.findIndex(note => note.id === noteId);
-      if (sortOrder === -1) return Promise.resolve(localResult.ok);
+      if (sortOrder === -1) return Promise.resolve(true);
       command = "save_note_db";
       payload = { dbPath, note: { ...notes[sortOrder] }, sortOrder };
     }
@@ -755,7 +767,7 @@ function saveNotesToStorage({ noteId = activeNoteId, syncWorkspace = false } = {
     // or structural workspace change.
     const workspaceSave = dbSaveQueue
       .then(() => {
-        if (activeDbPath !== dbPath) return localResult.ok;
+        if (activeDbPath !== dbPath) return true;
         return invoke(command, payload).then(() => true);
       })
       .catch(err => {
@@ -766,6 +778,18 @@ function saveNotesToStorage({ noteId = activeNoteId, syncWorkspace = false } = {
 
     dbSaveQueue = workspaceSave.then(() => undefined);
     return workspaceSave;
+  }
+
+  const localResult = persistNotesLocally(localStorage, notes);
+
+  if (localResult.ok) {
+    localMirrorFailureNotified = false;
+  } else {
+    console.error("Failed to save the local notes", localResult.error);
+    if (!localMirrorFailureNotified) {
+      showNotification("Local save failed; free some disk space or connect a workspace");
+      localMirrorFailureNotified = true;
+    }
   }
 
   return Promise.resolve(localResult.ok);
@@ -806,6 +830,10 @@ async function flushPendingSaves() {
 }
 
 function persistLocalMirrorBeforePageExit() {
+  // A workspace session has nothing to flush here, and writing would replace
+  // the local-only collection with the workspace's notes.
+  if (activeDbPath) return;
+
   const result = persistNotesLocally(localStorage, notes);
   if (!result.ok) {
     console.error("Failed to flush notes during page exit", result.error);
@@ -1177,6 +1205,10 @@ function attachEventListeners() {
   modeSplitBtn.addEventListener("click", () => setLayoutMode("split"));
   modePreviewBtn.addEventListener("click", () => setLayoutMode("preview"));
 
+  // Markdown preview links
+  markdownPreview.addEventListener("click", handlePreviewLinkClick);
+  secondaryMarkdownPreview.addEventListener("click", handlePreviewLinkClick);
+
   // Focus toggle
   focusBtn.addEventListener("click", toggleFocusMode);
 
@@ -1422,6 +1454,28 @@ function attachEventListeners() {
 // ----------------------------------------------------
 // Utilities
 // ----------------------------------------------------
+// Sanitized Markdown links carry target="_blank", but the desktop webview has
+// no default handling for it, so clicking one would otherwise do nothing. Send
+// external links to the user's browser; everything else stays put.
+function handlePreviewLinkClick(event) {
+  const link = event.target.closest("a[href]");
+  if (!link) return;
+
+  event.preventDefault();
+  const action = resolveLinkAction(link.getAttribute("href"));
+  if (action.kind !== "external") return;
+
+  if (!window.__TAURI__) {
+    window.open(action.url, "_blank", "noopener,noreferrer");
+    return;
+  }
+
+  invoke("plugin:opener|open_url", { url: action.url }).catch(error => {
+    console.error("Failed to open a link in the browser", error);
+    showNotification("Could not open that link");
+  });
+}
+
 function escapeHTML(str) {
   return str.replace(/[&<>'"]/g, 
     tag => ({
@@ -1436,7 +1490,7 @@ function escapeHTML(str) {
 
 // Database helpers
 function loadNotesFromLocalStorage() {
-  const savedNotes = localStorage.getItem("scratchpad_notes");
+  const savedNotes = localStorage.getItem(LOCAL_NOTES_KEY);
   if (savedNotes) {
     try {
       notes = JSON.parse(savedNotes);
@@ -1445,6 +1499,41 @@ function loadNotesFromLocalStorage() {
       notes = [];
     }
   }
+}
+
+// Notes set aside by an earlier build of this branch, when local storage was
+// shared between the local-only collection and the active workspace. Folded
+// back in once so nothing is stranded; can be dropped after a release carries
+// the current storage layout.
+function adoptLegacyStashedNotes() {
+  let stashed = null;
+  try {
+    stashed = readStoredNotes(localStorage.getItem(LOCAL_NOTES_BACKUP_KEY));
+  } catch (error) {
+    console.error("Failed to read previously set-aside notes", error);
+    return false;
+  }
+  if (!stashed) return false;
+
+  const byId = new Map(stashed.map(note => [note.id, note]));
+  notes.forEach(note => {
+    const held = byId.get(note.id);
+    if (!held || (note.updatedAt || 0) >= (held.updatedAt || 0)) byId.set(note.id, note);
+  });
+  notes = [...byId.values()];
+
+  const merged = persistNotesLocally(localStorage, notes);
+  if (!merged.ok) {
+    console.error("Failed to fold previously set-aside notes back in", merged.error);
+    return false;
+  }
+
+  try {
+    localStorage.removeItem(LOCAL_NOTES_BACKUP_KEY);
+  } catch (error) {
+    console.error("Failed to clear previously set-aside notes", error);
+  }
+  return true;
 }
 
 function updateDbUiState(isConnected) {
@@ -1479,72 +1568,74 @@ async function connectDatabase() {
   }
   if (!path) return;
 
-  activeDbPath = path;
+  const localNotes = readStoredNotes(localStorage.getItem(LOCAL_NOTES_KEY));
 
+  // Load into a local until the switch is known to be safe, so a failure here
+  // leaves the active collection untouched.
+  let workspaceNotes;
   try {
-    notes = await invoke("load_db_notes", { dbPath: path });
-
-    // If the database is completely empty, seed it with current LocalStorage notes.
-    if (notes.length === 0) {
-      const savedNotes = localStorage.getItem("scratchpad_notes");
-      if (savedNotes) {
-        try {
-          const fallbackNotes = JSON.parse(savedNotes);
-          if (Array.isArray(fallbackNotes) && fallbackNotes.length > 0) {
-            notes = fallbackNotes;
-            await invoke("save_notes_db", { dbPath: path, notes });
-          }
-        } catch (err) {
-          console.error("Failed to seed notes to SQLite DB", err);
-        }
-      }
-    }
-
-    let preferenceSaved = true;
-    try {
-      await invoke("set_last_workspace", { dbPath: path });
-      localStorage.removeItem("scratchpad_active_db");
-    } catch (err) {
-      preferenceSaved = false;
-      console.error("Failed to remember workspace", err);
-    }
-
-    updateDbUiState(true);
-    if (notes.length === 0) {
-      createNote();
-    } else {
-      activeNoteId = notes[0].id;
-      renderNoteList();
-      loadActiveNote();
-    }
-
-    showNotification(preferenceSaved
-      ? "Workspace connected!"
-      : "Workspace connected, but could not be remembered");
+    workspaceNotes = await invoke("load_db_notes", { dbPath: path });
   } catch (err) {
     console.error("Failed to read SQLite database", err);
-    activeDbPath = null;
-    loadNotesFromLocalStorage();
-
-    if (notes.length === 0) {
-      createNote();
-    } else {
-      activeNoteId = notes[0].id;
-      renderNoteList();
-      loadActiveNote();
-    }
-
-    updateDbUiState(false);
     showNotification("Could not open workspace; using local notes");
+    return;
   }
+
+  // Seeding deletes and rewrites the workspace's rows, so an unreadable
+  // response must not be mistaken for an empty workspace.
+  if (!Array.isArray(workspaceNotes)) {
+    console.error("Workspace returned an unexpected response", workspaceNotes);
+    showNotification("Could not open workspace; using local notes");
+    return;
+  }
+
+  activeDbPath = path;
+
+  // The local-only collection stays where it is. Nothing needs setting aside,
+  // because a workspace session no longer writes to local storage at all.
+  if (workspaceNotes.length > 0) {
+    notes = workspaceNotes;
+  } else if (localNotes) {
+    // Seed an empty workspace with the notes already in the app.
+    notes = localNotes;
+    try {
+      await invoke("save_notes_db", { dbPath: path, notes });
+    } catch (err) {
+      console.error("Failed to seed notes to SQLite DB", err);
+    }
+  }
+
+  let preferenceSaved = true;
+  try {
+    await invoke("set_last_workspace", { dbPath: path });
+    localStorage.removeItem("scratchpad_active_db");
+  } catch (err) {
+    preferenceSaved = false;
+    console.error("Failed to remember workspace", err);
+  }
+
+  updateDbUiState(true);
+  if (notes.length === 0) {
+    createNote();
+  } else {
+    activeNoteId = notes[0].id;
+    renderNoteList();
+    loadActiveNote();
+  }
+
+  showNotification(preferenceSaved
+    ? "Workspace connected!"
+    : "Workspace connected, but could not be remembered");
 }
 
 async function disconnectDatabase() {
   activeDbPath = null;
   localStorage.removeItem("scratchpad_active_db");
-  
+
+  // The local-only collection was never written over while the workspace was
+  // connected, so it is simply still there.
   loadNotesFromLocalStorage();
-  
+
   if (notes.length === 0) {
     createNote();
   } else {
