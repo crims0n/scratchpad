@@ -23,9 +23,19 @@ const NOTES = [
 ];
 
 test("Find All lists live matches and jumps to the selected result", async () => {
+  let nativeResizeHandler = null;
   const app = await bootApp({
     storage: { scratchpad_notes: NOTES },
-    handlers: { load_workspace_preference: () => null }
+    handlers: { load_workspace_preference: () => null },
+    windowApi: {
+      getCurrentWindow: () => ({
+        onCloseRequested: async () => () => {},
+        onResized: async (handler) => {
+          nativeResizeHandler = handler;
+          return () => {};
+        }
+      })
+    }
   });
   const { document, Event, KeyboardEvent } = app.dom.window;
   app.dom.window.marked = marked;
@@ -74,6 +84,15 @@ test("Find All lists live matches and jumps to the selected result", async () =>
     document.querySelector("#editor-backdrop mark.active-match"),
     highlightBeforeResize,
     "resizing redraws the editor highlights"
+  );
+
+  const highlightBeforeNativeResize = document.querySelector("#editor-backdrop mark.active-match");
+  nativeResizeHandler();
+  await app.settle(150);
+  assert.notEqual(
+    document.querySelector("#editor-backdrop mark.active-match"),
+    highlightBeforeNativeResize,
+    "a packaged Tauri window resize redraws the editor highlights"
   );
 
   const editor = document.getElementById("editor-textarea");

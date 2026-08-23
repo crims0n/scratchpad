@@ -321,7 +321,9 @@ let isReplaceOpen = false;
 const noteSaveDebounceTimers = new Map();
 let previewDebounceTimer = null;
 let highlightRedrawTimer = null;
+let highlightSettledRedrawTimer = null;
 let highlightResizeObserver = null;
+let nativeWindowResizeUnlisten = null;
 let dbSaveQueue = Promise.resolve();
 let isClosing = false;
 let localMirrorFailureNotified = false;
@@ -371,6 +373,7 @@ async function init() {
   applyPlatformShortcutLabels();
   attachEventListeners();
   await registerCloseHandler();
+  await registerWindowResizeHandler();
 
   // 2. Load the saved theme (Default Dark on first launch) and layout mode
   loadSavedThemes();
@@ -886,6 +889,22 @@ async function registerCloseHandler() {
     });
   } catch (error) {
     console.error("Failed to register the close-save handler", error);
+  }
+}
+
+async function registerWindowResizeHandler() {
+  const getCurrentWindow = window.__TAURI__?.window?.getCurrentWindow;
+  if (typeof getCurrentWindow !== "function") return;
+
+  try {
+    const appWindow = getCurrentWindow();
+    if (typeof appWindow.onResized !== "function") return;
+
+    nativeWindowResizeUnlisten = await appWindow.onResized(() => {
+      scheduleFindHighlightRedraw(80);
+    });
+  } catch (error) {
+    console.error("Failed to register the native highlight resize handler", error);
   }
 }
 
@@ -1740,7 +1759,9 @@ function toggleFindBar(openReplace = false) {
 function hideFindBar() {
   isFindBarOpen = false;
   clearTimeout(highlightRedrawTimer);
+  clearTimeout(highlightSettledRedrawTimer);
   highlightRedrawTimer = null;
+  highlightSettledRedrawTimer = null;
   toggleFindResults(false);
   findBar.style.display = "none";
   findMatches = [];
@@ -2127,23 +2148,34 @@ function scheduleFindHighlightRedraw(delay = 0) {
   if (!isFindBarOpen) return;
 
   clearTimeout(highlightRedrawTimer);
-  highlightRedrawTimer = setTimeout(() => {
-    highlightRedrawTimer = null;
+  clearTimeout(highlightSettledRedrawTimer);
 
-    const redraw = () => {
-      if (!isFindBarOpen) return;
-      updateHighlights();
-      if (activeMatchIndex >= 0 && activeMatchIndex < findMatches.length) {
-        scrollActiveMatchIntoView(findMatches[activeMatchIndex]);
-      }
-    };
+  highlightRedrawTimer = setTimeout(() => redrawFindHighlights(), delay);
+  // A packaged webview can report the new dimensions before native layout and
+  // paint have completely settled. Redraw once promptly and once after that
+  // transition window so highlights cannot retain the intermediate wrapping.
+  highlightSettledRedrawTimer = setTimeout(
+    () => redrawFindHighlights(),
+    Math.max(delay + 80, 260)
+  );
+}
 
-    if (typeof window.requestAnimationFrame === "function") {
-      window.requestAnimationFrame(redraw);
-    } else {
-      redraw();
+function redrawFindHighlights() {
+  if (!isFindBarOpen) return;
+
+  const redraw = () => {
+    if (!isFindBarOpen) return;
+    updateHighlights();
+    if (activeMatchIndex >= 0 && activeMatchIndex < findMatches.length) {
+      scrollActiveMatchIntoView(findMatches[activeMatchIndex]);
     }
-  }, delay);
+  };
+
+  if (typeof window.requestAnimationFrame === "function") {
+    window.requestAnimationFrame(redraw);
+  } else {
+    redraw();
+  }
 }
 
 function updateHighlights() {

@@ -15,7 +15,7 @@ export const settle = (ms = 50) => new Promise((resolve) => setTimeout(resolve, 
 // the value it should resolve with, or throws to simulate a failing command.
 // `instance` gives the module a distinct URL so a single process can boot the
 // app more than once, which is what a two-launch test needs.
-export async function bootApp({ storage = {}, handlers = {}, instance = 1 } = {}) {
+export async function bootApp({ storage = {}, handlers = {}, instance = 1, windowApi = {} } = {}) {
   const html = await readFile(new URL("../../src/index.html", import.meta.url), "utf8");
   const dom = new JSDOM(html, { url: "http://localhost/", pretendToBeVisual: true });
 
@@ -26,7 +26,7 @@ export async function bootApp({ storage = {}, handlers = {}, instance = 1 } = {}
     return typeof handler === "function" ? handler(args) : null;
   }
 
-  dom.window.__TAURI__ = { core: { invoke }, window: {} };
+  dom.window.__TAURI__ = { core: { invoke }, window: windowApi };
   globalThis.window = dom.window;
   globalThis.document = dom.window.document;
   globalThis.localStorage = dom.window.localStorage;
