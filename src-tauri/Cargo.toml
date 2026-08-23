@@ -1,6 +1,6 @@
 [package]
 name = "scratchpad"
-version = "0.1.0"
+version = "0.1.1"
 description = "A lightweight, offline-first Markdown scratchpad for the desktop."
 authors = ["crims0n"]
 repository = "https://github.com/crims0n/scratchpad"
