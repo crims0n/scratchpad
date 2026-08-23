@@ -331,17 +331,23 @@ function applyPlatformShortcutLabels() {
   });
 }
 
+// Reports the remembered workspace alongside whether it could be determined at
+// all. "Read it, there is no workspace" and "could not read it" look identical
+// from the path alone, and only the first is safe to act on: a preference that
+// failed to read may still name a workspace that opens on a later launch.
 async function loadRememberedWorkspacePath() {
   const legacyPath = localStorage.getItem("scratchpad_active_db");
-  if (!window.__TAURI__) return legacyPath;
+  if (!window.__TAURI__) return { known: true, path: legacyPath };
 
   try {
     const savedPath = await invoke("load_workspace_preference", { legacyPath });
     localStorage.removeItem("scratchpad_active_db");
-    return savedPath;
+    return { known: true, path: savedPath };
   } catch (err) {
     console.error("Failed to load native workspace preference", err);
-    return legacyPath;
+    // Unknown even when a legacy path survives: the native preference takes
+    // precedence over it and may name a different workspace.
+    return { known: false, path: legacyPath };
   }
 }
 
@@ -364,12 +370,17 @@ async function init() {
 
   // 4. Check if a native workspace preference is configured. Existing
   // localStorage preferences are migrated once for origin-independent startup.
-  const savedActiveDb = await loadRememberedWorkspacePath();
-  if (savedActiveDb && window.__TAURI__) {
-    activeDbPath = savedActiveDb;
+  const rememberedWorkspace = await loadRememberedWorkspacePath();
+  if (rememberedWorkspace.path && window.__TAURI__) {
+    activeDbPath = rememberedWorkspace.path;
     try {
       const dbNotes = await invoke("load_db_notes", { dbPath: activeDbPath });
-      if (Array.isArray(dbNotes) && dbNotes.length > 0) {
+      // Seeding deletes and rewrites the workspace's rows, so an unreadable
+      // response must not be mistaken for an empty workspace.
+      if (!Array.isArray(dbNotes)) {
+        throw new Error("Workspace returned an unexpected response");
+      }
+      if (dbNotes.length > 0) {
         notes = dbNotes;
       } else if (notes.length > 0) {
         // Seed empty SQLite database with existing LocalStorage notes
@@ -381,7 +392,7 @@ async function init() {
       activeDbPath = null;
       // Disconnect is the only other way back to the set-aside notes, and its
       // button is hidden while no workspace is active.
-      const restored = restoreStashedLocalNotes();
+      const restored = rememberedWorkspace.known && restoreStashedLocalNotes();
       updateDbUiState(false);
       showNotification(restored
         ? "Workspace unavailable; local notes restored"
@@ -390,8 +401,16 @@ async function init() {
   } else {
     // Reached whenever start-up ends without a workspace, including after a
     // failed preference write left notes set aside with nothing to restore them.
-    restoreStashedLocalNotes();
+    // Hand them back only when start-up is certain no workspace is configured;
+    // consuming them on an unreadable preference would leave nothing to restore
+    // once that workspace opens again.
+    if (rememberedWorkspace.known) {
+      restoreStashedLocalNotes();
+    }
     updateDbUiState(false);
+    if (!rememberedWorkspace.known && hasStashedLocalNotes()) {
+      showNotification("Workspace settings unreadable; local notes kept aside");
+    }
   }
 
   // 5. Create default note if none exist
@@ -1502,6 +1521,15 @@ function ensureLocalNotesStashed(localNotes) {
     return Boolean(readStoredNotes(localStorage.getItem(LOCAL_NOTES_BACKUP_KEY)));
   } catch (error) {
     console.error("Failed to preserve local notes before connecting a workspace", error);
+    return false;
+  }
+}
+
+function hasStashedLocalNotes() {
+  try {
+    return Boolean(readStoredNotes(localStorage.getItem(LOCAL_NOTES_BACKUP_KEY)));
+  } catch (error) {
+    console.error("Failed to read the preserved local notes", error);
     return false;
   }
 }
