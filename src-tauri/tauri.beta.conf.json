@@ -1,0 +1,10 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Scratchpad Beta",
+  "identifier": "io.github.crims0n.scratchpad.beta",
+  "bundle": {
+    "macOS": {
+      "signingIdentity": "-"
+    }
+  }
+}

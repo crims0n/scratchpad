@@ -118,6 +118,18 @@ npm run tauri -- build
 
 Application bundles and installers are written beneath `src-tauri/target/release/bundle/`.
 
+### Build or publish a beta
+
+Beta builds use a separate app name, identifier, and preferences directory so they can be installed alongside the stable app:
+
+```bash
+npm run tauri -- build --config src-tauri/tauri.beta.conf.json
+```
+
+The **Beta Release** workflow in GitHub Actions builds macOS, Windows, and Linux installers and attaches them to a draft prerelease. Run it manually from the repository's **Actions** tab. Before creating another beta, update the version in `src-tauri/tauri.conf.json`; the workflow uses that version for the release tag and title.
+
+The macOS beta is ad-hoc signed for early testing. Public distribution should use platform signing and notarization credentials configured as repository secrets.
+
 ## Architecture
 
 | Area | Implementation |
