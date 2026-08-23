@@ -34,7 +34,41 @@ function addLocationContext(text, matches) {
   });
 }
 
-export function findTextMatches(text, query, useRegex = false) {
+const WORD_CHARACTER = /[\p{L}\p{N}\p{M}\p{Pc}]/u;
+
+function characterAt(text, index) {
+  if (index < 0 || index >= text.length) return "";
+  return String.fromCodePoint(text.codePointAt(index));
+}
+
+function characterBefore(text, index) {
+  if (index <= 0 || index > text.length) return "";
+  const lastCodeUnit = text.charCodeAt(index - 1);
+  if (lastCodeUnit >= 0xDC00 && lastCodeUnit <= 0xDFFF && index > 1) {
+    return text.slice(index - 2, index);
+  }
+  return text[index - 1];
+}
+
+function hasExactBoundaries(text, match) {
+  const firstMatchCharacter = characterAt(match.text, 0);
+  const lastMatchCharacter = characterBefore(match.text, match.text.length);
+  const previousCharacter = characterBefore(text, match.start);
+  const nextCharacter = characterAt(text, match.end);
+
+  const startsInsideWord = WORD_CHARACTER.test(firstMatchCharacter) &&
+    WORD_CHARACTER.test(previousCharacter);
+  const endsInsideWord = WORD_CHARACTER.test(lastMatchCharacter) &&
+    WORD_CHARACTER.test(nextCharacter);
+
+  return !startsInsideWord && !endsInsideWord;
+}
+
+export function findTextMatches(
+  text,
+  query,
+  { useRegex = false, matchCase = false, exactMatch = false } = {}
+) {
   if (!query) return { matches: [], invalidPattern: false };
 
   const matches = [];
@@ -42,7 +76,7 @@ export function findTextMatches(text, query, useRegex = false) {
   if (useRegex) {
     let regex;
     try {
-      regex = new RegExp(query, "gi");
+      regex = new RegExp(query, matchCase ? "g" : "gi");
     } catch {
       return { matches: [], invalidPattern: true };
     }
@@ -63,11 +97,11 @@ export function findTextMatches(text, query, useRegex = false) {
       });
     }
   } else {
-    const lowerText = text.toLowerCase();
-    const lowerQuery = query.toLowerCase();
+    const searchText = matchCase ? text : text.toLowerCase();
+    const searchQuery = matchCase ? query : query.toLowerCase();
     let index = 0;
 
-    while ((index = lowerText.indexOf(lowerQuery, index)) !== -1) {
+    while ((index = searchText.indexOf(searchQuery, index)) !== -1) {
       matches.push({
         start: index,
         end: index + query.length,
@@ -77,8 +111,12 @@ export function findTextMatches(text, query, useRegex = false) {
     }
   }
 
+  const filteredMatches = exactMatch
+    ? matches.filter((match) => hasExactBoundaries(text, match))
+    : matches;
+
   return {
-    matches: addLocationContext(text, matches),
+    matches: addLocationContext(text, filteredMatches),
     invalidPattern: false
   };
 }

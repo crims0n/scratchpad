@@ -842,6 +842,8 @@ body {
   margin: 0;
   white-space: pre-wrap;
   word-wrap: break-word;
+  /* Keep both text layers the same width when wrapping creates a scrollbar. */
+  scrollbar-gutter: stable;
 }
 
 .editor-textarea {
@@ -1182,7 +1184,7 @@ body {
 }
 
 #find-input {
-  padding-right: 28px;
+  padding-right: 80px;
 }
 
 #find-input.invalid-regex {
@@ -1209,6 +1211,14 @@ body {
   cursor: pointer;
   line-height: 1;
   transition: all 0.15s ease;
+}
+
+.find-case-toggle {
+  right: 56px;
+}
+
+.find-exact-toggle {
+  right: 30px;
 }
 
 .find-option-btn:hover {
@@ -1339,6 +1349,34 @@ body {
   font-size: 0.72rem;
 }
 
+.find-results-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.find-results-scope {
+  padding: 4px 7px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+
+.find-results-scope:hover {
+  background-color: var(--bg-note-hover);
+  color: var(--text-primary);
+}
+
+.find-results-scope.active {
+  background-color: var(--accent-color);
+  border-color: var(--accent-color);
+  color: #ffffff;
+}
+
 .find-results-close {
   flex: 0 0 auto;
   width: 28px;
@@ -1411,6 +1449,26 @@ body {
   line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.find-result-content {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.find-result-note {
+  margin-bottom: 2px;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.find-result-content .find-result-snippet {
+  display: block;
 }
 
 .find-results-empty {

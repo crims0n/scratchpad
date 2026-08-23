@@ -73,10 +73,13 @@ const findPrevBtn = document.getElementById("find-prev");
 const findNextBtn = document.getElementById("find-next");
 const findCloseBtn = document.getElementById("find-close");
 const findToggleReplaceBtn = document.getElementById("find-toggle-replace");
+const findCaseToggleBtn = document.getElementById("find-case-toggle");
+const findExactToggleBtn = document.getElementById("find-exact-toggle");
 const findRegexToggleBtn = document.getElementById("find-regex-toggle");
 const findResultsToggleBtn = document.getElementById("find-results-toggle");
 const findResultsPane = document.getElementById("find-results-pane");
 const findResultsCloseBtn = document.getElementById("find-results-close");
+const findAllNotesToggleBtn = document.getElementById("find-all-notes-toggle");
 const findResultsSummary = document.getElementById("find-results-summary");
 const findResultsList = document.getElementById("find-results-list");
 const replaceRow = document.getElementById("replace-row");
@@ -313,9 +316,12 @@ let findMatches = [];
 let activeMatchIndex = -1;
 let isFindBarOpen = false;
 let isFindResultsOpen = false;
+let isFindAllNotesMode = false;
 let hasInvalidFindPattern = false;
 let contextMenuTarget = null;
 let contextMenuNoteId = null;
+let isMatchCaseMode = false;
+let isExactMatchMode = false;
 let isRegexMode = false;
 let isReplaceOpen = false;
 const noteSaveDebounceTimers = new Map();
@@ -962,6 +968,10 @@ function handleTitleInput() {
   activeNote.isTitleLocked = true; // User edited manually, lock auto-renaming
   activeNote.updatedAt = Date.now();
 
+  if (isFindResultsOpen && isFindAllNotesMode) {
+    renderFindResults();
+  }
+
   triggerSavingState();
   
   scheduleNoteSave(activeNote.id, () => {
@@ -1380,9 +1390,12 @@ function attachEventListeners() {
     toggleFindResults(false);
     findInput.focus();
   });
+  findAllNotesToggleBtn.addEventListener("click", toggleFindAllNotesMode);
   findResultsList.addEventListener("click", handleFindResultClick);
   findResultsList.addEventListener("keydown", handleFindResultKeydown);
   findToggleReplaceBtn.addEventListener("click", () => toggleReplace());
+  findCaseToggleBtn.addEventListener("click", toggleMatchCaseMode);
+  findExactToggleBtn.addEventListener("click", toggleExactMatchMode);
   findRegexToggleBtn.addEventListener("click", toggleRegexMode);
   
   replaceInput.addEventListener("keydown", (e) => {
@@ -1451,6 +1464,14 @@ function attachEventListeners() {
     if (e.altKey && e.key.toLowerCase() === "r" && isFindBarOpen) {
       e.preventDefault();
       toggleRegexMode();
+    }
+    if (e.altKey && e.key.toLowerCase() === "c" && isFindBarOpen) {
+      e.preventDefault();
+      toggleMatchCaseMode();
+    }
+    if (e.altKey && e.key.toLowerCase() === "w" && isFindBarOpen) {
+      e.preventDefault();
+      toggleExactMatchMode();
     }
     if (isMeta && (e.key === "\\" || e.key === "|")) {
       e.preventDefault();
@@ -1792,12 +1813,34 @@ function toggleRegexMode() {
   runFind();
 }
 
+function toggleMatchCaseMode() {
+  isMatchCaseMode = !isMatchCaseMode;
+  findCaseToggleBtn.classList.toggle("active", isMatchCaseMode);
+  findCaseToggleBtn.setAttribute("aria-pressed", String(isMatchCaseMode));
+  runFind();
+}
+
+function toggleExactMatchMode() {
+  isExactMatchMode = !isExactMatchMode;
+  findExactToggleBtn.classList.toggle("active", isExactMatchMode);
+  findExactToggleBtn.setAttribute("aria-pressed", String(isExactMatchMode));
+  runFind();
+}
+
+function getFindOptions() {
+  return {
+    useRegex: isRegexMode,
+    matchCase: isMatchCaseMode,
+    exactMatch: isExactMatchMode
+  };
+}
+
 function runFind({ preserveActive = false, selectActive = true } = {}) {
   const query = findInput.value;
   const previousActiveIndex = activeMatchIndex;
   findInput.classList.remove("invalid-regex");
 
-  const result = findTextMatches(editorTextarea.value, query, isRegexMode);
+  const result = findTextMatches(editorTextarea.value, query, getFindOptions());
   findMatches = result.matches;
   hasInvalidFindPattern = result.invalidPattern;
 
@@ -1896,7 +1939,7 @@ function replaceOne() {
   let replacement = replaceText;
   if (isRegexMode) {
     try {
-      const regex = new RegExp(findInput.value, "i");
+      const regex = new RegExp(findInput.value, isMatchCaseMode ? "" : "i");
       replacement = match.text.replace(regex, replaceText);
     } catch (e) {}
   }
@@ -1929,18 +1972,24 @@ function replaceAll() {
   const text = editorTextarea.value;
   const totalMatches = findMatches.length;
   
-  let newContent = "";
+  let newContent = text;
+  let replacementRegex = null;
   if (isRegexMode) {
     try {
-      const regex = new RegExp(query, "gi");
-      newContent = text.replace(regex, replaceText);
+      replacementRegex = new RegExp(query, isMatchCaseMode ? "" : "i");
     } catch (e) {
       return;
     }
-  } else {
-    const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(escapedQuery, "gi");
-    newContent = text.replace(regex, replaceText);
+  }
+
+  for (let index = findMatches.length - 1; index >= 0; index -= 1) {
+    const match = findMatches[index];
+    const replacement = replacementRegex
+      ? match.text.replace(replacementRegex, replaceText)
+      : replaceText;
+    newContent = newContent.substring(0, match.start) +
+      replacement +
+      newContent.substring(match.end);
   }
   
   editorTextarea.value = newContent;
@@ -1998,11 +2047,42 @@ function toggleFindResults(forceState) {
   scheduleFindHighlightRedraw(220);
 }
 
+function toggleFindAllNotesMode() {
+  isFindAllNotesMode = !isFindAllNotesMode;
+  findAllNotesToggleBtn.classList.toggle("active", isFindAllNotesMode);
+  findAllNotesToggleBtn.setAttribute("aria-pressed", String(isFindAllNotesMode));
+  renderFindResults();
+}
+
+function getFindResultEntries() {
+  if (!isFindAllNotesMode) {
+    const activeNote = notes.find((note) => note.id === activeNoteId);
+    if (!activeNote) return [];
+    return findMatches.map((match, matchIndex) => ({ activeNote, match, matchIndex }));
+  }
+
+  return notes.flatMap((note) => {
+    const result = findTextMatches(note.content || "", findInput.value, getFindOptions());
+    return result.matches.map((match, matchIndex) => ({
+      activeNote: note,
+      match,
+      matchIndex
+    }));
+  });
+}
+
 function renderFindResults() {
   if (!isFindResultsOpen) return;
 
-  const matchLabel = findMatches.length === 1 ? "match" : "matches";
-  findResultsSummary.textContent = `${findMatches.length} ${matchLabel}`;
+  const resultEntries = getFindResultEntries();
+  const matchLabel = resultEntries.length === 1 ? "match" : "matches";
+  if (isFindAllNotesMode && resultEntries.length > 0) {
+    const noteCount = new Set(resultEntries.map(({ activeNote }) => activeNote.id)).size;
+    const noteLabel = noteCount === 1 ? "note" : "notes";
+    findResultsSummary.textContent = `${resultEntries.length} ${matchLabel} in ${noteCount} ${noteLabel}`;
+  } else {
+    findResultsSummary.textContent = `${resultEntries.length} ${matchLabel}`;
+  }
   findResultsList.replaceChildren();
 
   let emptyMessage = "";
@@ -2010,8 +2090,10 @@ function renderFindResults() {
     emptyMessage = "Enter a search term to see every match.";
   } else if (hasInvalidFindPattern) {
     emptyMessage = "Fix the regular expression to show results.";
-  } else if (findMatches.length === 0) {
-    emptyMessage = "No matches in this scratchpad.";
+  } else if (resultEntries.length === 0) {
+    emptyMessage = isFindAllNotesMode
+      ? "No matches in any scratchpad."
+      : "No matches in this scratchpad.";
   }
 
   if (emptyMessage) {
@@ -2023,21 +2105,30 @@ function renderFindResults() {
   }
 
   const fragment = document.createDocumentFragment();
-  findMatches.forEach((match, index) => {
+  const hasActiveEntry = resultEntries.some(({ activeNote, matchIndex }) =>
+    activeNote.id === activeNoteId && matchIndex === activeMatchIndex
+  );
+
+  resultEntries.forEach(({ activeNote, match, matchIndex }, index) => {
     const item = document.createElement("li");
     item.className = "find-result-item";
 
     const button = document.createElement("button");
     button.type = "button";
     button.className = "find-result-button";
-    button.dataset.matchIndex = String(index);
-    button.tabIndex = index === activeMatchIndex ? 0 : -1;
+    button.dataset.noteId = activeNote.id;
+    button.dataset.matchIndex = String(matchIndex);
+    button.dataset.matchStart = String(match.start);
+    button.dataset.matchEnd = String(match.end);
+    const isActive = activeNote.id === activeNoteId && matchIndex === activeMatchIndex;
+    button.tabIndex = isActive || (!hasActiveEntry && index === 0) ? 0 : -1;
+    const noteContext = isFindAllNotesMode ? `${activeNote.title}, ` : "";
     button.setAttribute(
       "aria-label",
-      `Match ${index + 1} of ${findMatches.length}, line ${match.line}, column ${match.column}: ${match.snippet}`
+      `Match ${index + 1} of ${resultEntries.length}, ${noteContext}line ${match.line}, column ${match.column}: ${match.snippet}`
     );
 
-    if (index === activeMatchIndex) {
+    if (isActive) {
       button.classList.add("active");
       button.setAttribute("aria-current", "true");
     }
@@ -2052,7 +2143,18 @@ function renderFindResults() {
     snippet.textContent = match.snippet;
     snippet.title = match.snippet;
 
-    button.append(location, snippet);
+    const content = document.createElement("span");
+    content.className = "find-result-content";
+    if (isFindAllNotesMode) {
+      const noteTitle = document.createElement("span");
+      noteTitle.className = "find-result-note";
+      noteTitle.textContent = activeNote.title;
+      noteTitle.title = activeNote.title;
+      content.appendChild(noteTitle);
+    }
+    content.appendChild(snippet);
+
+    button.append(location, content);
     item.appendChild(button);
     fragment.appendChild(item);
   });
@@ -2065,31 +2167,54 @@ function renderFindResults() {
 function handleFindResultClick(event) {
   const button = event.target.closest(".find-result-button");
   if (!button) return;
-  selectMatch(Number(button.dataset.matchIndex), true);
+  activateFindResult(button, true);
+}
+
+function activateFindResult(button, focusEditor) {
+  const noteId = button.dataset.noteId;
+  const matchStart = Number(button.dataset.matchStart);
+  const matchEnd = Number(button.dataset.matchEnd);
+
+  if (noteId !== activeNoteId) {
+    activeNoteId = noteId;
+    renderNoteList(searchInput.value);
+    loadActiveNote();
+  }
+
+  const matchIndex = findMatches.findIndex(
+    (match) => match.start === matchStart && match.end === matchEnd
+  );
+  if (matchIndex >= 0) selectMatch(matchIndex, focusEditor);
 }
 
 function handleFindResultKeydown(event) {
   const button = event.target.closest(".find-result-button");
-  if (!button || findMatches.length === 0) return;
+  const buttons = [...findResultsList.querySelectorAll(".find-result-button")];
+  if (!button || buttons.length === 0) return;
 
-  const currentIndex = Number(button.dataset.matchIndex);
+  const currentIndex = buttons.indexOf(button);
   let targetIndex = currentIndex;
 
   if (event.key === "ArrowDown") {
-    targetIndex = (currentIndex + 1) % findMatches.length;
+    targetIndex = (currentIndex + 1) % buttons.length;
   } else if (event.key === "ArrowUp") {
-    targetIndex = (currentIndex - 1 + findMatches.length) % findMatches.length;
+    targetIndex = (currentIndex - 1 + buttons.length) % buttons.length;
   } else if (event.key === "Home") {
     targetIndex = 0;
   } else if (event.key === "End") {
-    targetIndex = findMatches.length - 1;
+    targetIndex = buttons.length - 1;
   } else {
     return;
   }
 
   event.preventDefault();
-  selectMatch(targetIndex, false);
-  findResultsList.querySelector(`[data-match-index="${targetIndex}"]`)?.focus();
+  const target = buttons[targetIndex];
+  const noteId = target.dataset.noteId;
+  const matchStart = target.dataset.matchStart;
+  activateFindResult(target, false);
+  [...findResultsList.querySelectorAll(".find-result-button")]
+    .find((result) => result.dataset.noteId === noteId && result.dataset.matchStart === matchStart)
+    ?.focus();
 }
 
 function clearPreviewHighlights() {
@@ -2123,7 +2248,11 @@ function updatePreviewHighlights() {
 
   let previewMatchIndex = 0;
   textNodes.forEach((textNode) => {
-    const nodeMatches = findTextMatches(textNode.nodeValue, findInput.value, isRegexMode).matches
+    const nodeMatches = findTextMatches(
+      textNode.nodeValue,
+      findInput.value,
+      getFindOptions()
+    ).matches
       .map((match) => ({ ...match, previewIndex: previewMatchIndex++ }));
 
     for (let index = nodeMatches.length - 1; index >= 0; index -= 1) {

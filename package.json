@@ -1,7 +1,7 @@
 {
   "name": "scratchpad",
   "private": true,
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "A lightweight, offline-first Markdown scratchpad for the desktop.",
   "license": "GPL-3.0-or-later",
   "author": "crims0n",

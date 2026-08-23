@@ -23,8 +23,38 @@ test("plain-text find is case-insensitive and includes line context", () => {
   );
 });
 
+test("match case requires matching capitalization", () => {
+  const { matches } = findTextMatches(
+    "Alpha first\nsecond alpha here\nALPHA",
+    "alpha",
+    { matchCase: true }
+  );
+
+  assert.deepEqual(matches.map(({ text, line, column }) => ({ text, line, column })), [
+    { text: "alpha", line: 2, column: 8 }
+  ]);
+});
+
+test("exact match excludes results contained within larger words", () => {
+  const { matches } = findTextMatches(
+    "cat scatter cat2 cat_note cat. Cat",
+    "cat",
+    { exactMatch: true }
+  );
+
+  assert.deepEqual(matches.map(({ text, column }) => ({ text, column })), [
+    { text: "cat", column: 1 },
+    { text: "cat", column: 27 },
+    { text: "Cat", column: 32 }
+  ]);
+});
+
 test("regex find supports multiline matches and reports their starting location", () => {
-  const { matches } = findTextMatches("first\nsecond\nthird", "first\\nsecond", true);
+  const { matches } = findTextMatches(
+    "first\nsecond\nthird",
+    "first\\nsecond",
+    { useRegex: true }
+  );
 
   assert.equal(matches.length, 1);
   assert.deepEqual(matches[0], {
@@ -37,12 +67,22 @@ test("regex find supports multiline matches and reports their starting location"
   });
 });
 
+test("match case makes regular expressions case-sensitive", () => {
+  const { matches } = findTextMatches(
+    "Alpha alpha ALPHA",
+    "alpha",
+    { useRegex: true, matchCase: true }
+  );
+
+  assert.deepEqual(matches.map(({ text }) => text), ["alpha"]);
+});
+
 test("invalid and empty regular expressions are handled safely", () => {
-  assert.deepEqual(findTextMatches("text", "[", true), {
+  assert.deepEqual(findTextMatches("text", "[", { useRegex: true }), {
     matches: [],
     invalidPattern: true
   });
-  assert.deepEqual(findTextMatches("text", "^", true), {
+  assert.deepEqual(findTextMatches("text", "^", { useRegex: true }), {
     matches: [],
     invalidPattern: false
   });

@@ -133,6 +133,8 @@
                 </button>
                 <div class="find-input-wrapper">
                   <input type="text" id="find-input" aria-label="Find in document" placeholder="Find in document..." autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
+                  <button class="find-option-btn find-case-toggle" id="find-case-toggle" title="Match Case (Alt+C)" aria-label="Toggle case-sensitive matching" aria-pressed="false">Aa</button>
+                  <button class="find-option-btn find-exact-toggle" id="find-exact-toggle" title="Exact Match (Alt+W)" aria-label="Toggle exact whole-word matching" aria-pressed="false">ab</button>
                   <button class="find-option-btn" id="find-regex-toggle" title="Use Regular Expression (Alt+R)" aria-pressed="false">.*</button>
                 </div>
                 <span class="find-count" id="find-count">0 of 0</span>
@@ -194,12 +196,15 @@
               <h2 id="find-results-title">Find Results</h2>
               <span id="find-results-summary" aria-live="polite">0 matches</span>
             </div>
-            <button class="icon-btn find-results-close" id="find-results-close" title="Close Find Results" aria-label="Close find results">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
+            <div class="find-results-actions">
+              <button class="find-results-scope" id="find-all-notes-toggle" title="Search every scratchpad" aria-pressed="false">All notes</button>
+              <button class="icon-btn find-results-close" id="find-results-close" title="Close Find Results" aria-label="Close find results">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
           </div>
           <ol class="find-results-list" id="find-results-list"></ol>
         </aside>
@@ -359,6 +364,14 @@
             <div class="shortcut-row">
               <span class="shortcut-desc">Toggle Regular Expression Mode (<span class="code-mono">.*</span>)</span>
               <div class="shortcut-keys"><kbd>Alt</kbd><span class="key-plus">+</span><kbd>R</kbd></div>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Toggle Match Case (<span class="code-mono">Aa</span>)</span>
+              <div class="shortcut-keys"><kbd>Alt</kbd><span class="key-plus">+</span><kbd>C</kbd></div>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Toggle Exact Match (<span class="code-mono">ab</span>)</span>
+              <div class="shortcut-keys"><kbd>Alt</kbd><span class="key-plus">+</span><kbd>W</kbd></div>
             </div>
             <div class="shortcut-row">
               <span class="shortcut-desc">Jump to Next Match</span>

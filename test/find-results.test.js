@@ -19,6 +19,13 @@ const NOTES = [
     content: "No result on this note",
     updatedAt: 1,
     isTitleLocked: true
+  },
+  {
+    id: "note-three",
+    title: "Third",
+    content: "Remote alpha",
+    updatedAt: 0,
+    isTitleLocked: true
   }
 ];
 
@@ -65,6 +72,24 @@ test("Find All lists live matches and jumps to the selected result", async () =>
   findInput.value = "alpha";
   findInput.dispatchEvent(new Event("input", { bubbles: true }));
 
+  const caseToggle = document.getElementById("find-case-toggle");
+  caseToggle.click();
+  assert.equal(caseToggle.getAttribute("aria-pressed"), "true");
+  assert.equal(document.getElementById("find-count").textContent, "1 of 1");
+  caseToggle.click();
+  assert.equal(document.getElementById("find-count").textContent, "1 of 3");
+
+  const exactToggle = document.getElementById("find-exact-toggle");
+  findInput.value = "alp";
+  findInput.dispatchEvent(new Event("input", { bubbles: true }));
+  assert.equal(document.getElementById("find-count").textContent, "1 of 3");
+  exactToggle.click();
+  assert.equal(exactToggle.getAttribute("aria-pressed"), "true");
+  assert.equal(document.getElementById("find-count").textContent, "0 of 0");
+  exactToggle.click();
+  findInput.value = "alpha";
+  findInput.dispatchEvent(new Event("input", { bubbles: true }));
+
   const resultsToggle = document.getElementById("find-results-toggle");
   assert.equal(resultsToggle.disabled, false);
   resultsToggle.click();
@@ -76,6 +101,24 @@ test("Find All lists live matches and jumps to the selected result", async () =>
     [...document.querySelectorAll(".find-result-location")].map((element) => element.textContent),
     ["Line 1", "Line 2", "Line 3"]
   );
+
+  const allNotesToggle = document.getElementById("find-all-notes-toggle");
+  allNotesToggle.click();
+  assert.equal(allNotesToggle.getAttribute("aria-pressed"), "true");
+  assert.equal(document.getElementById("find-results-summary").textContent, "4 matches in 2 notes");
+  assert.deepEqual(
+    [...document.querySelectorAll(".find-result-note")].map((element) => element.textContent),
+    ["First", "First", "First", "Third"]
+  );
+
+  document.querySelector('[data-note-id="note-three"]').click();
+  assert.equal(document.getElementById("editor-textarea").value, "Remote alpha");
+  assert.equal(document.getElementById("editor-textarea").selectionStart, 7);
+  assert.ok(document.querySelector('[data-id="note-three"]').classList.contains("active"));
+
+  document.querySelector('[data-note-id="note-one"][data-match-start="0"]').click();
+  allNotesToggle.click();
+  assert.equal(document.getElementById("find-results-summary").textContent, "3 matches");
 
   const highlightBeforeResize = document.querySelector("#editor-backdrop mark.active-match");
   app.dom.window.dispatchEvent(new Event("resize"));

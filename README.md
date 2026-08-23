@@ -26,7 +26,7 @@ Beta packages are not yet production-signed. macOS and Windows may show a securi
 - Edit, synchronized edit/preview, and full Markdown preview layouts
 - Two-note side-by-side editing with drag-to-split
 - Sidebar search, note reordering, word counts, and distraction-free Focus Mode
-- Find and replace with regular-expression support and live highlighting
+- Find and replace with case-sensitive, exact-match, and regular-expression modes, live highlighting, and results across one or every scratchpad
 - Native text-file import and Markdown export
 - Copy as Markdown or sanitized rendered HTML
 - Optional portable workspace files that reopen automatically
@@ -57,6 +57,8 @@ The app displays `Cmd` on macOS and `Ctrl` on Windows or Linux.
 | `Alt + ↑` / `Alt + ↓` | Move the active note in the sidebar |
 | `Cmd/Ctrl + F` | Open or close Find |
 | `Cmd/Ctrl + H` | Open Find and Replace |
+| `Alt + C` | Toggle case-sensitive matching while Find is open |
+| `Alt + W` | Toggle exact whole-word matching while Find is open |
 | `Alt + R` | Toggle regular-expression mode while Find is open |
 | `Enter` / `Shift + Enter` | Select the next or previous match |
 | `Cmd/Ctrl + Shift + F` | Toggle Focus Mode |
