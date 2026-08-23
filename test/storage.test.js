@@ -2,7 +2,12 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { persistNotesLocally } from "../src/storage.js";
+import {
+  LOCAL_NOTES_BACKUP_KEY,
+  LOCAL_NOTES_KEY,
+  persistNotesLocally,
+  readStoredNotes
+} from "../src/storage.js";
 
 test("local persistence serializes the complete note collection", () => {
   const writes = new Map();
@@ -31,4 +36,22 @@ test("local persistence reports quota failures without throwing", () => {
 
   assert.equal(result.ok, false);
   assert.equal(result.error, quotaError);
+});
+
+test("the preserved local notes use a key of their own", () => {
+  assert.notEqual(LOCAL_NOTES_BACKUP_KEY, LOCAL_NOTES_KEY);
+});
+
+test("stored notes are read back when the collection has content", () => {
+  const notes = [{ id: "note-1", title: "One", content: "Hello" }];
+
+  assert.deepEqual(readStoredNotes(JSON.stringify(notes)), notes);
+});
+
+test("nothing worth preserving reads back as null", () => {
+  assert.equal(readStoredNotes(null), null, "missing value");
+  assert.equal(readStoredNotes(""), null, "empty value");
+  assert.equal(readStoredNotes("[]"), null, "empty collection");
+  assert.equal(readStoredNotes("{\"id\":\"note-1\"}"), null, "not a collection");
+  assert.equal(readStoredNotes("{ truncated"), null, "unparsable value");
 });

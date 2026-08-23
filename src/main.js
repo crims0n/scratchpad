@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { persistNotesLocally } from "./storage.js";
-import { renderMarkdown, sanitizeMarkdownHtml } from "./markdown.js";
+import {
+  LOCAL_NOTES_BACKUP_KEY,
+  LOCAL_NOTES_KEY,
+  persistNotesLocally,
+  readStoredNotes
+} from "./storage.js";
+import { renderMarkdown, resolveLinkAction, sanitizeMarkdownHtml } from "./markdown.js";
 import { getNotePreview } from "./note-preview.js";
 
 // ----------------------------------------------------
@@ -1177,6 +1182,10 @@ function attachEventListeners() {
   modeSplitBtn.addEventListener("click", () => setLayoutMode("split"));
   modePreviewBtn.addEventListener("click", () => setLayoutMode("preview"));
 
+  // Markdown preview links
+  markdownPreview.addEventListener("click", handlePreviewLinkClick);
+  secondaryMarkdownPreview.addEventListener("click", handlePreviewLinkClick);
+
   // Focus toggle
   focusBtn.addEventListener("click", toggleFocusMode);
 
@@ -1422,6 +1431,39 @@ function attachEventListeners() {
 // ----------------------------------------------------
 // Utilities
 // ----------------------------------------------------
+// Sanitized Markdown links carry target="_blank", but the desktop webview has
+// no default handling for it, so clicking one would otherwise do nothing. Send
+// external links to the user's browser and keep in-document anchors inside the
+// preview.
+function handlePreviewLinkClick(event) {
+  const link = event.target.closest("a[href]");
+  if (!link) return;
+
+  event.preventDefault();
+  const action = resolveLinkAction(link.getAttribute("href"));
+
+  if (action.kind === "anchor") {
+    const container = link.closest(".markdown-preview");
+    const anchor = container
+      ? [...container.querySelectorAll("[id]")].find(element => element.id === action.target)
+      : null;
+    if (anchor) anchor.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
+  if (action.kind !== "external") return;
+
+  if (!window.__TAURI__) {
+    window.open(action.url, "_blank", "noopener,noreferrer");
+    return;
+  }
+
+  invoke("plugin:opener|open_url", { url: action.url }).catch(error => {
+    console.error("Failed to open a link in the browser", error);
+    showNotification("Could not open that link");
+  });
+}
+
 function escapeHTML(str) {
   return str.replace(/[&<>'"]/g, 
     tag => ({
@@ -1436,7 +1478,7 @@ function escapeHTML(str) {
 
 // Database helpers
 function loadNotesFromLocalStorage() {
-  const savedNotes = localStorage.getItem("scratchpad_notes");
+  const savedNotes = localStorage.getItem(LOCAL_NOTES_KEY);
   if (savedNotes) {
     try {
       notes = JSON.parse(savedNotes);
@@ -1445,6 +1487,52 @@ function loadNotesFromLocalStorage() {
       notes = [];
     }
   }
+}
+
+// Every save mirrors the active collection into local storage, so connecting a
+// workspace would otherwise overwrite the local-only notes with the workspace's
+// contents and leave nothing to come back to. Set them aside first. An existing
+// stash is kept as-is so the original local notes survive switching between
+// workspaces.
+function stashLocalNotes(localNotes) {
+  try {
+    if (localStorage.getItem(LOCAL_NOTES_BACKUP_KEY)) return true;
+    localStorage.setItem(LOCAL_NOTES_BACKUP_KEY, JSON.stringify(localNotes));
+    return true;
+  } catch (error) {
+    console.error("Failed to preserve local notes before connecting a workspace", error);
+    return false;
+  }
+}
+
+// Hands the stashed local-only collection back after a disconnect. Returns
+// false when there is nothing stashed, leaving the caller on the local mirror.
+function restoreStashedLocalNotes() {
+  let stashed = null;
+  try {
+    stashed = readStoredNotes(localStorage.getItem(LOCAL_NOTES_BACKUP_KEY));
+  } catch (error) {
+    console.error("Failed to read the preserved local notes", error);
+    return false;
+  }
+  if (!stashed) return false;
+
+  notes = stashed;
+
+  // Only drop the stash once the mirror has actually been rewritten, so a
+  // failed write cannot lose the notes it was holding.
+  const mirrored = persistNotesLocally(localStorage, notes);
+  if (mirrored.ok) {
+    try {
+      localStorage.removeItem(LOCAL_NOTES_BACKUP_KEY);
+    } catch (error) {
+      console.error("Failed to clear the preserved local notes", error);
+    }
+  } else {
+    console.error("Failed to restore the local notes mirror", mirrored.error);
+  }
+
+  return true;
 }
 
 function updateDbUiState(isConnected) {
@@ -1479,25 +1567,29 @@ async function connectDatabase() {
   }
   if (!path) return;
 
+  // Read the local-only notes before anything can overwrite the mirror.
+  const localNotesBeforeConnect = readStoredNotes(localStorage.getItem(LOCAL_NOTES_KEY));
+
   activeDbPath = path;
 
   try {
     notes = await invoke("load_db_notes", { dbPath: path });
 
     // If the database is completely empty, seed it with current LocalStorage notes.
+    let localNotesStashed = false;
     if (notes.length === 0) {
-      const savedNotes = localStorage.getItem("scratchpad_notes");
-      if (savedNotes) {
+      if (localNotesBeforeConnect) {
         try {
-          const fallbackNotes = JSON.parse(savedNotes);
-          if (Array.isArray(fallbackNotes) && fallbackNotes.length > 0) {
-            notes = fallbackNotes;
-            await invoke("save_notes_db", { dbPath: path, notes });
-          }
+          notes = localNotesBeforeConnect;
+          await invoke("save_notes_db", { dbPath: path, notes });
         } catch (err) {
           console.error("Failed to seed notes to SQLite DB", err);
         }
       }
+    } else if (localNotesBeforeConnect) {
+      // The workspace replaces the local collection rather than merging with
+      // it, so keep the local notes recoverable through a disconnect.
+      localNotesStashed = stashLocalNotes(localNotesBeforeConnect);
     }
 
     let preferenceSaved = true;
@@ -1518,9 +1610,13 @@ async function connectDatabase() {
       loadActiveNote();
     }
 
-    showNotification(preferenceSaved
-      ? "Workspace connected!"
-      : "Workspace connected, but could not be remembered");
+    if (!preferenceSaved) {
+      showNotification("Workspace connected, but could not be remembered");
+    } else if (localNotesStashed) {
+      showNotification("Workspace connected; local notes kept for disconnect");
+    } else {
+      showNotification("Workspace connected!");
+    }
   } catch (err) {
     console.error("Failed to read SQLite database", err);
     activeDbPath = null;
@@ -1542,9 +1638,14 @@ async function connectDatabase() {
 async function disconnectDatabase() {
   activeDbPath = null;
   localStorage.removeItem("scratchpad_active_db");
-  
-  loadNotesFromLocalStorage();
-  
+
+  // Prefer the local-only notes set aside when the workspace was connected;
+  // the mirror holds a copy of the workspace by now.
+  const restoredLocalNotes = restoreStashedLocalNotes();
+  if (!restoredLocalNotes) {
+    loadNotesFromLocalStorage();
+  }
+
   if (notes.length === 0) {
     createNote();
   } else {
@@ -1558,7 +1659,9 @@ async function disconnectDatabase() {
     if (window.__TAURI__) {
       await invoke("set_last_workspace", { dbPath: null });
     }
-    showNotification("Workspace disconnected; using local notes");
+    showNotification(restoredLocalNotes
+      ? "Workspace disconnected; local notes restored"
+      : "Workspace disconnected; using local notes");
   } catch (err) {
     console.error("Failed to forget workspace", err);
     showNotification("Disconnected, but the workspace preference could not be cleared");

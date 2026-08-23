@@ -36,6 +36,26 @@ export function isSafeMarkdownUrl(value, isImage = false) {
     compact.startsWith("mailto:");
 }
 
+// Decides what clicking a link in the rendered preview should do. Kept apart
+// from the DOM so the policy that hands URLs to the operating system can be
+// tested on its own.
+export function resolveLinkAction(href) {
+  if (typeof href !== "string") return { kind: "ignore" };
+
+  const value = href.trim();
+  if (!value) return { kind: "ignore" };
+  if (value.startsWith("#")) return { kind: "anchor", target: value.slice(1) };
+
+  // Compare on the same stripped form the URL policy uses, so a scheme split
+  // by control characters cannot slip past this check.
+  const compact = value.replace(/[\u0000-\u0020\u007f]+/g, "");
+  if (/^(https?|mailto):/i.test(compact) && isSafeMarkdownUrl(value)) {
+    return { kind: "external", url: value };
+  }
+
+  return { kind: "ignore" };
+}
+
 export function sanitizeMarkdownHtml(html) {
   const template = document.createElement("template");
   template.innerHTML = html;

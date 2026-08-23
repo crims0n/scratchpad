@@ -7,6 +7,7 @@ import { marked } from "marked";
 import {
   isSafeMarkdownUrl,
   renderMarkdown,
+  resolveLinkAction,
   sanitizeMarkdownHtml
 } from "../src/markdown.js";
 
@@ -49,6 +50,43 @@ test("rendered Markdown passes through the sanitizer", () => {
 
   assert.doesNotMatch(html, /javascript:/i);
   assert.doesNotMatch(html, /script/i);
+});
+
+test("preview links route external schemes to the browser", () => {
+  assert.deepEqual(resolveLinkAction("https://example.com"), {
+    kind: "external",
+    url: "https://example.com"
+  });
+  assert.deepEqual(resolveLinkAction("http://example.com"), {
+    kind: "external",
+    url: "http://example.com"
+  });
+  assert.deepEqual(resolveLinkAction("mailto:someone@example.com"), {
+    kind: "external",
+    url: "mailto:someone@example.com"
+  });
+});
+
+test("preview links keep in-document anchors inside the preview", () => {
+  assert.deepEqual(resolveLinkAction("#a-heading"), { kind: "anchor", target: "a-heading" });
+});
+
+test("preview links never hand an unsupported scheme to the system", () => {
+  const ignored = [
+    "javascript:alert(1)",
+    "java\nscript:alert(1)",
+    "file:///etc/passwd",
+    "data:text/html,<script>alert(1)</script>",
+    "tel:+15550100",
+    "",
+    "   ",
+    null,
+    undefined
+  ];
+
+  ignored.forEach((href) => {
+    assert.equal(resolveLinkAction(href).kind, "ignore", `expected ${href} to be ignored`);
+  });
 });
 
 test("URL policy rejects obfuscated active schemes", () => {

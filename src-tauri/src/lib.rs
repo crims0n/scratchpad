@@ -344,6 +344,10 @@ fn show_alert_dialog(title: String, message: String) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Markdown links have no default handling in the webview; the opener
+        // plugin sends them to the user's browser instead. Its capability scope
+        // limits it to the same schemes the Markdown sanitizer allows.
+        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             load_workspace_preference,
             set_last_workspace,

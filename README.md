@@ -37,9 +37,9 @@ Beta packages are not yet production-signed. macOS and Windows may show a securi
 
 By default, notes stay in the desktop webview's local storage. Scratchpad also supports optional portable workspace files for a durable collection of notes and their sidebar order. Workspace files use SQLite internally and may have a `.db` or `.sqlite` extension.
 
-Changes are mirrored locally and serialized to the connected workspace. Pending workspace changes are flushed before the desktop window closes; if that save fails, Scratchpad cancels the close and reports the error. Connecting an empty workspace seeds it with the notes already available in the app.
+Changes are mirrored locally and serialized to the connected workspace. Pending workspace changes are flushed before the desktop window closes; if that save fails, Scratchpad cancels the close and reports the error. Connecting an empty workspace seeds it with the notes already available in the app. Connecting a workspace that already has notes sets your local-only notes aside instead of overwriting them, and disconnecting restores them.
 
-Scratchpad has no analytics, advertising, accounts, or sync service. Markdown is parsed on-device, preview HTML is sanitized, and remote images are blocked so merely previewing a note does not contact an image host. Following an ordinary web link is still an explicit network action and may contact that destination.
+Scratchpad has no analytics, advertising, accounts, or sync service. Markdown is parsed on-device, preview HTML is sanitized, and remote images are blocked so merely previewing a note does not contact an image host. Links in the preview open in your default browser rather than inside the app; following one is an explicit network action and may contact that destination.
 
 Back up important workspace files like any other local document. Local-only notes remain tied to the app data stored by the operating system and may be lost if that data is cleared.
 
@@ -133,6 +133,7 @@ Production distribution will also require platform signing and, on macOS, notari
 | Desktop runtime | Tauri v2 and Rust |
 | Frontend | Vanilla HTML, CSS, and JavaScript |
 | Markdown | Bundled Marked parser with an allowlist sanitizer |
+| External links | `tauri-plugin-opener`, scoped to `http`, `https`, and `mailto` |
 | Local persistence | Desktop webview local storage |
 | Workspace persistence | Bundled SQLite through `rusqlite` |
 | Native preferences | JSON in the platform app configuration directory |
