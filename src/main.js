@@ -100,9 +100,9 @@ const PRESET_THEMES = [
     background: "#090d16",
     foreground: "#f3f4f6",
     sidebar: "#111625",
-    accent: "#3b82f6",
+    accent: "#a855f7",
     border: "#1e2640",
-    selection: "#1d283d"
+    selection: "#2d1f46"
   },
   {
     id: "default-light",
@@ -110,9 +110,9 @@ const PRESET_THEMES = [
     background: "#f8fafc",
     foreground: "#0f172a",
     sidebar: "#ffffff",
-    accent: "#3b82f6",
+    accent: "#a855f7",
     border: "#e2e8f0",
-    selection: "#eff6ff"
+    selection: "#f3e8ff"
   },
   {
     id: "dracula",
@@ -316,9 +316,8 @@ async function init() {
   // 1. Attach all event listeners immediately so all UI buttons and keyboard shortcuts are live
   attachEventListeners();
 
-  // 2. Load custom color schemes, dark/light theme & layout mode
+  // 2. Load the saved theme (Default Dark on first launch) and layout mode
   loadSavedThemes();
-  initTheme();
   const savedLayoutMode = localStorage.getItem("scratchpad_layout_mode");
   if (savedLayoutMode) {
     setLayoutMode(savedLayoutMode);
@@ -355,37 +354,28 @@ async function init() {
   if (notes.length === 0) {
     createNote("Welcome to Scratchpad!", `# Welcome to Scratchpad!
 
-This is a fast, offline-first markdown scratchpad.
+Scratchpad is a fast, local-first place for notes, snippets, and Markdown. Everything is saved automatically as you write.
 
-## Features
-- **Auto-save**: Every stroke is stored instantly.
-- **Markdown Preview**: Click **Split** or **Preview** above to toggle the live rendering.
-- **Multiple Notes**: Manage your ideas in the sidebar.
-- **Focus Mode**: Press \`Cmd+Shift+F\` or click the focus button for distraction-free writing.
+## Start writing
+- Create a scratchpad with \`Cmd/Ctrl+N\` and find your notes from the sidebar.
+- Switch between **Edit**, **Split**, and **Preview** to work with rendered Markdown.
+- Open a second note beside this one with \`Cmd/Ctrl+\\\`.
+- Enter Focus Mode with \`Cmd/Ctrl+Shift+F\` when you want fewer distractions.
 
-## Basic Markdown Guide
-Here is a quick cheat sheet:
+## Find and organize
+- Search every scratchpad from the sidebar.
+- Use \`Cmd/Ctrl+F\` to find text or \`Cmd/Ctrl+H\` to find and replace.
+- Drag notes to reorder them, or use \`Alt+Up\` and \`Alt+Down\`.
 
-### Text formatting
-You can make text **bold** using double asterisks or *italic* using single asterisks. 
+## Make it yours
+- Choose a built-in theme from the bottom of the sidebar, or import your own.
+- Use the actions menu to import files, export Markdown, or copy rendered HTML.
+- Connect a workspace file when you want a portable collection that Scratchpad reopens automatically.
 
-### Blockquotes
-> Focus is a matter of deciding what things you're not going to do.
-> — *Steve Jobs*
+## Need a reference?
+Press \`Cmd/Ctrl+/\` (or \`F1\`) to open keyboard shortcuts and the Markdown cheatsheet. Use \`Tab\` and \`Shift+Tab\` to switch between them.
 
-### Code blocks
-Inline \`code\` is simple, and block code uses triple backticks:
-\`\`\`javascript
-function greet() {
-  console.log("Hello, scratchpad!");
-}
-\`\`\`
-
-### Lists
-1. First item
-2. Second item
-   - Sub item A
-   - Sub item B
+Happy writing.
 `);
   } else {
     // Select first note by default
@@ -398,28 +388,8 @@ function greet() {
 }
 
 // ----------------------------------------------------
-// Theme Handling (respecting modern-web-guidance)
+// Theme Handling
 // ----------------------------------------------------
-function initTheme() {
-  const savedTheme = localStorage.getItem("color-scheme");
-  const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)");
-
-  if (savedTheme) {
-    setTheme(savedTheme);
-  } else {
-    // Default to system preference
-    const currentSystemTheme = systemPrefersDark.matches ? "dark" : "light";
-    setTheme(currentSystemTheme, false); // don't pin it in localStorage yet
-  }
-
-  // React to OS system-level theme shifts
-  systemPrefersDark.addEventListener("change", (e) => {
-    if (!localStorage.getItem("color-scheme")) {
-      setTheme(e.matches ? "dark" : "light", false);
-    }
-  });
-}
-
 function setTheme(theme, pin = true) {
   const isDark = theme === "dark";
   
@@ -2253,11 +2223,16 @@ function loadSavedThemes() {
 
   const storedThemeId = localStorage.getItem("scratchpad_active_theme");
   const savedThemeId = LEGACY_THEME_IDS[storedThemeId] || storedThemeId;
-  if (savedThemeId) {
+  const themeExists = [...PRESET_THEMES, ...customThemes]
+    .some((theme) => theme.id === savedThemeId);
+
+  if (savedThemeId && themeExists) {
     if (savedThemeId !== storedThemeId) {
       localStorage.setItem("scratchpad_active_theme", savedThemeId);
     }
     applyTheme(savedThemeId);
+  } else {
+    applyTheme("default-dark");
   }
 }
 

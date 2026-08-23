@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="images/logo.png" alt="Scratchpad logo" width="160">
+</p>
+
 # Scratchpad
 
 Scratchpad is a fast, local-first desktop editor for notes, snippets, and Markdown. It is built with Tauri v2 and a vanilla HTML, CSS, and JavaScript frontend, with no account or cloud service required.
