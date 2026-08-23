@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="images/logo.png" alt="Scratchpad logo" width="160">
-</p>
-
 # Scratchpad
 
 [![CI](https://github.com/crims0n/scratchpad/actions/workflows/ci.yml/badge.svg)](https://github.com/crims0n/scratchpad/actions/workflows/ci.yml)
