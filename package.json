@@ -27,7 +27,7 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
-    "jsdom": "26.1.0"
+    "jsdom": "30.0.1"
   },
   "dependencies": {
     "marked": "18.0.10"
