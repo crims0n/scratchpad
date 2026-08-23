@@ -67,8 +67,10 @@ test("preview links route external schemes to the browser", () => {
   });
 });
 
-test("preview links keep in-document anchors inside the preview", () => {
-  assert.deepEqual(resolveLinkAction("#a-heading"), { kind: "anchor", target: "a-heading" });
+test("preview links leave in-document anchors alone", () => {
+  // Nothing generates heading ids and the sanitizer strips them, so an anchor
+  // has no target. What matters is that it is never treated as external.
+  assert.deepEqual(resolveLinkAction("#a-heading"), { kind: "ignore" });
 });
 
 test("preview links never hand an unsupported scheme to the system", () => {

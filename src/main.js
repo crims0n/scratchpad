@@ -378,11 +378,19 @@ async function init() {
       updateDbUiState(true);
     } catch (err) {
       console.error("Failed to load notes from SQLite DB on boot", err);
-      showNotification("Workspace error: using local notes");
       activeDbPath = null;
+      // Disconnect is the only other way back to the set-aside notes, and its
+      // button is hidden while no workspace is active.
+      const restored = restoreStashedLocalNotes();
       updateDbUiState(false);
+      showNotification(restored
+        ? "Workspace unavailable; local notes restored"
+        : "Workspace error: using local notes");
     }
   } else {
+    // Reached whenever start-up ends without a workspace, including after a
+    // failed preference write left notes set aside with nothing to restore them.
+    restoreStashedLocalNotes();
     updateDbUiState(false);
   }
 
@@ -1433,24 +1441,13 @@ function attachEventListeners() {
 // ----------------------------------------------------
 // Sanitized Markdown links carry target="_blank", but the desktop webview has
 // no default handling for it, so clicking one would otherwise do nothing. Send
-// external links to the user's browser and keep in-document anchors inside the
-// preview.
+// external links to the user's browser; everything else stays put.
 function handlePreviewLinkClick(event) {
   const link = event.target.closest("a[href]");
   if (!link) return;
 
   event.preventDefault();
   const action = resolveLinkAction(link.getAttribute("href"));
-
-  if (action.kind === "anchor") {
-    const container = link.closest(".markdown-preview");
-    const anchor = container
-      ? [...container.querySelectorAll("[id]")].find(element => element.id === action.target)
-      : null;
-    if (anchor) anchor.scrollIntoView({ behavior: "smooth", block: "start" });
-    return;
-  }
-
   if (action.kind !== "external") return;
 
   if (!window.__TAURI__) {
@@ -1491,14 +1488,18 @@ function loadNotesFromLocalStorage() {
 
 // Every save mirrors the active collection into local storage, so connecting a
 // workspace would otherwise overwrite the local-only notes with the workspace's
-// contents and leave nothing to come back to. Set them aside first. An existing
-// stash is kept as-is so the original local notes survive switching between
-// workspaces.
-function stashLocalNotes(localNotes) {
+// contents and leave nothing to come back to. Set them aside first.
+//
+// Reports success only when the notes are genuinely recoverable: either a
+// readable stash is already held — kept as-is so the original local notes
+// survive switching between workspaces — or this one was written and read back.
+// A stash that cannot be parsed is worth no more than none at all.
+function ensureLocalNotesStashed(localNotes) {
   try {
-    if (localStorage.getItem(LOCAL_NOTES_BACKUP_KEY)) return true;
+    if (readStoredNotes(localStorage.getItem(LOCAL_NOTES_BACKUP_KEY))) return true;
+
     localStorage.setItem(LOCAL_NOTES_BACKUP_KEY, JSON.stringify(localNotes));
-    return true;
+    return Boolean(readStoredNotes(localStorage.getItem(LOCAL_NOTES_BACKUP_KEY)));
   } catch (error) {
     console.error("Failed to preserve local notes before connecting a workspace", error);
     return false;
@@ -1570,68 +1571,76 @@ async function connectDatabase() {
   // Read the local-only notes before anything can overwrite the mirror.
   const localNotesBeforeConnect = readStoredNotes(localStorage.getItem(LOCAL_NOTES_KEY));
 
-  activeDbPath = path;
-
+  // Load into a local until the switch is known to be safe, so a failure here
+  // leaves the active collection untouched.
+  let workspaceNotes;
   try {
-    notes = await invoke("load_db_notes", { dbPath: path });
-
-    // If the database is completely empty, seed it with current LocalStorage notes.
-    let localNotesStashed = false;
-    if (notes.length === 0) {
-      if (localNotesBeforeConnect) {
-        try {
-          notes = localNotesBeforeConnect;
-          await invoke("save_notes_db", { dbPath: path, notes });
-        } catch (err) {
-          console.error("Failed to seed notes to SQLite DB", err);
-        }
-      }
-    } else if (localNotesBeforeConnect) {
-      // The workspace replaces the local collection rather than merging with
-      // it, so keep the local notes recoverable through a disconnect.
-      localNotesStashed = stashLocalNotes(localNotesBeforeConnect);
-    }
-
-    let preferenceSaved = true;
-    try {
-      await invoke("set_last_workspace", { dbPath: path });
-      localStorage.removeItem("scratchpad_active_db");
-    } catch (err) {
-      preferenceSaved = false;
-      console.error("Failed to remember workspace", err);
-    }
-
-    updateDbUiState(true);
-    if (notes.length === 0) {
-      createNote();
-    } else {
-      activeNoteId = notes[0].id;
-      renderNoteList();
-      loadActiveNote();
-    }
-
-    if (!preferenceSaved) {
-      showNotification("Workspace connected, but could not be remembered");
-    } else if (localNotesStashed) {
-      showNotification("Workspace connected; local notes kept for disconnect");
-    } else {
-      showNotification("Workspace connected!");
-    }
+    workspaceNotes = await invoke("load_db_notes", { dbPath: path });
   } catch (err) {
     console.error("Failed to read SQLite database", err);
-    activeDbPath = null;
-    loadNotesFromLocalStorage();
-
-    if (notes.length === 0) {
-      createNote();
-    } else {
-      activeNoteId = notes[0].id;
-      renderNoteList();
-      loadActiveNote();
-    }
-
-    updateDbUiState(false);
     showNotification("Could not open workspace; using local notes");
+    return;
+  }
+
+  // Seeding deletes and rewrites the workspace's rows, so an unreadable
+  // response must not be mistaken for an empty workspace.
+  if (!Array.isArray(workspaceNotes)) {
+    console.error("Workspace returned an unexpected response", workspaceNotes);
+    showNotification("Could not open workspace; using local notes");
+    return;
+  }
+
+  // A populated workspace replaces the local collection rather than merging
+  // with it. Refuse to switch until those notes are recoverable, otherwise the
+  // next mirror write destroys them.
+  let localNotesStashed = false;
+  if (workspaceNotes.length > 0 && localNotesBeforeConnect) {
+    localNotesStashed = ensureLocalNotesStashed(localNotesBeforeConnect);
+    if (!localNotesStashed) {
+      showNotification("Could not preserve local notes; workspace not connected");
+      return;
+    }
+  }
+
+  activeDbPath = path;
+
+  if (workspaceNotes.length > 0) {
+    notes = workspaceNotes;
+  } else if (localNotesBeforeConnect) {
+    // Seed an empty workspace with the notes already in the app. Both
+    // collections match afterwards, so there is nothing to set aside.
+    notes = localNotesBeforeConnect;
+    try {
+      await invoke("save_notes_db", { dbPath: path, notes });
+    } catch (err) {
+      console.error("Failed to seed notes to SQLite DB", err);
+    }
+  }
+
+  let preferenceSaved = true;
+  try {
+    await invoke("set_last_workspace", { dbPath: path });
+    localStorage.removeItem("scratchpad_active_db");
+  } catch (err) {
+    preferenceSaved = false;
+    console.error("Failed to remember workspace", err);
+  }
+
+  updateDbUiState(true);
+  if (notes.length === 0) {
+    createNote();
+  } else {
+    activeNoteId = notes[0].id;
+    renderNoteList();
+    loadActiveNote();
+  }
+
+  if (!preferenceSaved) {
+    showNotification("Workspace connected, but could not be remembered");
+  } else if (localNotesStashed) {
+    showNotification("Workspace connected; local notes kept for disconnect");
+  } else {
+    showNotification("Workspace connected!");
   }
 }
 

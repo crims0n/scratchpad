@@ -44,7 +44,12 @@ export function resolveLinkAction(href) {
 
   const value = href.trim();
   if (!value) return { kind: "ignore" };
-  if (value.startsWith("#")) return { kind: "anchor", target: value.slice(1) };
+
+  // In-document anchors are inert: no heading ids are generated and the
+  // sanitizer strips id attributes, so there is nothing to jump to. They are
+  // still called out here so they are never mistaken for something to hand to
+  // the operating system.
+  if (value.startsWith("#")) return { kind: "ignore" };
 
   // Compare on the same stripped form the URL policy uses, so a scheme split
   // by control characters cannot slip past this check.
