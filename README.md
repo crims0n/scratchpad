@@ -10,6 +10,10 @@
 
 Scratchpad is a lightweight, open-source, local-first desktop editor for notes, snippets, and Markdown. It runs on macOS, Windows, and Linux with no account, cloud service, or telemetry.
 
+<p align="center">
+  <img src="images/preview.png" alt="Scratchpad application preview" width="900">
+</p>
+
 ## Install
 
 Scratchpad is in beta. Download the newest prerelease from [GitHub Releases](https://github.com/crims0n/scratchpad/releases):
@@ -19,10 +23,6 @@ Scratchpad is in beta. Download the newest prerelease from [GitHub Releases](htt
 - **Linux:** install the `.deb`, or make the `.AppImage` executable and run it.
 
 Beta packages are not yet production-signed. macOS and Windows may show a security warning, so only install artifacts downloaded from this repository. Back up important workspace files before testing.
-
-<p align="center">
-  <img src="images/preview.png" alt="Scratchpad application preview" width="900">
-</p>
 
 ## Features
 
