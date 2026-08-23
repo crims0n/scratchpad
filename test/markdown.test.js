@@ -22,6 +22,12 @@ test("sanitizer removes active content and event handlers", () => {
   assert.equal(html, "<p>safe</p>");
 });
 
+test("sanitizer does not trust highlight markup from note content", () => {
+  const html = sanitizeMarkdownHtml('<mark class="find-preview-match" data-find-index="0">safe</mark>');
+
+  assert.equal(html, "safe");
+});
+
 test("sanitizer restricts links and isolates safe external links", () => {
   const unsafe = sanitizeMarkdownHtml('<a href="javascript:alert(1)">bad</a>');
   const safe = sanitizeMarkdownHtml('<a href="https://example.com">good</a>');

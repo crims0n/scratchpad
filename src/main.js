@@ -8,6 +8,8 @@ import {
 } from "./storage.js";
 import { renderMarkdown, resolveLinkAction, sanitizeMarkdownHtml } from "./markdown.js";
 import { getNotePreview } from "./note-preview.js";
+import { findTextMatches } from "./find.js";
+import { getCursorPosition } from "./editor-position.js";
 
 // ----------------------------------------------------
 // Scratchpad - Core Application Logic
@@ -24,9 +26,12 @@ const newNoteBtn = document.getElementById("new-note-btn");
 const searchInput = document.getElementById("search-input");
 const noteList = document.getElementById("note-list");
 const noteTitleInput = document.getElementById("note-title");
+const editorWrapper = document.getElementById("editor-wrapper");
 const editorTextarea = document.getElementById("editor-textarea");
+const previewWrapper = document.getElementById("preview-wrapper");
 const markdownPreview = document.getElementById("markdown-preview");
 const wordCharCount = document.getElementById("word-char-count");
+const cursorPosition = document.getElementById("cursor-position");
 const selectionCount = document.getElementById("selection-count");
 const saveStatus = document.getElementById("save-status");
 const themeToggleBtn = document.getElementById("theme-toggle");
@@ -69,6 +74,11 @@ const findNextBtn = document.getElementById("find-next");
 const findCloseBtn = document.getElementById("find-close");
 const findToggleReplaceBtn = document.getElementById("find-toggle-replace");
 const findRegexToggleBtn = document.getElementById("find-regex-toggle");
+const findResultsToggleBtn = document.getElementById("find-results-toggle");
+const findResultsPane = document.getElementById("find-results-pane");
+const findResultsCloseBtn = document.getElementById("find-results-close");
+const findResultsSummary = document.getElementById("find-results-summary");
+const findResultsList = document.getElementById("find-results-list");
 const replaceRow = document.getElementById("replace-row");
 const replaceInput = document.getElementById("replace-input");
 const replaceOneBtn = document.getElementById("replace-one-btn");
@@ -302,12 +312,16 @@ let activeThemeId = "default-dark";
 let findMatches = [];
 let activeMatchIndex = -1;
 let isFindBarOpen = false;
+let isFindResultsOpen = false;
+let hasInvalidFindPattern = false;
 let contextMenuTarget = null;
 let contextMenuNoteId = null;
 let isRegexMode = false;
 let isReplaceOpen = false;
 const noteSaveDebounceTimers = new Map();
 let previewDebounceTimer = null;
+let highlightRedrawTimer = null;
+let highlightResizeObserver = null;
 let dbSaveQueue = Promise.resolve();
 let isClosing = false;
 let localMirrorFailureNotified = false;
@@ -526,7 +540,11 @@ function loadActiveNote() {
   editorTextarea.scrollTop = 0;
   editorBackdrop.scrollTop = 0;
   markdownPreview.scrollTop = 0;
-  updateHighlights();
+  if (isFindBarOpen) {
+    runFind({ selectActive: false });
+  } else {
+    updateHighlights();
+  }
 }
 
 function renderNoteList(filter = "") {
@@ -880,7 +898,12 @@ function handleEditorInput() {
 
   activeNote.content = editorTextarea.value;
   activeNote.updatedAt = Date.now();
-  updateHighlights();
+  updateCursorPositionForText(editorTextarea);
+  if (isFindBarOpen) {
+    runFind({ preserveActive: true, selectActive: false });
+  } else {
+    updateHighlights();
+  }
 
   // Auto-rename the title from the first line until the user edits it manually.
   if (!activeNote.isTitleLocked) {
@@ -952,6 +975,7 @@ function updateWordCharCount() {
   
   // Always update global count on the left
   wordCharCount.textContent = `${totalWords} word${totalWords !== 1 ? 's' : ''} • ${totalChars} character${totalChars !== 1 ? 's' : ''}`;
+  updateCursorPositionForText(editorTextarea);
 
   const start = editorTextarea.selectionStart;
   const end = editorTextarea.selectionEnd;
@@ -999,6 +1023,8 @@ function updateMarkdownPreview() {
       <strong>Notice:</strong> Markdown parser not loaded. Displaying as formatted text.
     </div>` + escapeHTML(rawText).replace(/\n/g, "<br>").replace(/  /g, "&nbsp;&nbsp;");
   }
+
+  updatePreviewHighlights();
 }
 
 // ----------------------------------------------------
@@ -1028,11 +1054,14 @@ function setLayoutMode(mode) {
   } else {
     modeEditBtn.classList.add("active");
   }
+
+  scheduleFindHighlightRedraw();
 }
 
 function toggleSidebar() {
   sidebar.classList.toggle("collapsed");
   toggleSidebarBtn.setAttribute("aria-expanded", String(!sidebar.classList.contains("collapsed")));
+  scheduleFindHighlightRedraw(250);
 }
 
 function toggleFocusMode() {
@@ -1047,6 +1076,7 @@ function toggleFocusMode() {
     sidebar.classList.remove("collapsed");
     toggleSidebarBtn.setAttribute("aria-expanded", "true");
   }
+  scheduleFindHighlightRedraw(250);
 }
 
 // ----------------------------------------------------
@@ -1189,6 +1219,15 @@ function attachEventListeners() {
   editorTextarea.addEventListener("keyup", updateWordCharCount);
   noteTitleInput.addEventListener("input", handleTitleInput);
 
+  window.addEventListener("resize", () => scheduleFindHighlightRedraw(80));
+  if (typeof window.ResizeObserver === "function") {
+    highlightResizeObserver = new window.ResizeObserver(() => {
+      scheduleFindHighlightRedraw(80);
+    });
+    highlightResizeObserver.observe(editorWrapper);
+    highlightResizeObserver.observe(previewWrapper);
+  }
+
   // Sidebar toggle
   toggleSidebarBtn.addEventListener("click", toggleSidebar);
 
@@ -1230,6 +1269,8 @@ function attachEventListeners() {
   });
   secondaryEditorTextarea.addEventListener("input", handleSecondaryEditorInput);
   secondaryEditorTextarea.addEventListener("select", () => updateWordCharCountForText(secondaryEditorTextarea));
+  secondaryEditorTextarea.addEventListener("mouseup", () => updateWordCharCountForText(secondaryEditorTextarea));
+  secondaryEditorTextarea.addEventListener("keyup", () => updateWordCharCountForText(secondaryEditorTextarea));
   secondaryEditorTextarea.addEventListener("focus", () => setActivePane("secondary"));
   editorTextarea.addEventListener("focus", () => setActivePane("primary"));
   secondaryNoteTitle.addEventListener("input", handleSecondaryTitleInput);
@@ -1315,6 +1356,13 @@ function attachEventListeners() {
   findPrevBtn.addEventListener("click", findPrev);
   findNextBtn.addEventListener("click", findNext);
   findCloseBtn.addEventListener("click", hideFindBar);
+  findResultsToggleBtn.addEventListener("click", () => toggleFindResults());
+  findResultsCloseBtn.addEventListener("click", () => {
+    toggleFindResults(false);
+    findInput.focus();
+  });
+  findResultsList.addEventListener("click", handleFindResultClick);
+  findResultsList.addEventListener("keydown", handleFindResultKeydown);
   findToggleReplaceBtn.addEventListener("click", () => toggleReplace());
   findRegexToggleBtn.addEventListener("click", toggleRegexMode);
   
@@ -1691,9 +1739,13 @@ function toggleFindBar(openReplace = false) {
 
 function hideFindBar() {
   isFindBarOpen = false;
+  clearTimeout(highlightRedrawTimer);
+  highlightRedrawTimer = null;
+  toggleFindResults(false);
   findBar.style.display = "none";
   findMatches = [];
   activeMatchIndex = -1;
+  hasInvalidFindPattern = false;
   findInput.value = "";
   replaceInput.value = "";
   toggleReplace(false);
@@ -1719,64 +1771,45 @@ function toggleRegexMode() {
   runFind();
 }
 
-function runFind() {
+function runFind({ preserveActive = false, selectActive = true } = {}) {
   const query = findInput.value;
-  findMatches = [];
-  activeMatchIndex = -1;
+  const previousActiveIndex = activeMatchIndex;
   findInput.classList.remove("invalid-regex");
-  
-  if (!query) {
-    updateFindCount();
+
+  const result = findTextMatches(editorTextarea.value, query, isRegexMode);
+  findMatches = result.matches;
+  hasInvalidFindPattern = result.invalidPattern;
+
+  if (hasInvalidFindPattern) {
+    activeMatchIndex = -1;
+    findInput.classList.add("invalid-regex");
+    updateFindCount("Invalid");
+    updateFindResultsToggle();
     updateHighlights();
+    renderFindResults();
     return;
   }
-  
-  const text = editorTextarea.value;
-  
-  if (isRegexMode) {
-    try {
-      const regex = new RegExp(query, "gi");
-      let match;
-      
-      while ((match = regex.exec(text)) !== null) {
-        if (match[0].length === 0) {
-          regex.lastIndex++;
-          continue;
-        }
-        findMatches.push({
-          start: match.index,
-          end: match.index + match[0].length,
-          text: match[0]
-        });
-      }
-    } catch (e) {
-      findInput.classList.add("invalid-regex");
-      updateFindCount("Invalid");
-      updateHighlights();
-      return;
-    }
-  } else {
-    const lowerText = text.toLowerCase();
-    const lowerQuery = query.toLowerCase();
-    let index = 0;
-    
-    while ((index = lowerText.indexOf(lowerQuery, index)) !== -1) {
-      findMatches.push({
-        start: index,
-        end: index + query.length,
-        text: text.substring(index, index + query.length)
-      });
-      index += query.length;
-    }
-  }
-  
+
   if (findMatches.length > 0) {
-    activeMatchIndex = 0;
-    selectMatch(0, false); // Do not steal focus from search input
+    activeMatchIndex = preserveActive && previousActiveIndex >= 0
+      ? Math.min(previousActiveIndex, findMatches.length - 1)
+      : 0;
+
+    if (selectActive) {
+      selectMatch(activeMatchIndex, false); // Do not steal focus from search input
+    } else {
+      updateFindCount();
+      updateHighlights();
+      renderFindResults();
+    }
   } else {
+    activeMatchIndex = -1;
     updateFindCount();
     updateHighlights();
+    renderFindResults();
   }
+
+  updateFindResultsToggle();
 }
 
 function selectMatch(index, focusEditor = false) {
@@ -1784,21 +1817,41 @@ function selectMatch(index, focusEditor = false) {
   activeMatchIndex = index;
   const match = findMatches[index];
   
-  if (focusEditor) {
+  const editorIsVisible = currentLayoutMode !== "preview" || isSplitNoteMode;
+  if (focusEditor && editorIsVisible) {
     editorTextarea.focus();
   }
   editorTextarea.setSelectionRange(match.start, match.end);
-  
-  // Custom scroll calculation to scroll selected match into view
-  const textBefore = editorTextarea.value.substring(0, match.start);
-  const lineCountBefore = textBefore.split("\n").length;
-  const lineHeight = parseFloat(window.getComputedStyle(editorTextarea).lineHeight) || 20;
-  
-  editorTextarea.scrollTop = (lineCountBefore - 3) * lineHeight;
-  editorBackdrop.scrollTop = editorTextarea.scrollTop; // sync scroll immediately
-  
+  updateCursorPositionForText(editorTextarea);
+
   updateFindCount();
   updateHighlights();
+  scrollActiveMatchIntoView(match);
+  renderFindResults();
+}
+
+function scrollActiveMatchIntoView(match) {
+  // The backdrop has the same typography, padding, wrapping, and width as the
+  // textarea, so its active mark gives us the real visual position. Counting
+  // newline characters is not enough when a long Markdown line wraps.
+  const activeHighlight = editorBackdrop.querySelector("mark.active-match");
+
+  if (activeHighlight) {
+    const viewportOffset = Math.min(editorTextarea.clientHeight * 0.3, 160);
+    editorTextarea.scrollTop = Math.max(0, activeHighlight.offsetTop - viewportOffset);
+  } else {
+    const textBefore = editorTextarea.value.slice(0, match.start);
+    const lineCountBefore = textBefore.split("\n").length;
+    const lineHeight = parseFloat(window.getComputedStyle(editorTextarea).lineHeight) || 20;
+    editorTextarea.scrollTop = Math.max(0, (lineCountBefore - 3) * lineHeight);
+  }
+
+  editorBackdrop.scrollTop = editorTextarea.scrollTop;
+
+  if (currentLayoutMode !== "edit" && !isSplitNoteMode) {
+    const previewHighlight = markdownPreview.querySelector("mark.active-match");
+    previewHighlight?.scrollIntoView?.({ block: "center", inline: "nearest" });
+  }
 }
 
 function findNext() {
@@ -1895,9 +1948,209 @@ function updateFindCount(customText) {
   }
 }
 
+function updateFindResultsToggle() {
+  findResultsToggleBtn.disabled = !findInput.value || hasInvalidFindPattern;
+}
+
+function toggleFindResults(forceState) {
+  const shouldOpen = typeof forceState === "boolean" ? forceState : !isFindResultsOpen;
+  if (shouldOpen && (!findInput.value || hasInvalidFindPattern)) return;
+
+  if (shouldOpen && isSplitNoteMode) {
+    const previousFocus = document.activeElement;
+    toggleSplitNoteMode(false);
+    previousFocus?.focus?.({ preventScroll: true });
+  }
+
+  isFindResultsOpen = shouldOpen;
+  panesContainer.classList.toggle("find-results-mode", shouldOpen);
+  findResultsPane.style.display = shouldOpen ? "flex" : "none";
+  findResultsToggleBtn.classList.toggle("active", shouldOpen);
+  findResultsToggleBtn.setAttribute("aria-expanded", String(shouldOpen));
+
+  if (shouldOpen) {
+    renderFindResults();
+  } else {
+    findResultsList.replaceChildren();
+  }
+
+  scheduleFindHighlightRedraw(220);
+}
+
+function renderFindResults() {
+  if (!isFindResultsOpen) return;
+
+  const matchLabel = findMatches.length === 1 ? "match" : "matches";
+  findResultsSummary.textContent = `${findMatches.length} ${matchLabel}`;
+  findResultsList.replaceChildren();
+
+  let emptyMessage = "";
+  if (!findInput.value) {
+    emptyMessage = "Enter a search term to see every match.";
+  } else if (hasInvalidFindPattern) {
+    emptyMessage = "Fix the regular expression to show results.";
+  } else if (findMatches.length === 0) {
+    emptyMessage = "No matches in this scratchpad.";
+  }
+
+  if (emptyMessage) {
+    const item = document.createElement("li");
+    item.className = "find-results-empty";
+    item.textContent = emptyMessage;
+    findResultsList.appendChild(item);
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  findMatches.forEach((match, index) => {
+    const item = document.createElement("li");
+    item.className = "find-result-item";
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "find-result-button";
+    button.dataset.matchIndex = String(index);
+    button.tabIndex = index === activeMatchIndex ? 0 : -1;
+    button.setAttribute(
+      "aria-label",
+      `Match ${index + 1} of ${findMatches.length}, line ${match.line}, column ${match.column}: ${match.snippet}`
+    );
+
+    if (index === activeMatchIndex) {
+      button.classList.add("active");
+      button.setAttribute("aria-current", "true");
+    }
+
+    const location = document.createElement("span");
+    location.className = "find-result-location";
+    location.textContent = `Line ${match.line}`;
+    location.title = `Line ${match.line}, column ${match.column}`;
+
+    const snippet = document.createElement("span");
+    snippet.className = "find-result-snippet";
+    snippet.textContent = match.snippet;
+    snippet.title = match.snippet;
+
+    button.append(location, snippet);
+    item.appendChild(button);
+    fragment.appendChild(item);
+  });
+
+  findResultsList.appendChild(fragment);
+  const activeResult = findResultsList.querySelector("[aria-current='true']");
+  activeResult?.scrollIntoView?.({ block: "nearest" });
+}
+
+function handleFindResultClick(event) {
+  const button = event.target.closest(".find-result-button");
+  if (!button) return;
+  selectMatch(Number(button.dataset.matchIndex), true);
+}
+
+function handleFindResultKeydown(event) {
+  const button = event.target.closest(".find-result-button");
+  if (!button || findMatches.length === 0) return;
+
+  const currentIndex = Number(button.dataset.matchIndex);
+  let targetIndex = currentIndex;
+
+  if (event.key === "ArrowDown") {
+    targetIndex = (currentIndex + 1) % findMatches.length;
+  } else if (event.key === "ArrowUp") {
+    targetIndex = (currentIndex - 1 + findMatches.length) % findMatches.length;
+  } else if (event.key === "Home") {
+    targetIndex = 0;
+  } else if (event.key === "End") {
+    targetIndex = findMatches.length - 1;
+  } else {
+    return;
+  }
+
+  event.preventDefault();
+  selectMatch(targetIndex, false);
+  findResultsList.querySelector(`[data-match-index="${targetIndex}"]`)?.focus();
+}
+
+function clearPreviewHighlights() {
+  markdownPreview.querySelectorAll("mark.find-preview-match").forEach((highlight) => {
+    highlight.replaceWith(document.createTextNode(highlight.textContent));
+  });
+  markdownPreview.normalize();
+}
+
+function updatePreviewHighlights() {
+  clearPreviewHighlights();
+
+  if (
+    currentLayoutMode === "edit" ||
+    isSplitNoteMode ||
+    !isFindBarOpen ||
+    !findInput.value ||
+    hasInvalidFindPattern ||
+    findMatches.length === 0
+  ) {
+    return;
+  }
+
+  const textNodes = [];
+  const walker = document.createTreeWalker(
+    markdownPreview,
+    window.NodeFilter.SHOW_TEXT
+  );
+  let node;
+  while ((node = walker.nextNode())) textNodes.push(node);
+
+  let previewMatchIndex = 0;
+  textNodes.forEach((textNode) => {
+    const nodeMatches = findTextMatches(textNode.nodeValue, findInput.value, isRegexMode).matches
+      .map((match) => ({ ...match, previewIndex: previewMatchIndex++ }));
+
+    for (let index = nodeMatches.length - 1; index >= 0; index -= 1) {
+      const match = nodeMatches[index];
+      textNode.splitText(match.end);
+      const matchedText = textNode.splitText(match.start);
+      const highlight = document.createElement("mark");
+
+      highlight.className = "find-preview-match";
+      highlight.dataset.findIndex = String(match.previewIndex);
+      highlight.textContent = matchedText.nodeValue;
+      if (match.previewIndex === activeMatchIndex) {
+        highlight.classList.add("active-match");
+      }
+
+      matchedText.replaceWith(highlight);
+    }
+  });
+}
+
+function scheduleFindHighlightRedraw(delay = 0) {
+  if (!isFindBarOpen) return;
+
+  clearTimeout(highlightRedrawTimer);
+  highlightRedrawTimer = setTimeout(() => {
+    highlightRedrawTimer = null;
+
+    const redraw = () => {
+      if (!isFindBarOpen) return;
+      updateHighlights();
+      if (activeMatchIndex >= 0 && activeMatchIndex < findMatches.length) {
+        scrollActiveMatchIntoView(findMatches[activeMatchIndex]);
+      }
+    };
+
+    if (typeof window.requestAnimationFrame === "function") {
+      window.requestAnimationFrame(redraw);
+    } else {
+      redraw();
+    }
+  }, delay);
+}
+
 function updateHighlights() {
   const text = editorTextarea.value;
   const query = findInput.value;
+
+  updatePreviewHighlights();
   
   if (!isFindBarOpen || !query || findMatches.length === 0) {
     editorBackdrop.innerHTML = escapeHTML(text) + "\n";
@@ -2073,7 +2326,12 @@ function handleContextFind() {
 // Dual-Note Split View Functions
 // ----------------------------------------------------
 function toggleSplitNoteMode(forceState) {
-  isSplitNoteMode = typeof forceState === "boolean" ? forceState : !isSplitNoteMode;
+  const shouldOpen = typeof forceState === "boolean" ? forceState : !isSplitNoteMode;
+  if (shouldOpen && isFindResultsOpen) {
+    toggleFindResults(false);
+  }
+
+  isSplitNoteMode = shouldOpen;
   splitNoteBtn.setAttribute("aria-pressed", String(isSplitNoteMode));
   
   if (isSplitNoteMode) {
@@ -2099,6 +2357,8 @@ function toggleSplitNoteMode(forceState) {
     activePane = "primary";
     editorTextarea.focus();
   }
+
+  scheduleFindHighlightRedraw(220);
 }
 
 function openNoteInSecondaryPane(noteId) {
@@ -2147,6 +2407,7 @@ function handleSecondaryEditorInput() {
 
   note.content = secondaryEditorTextarea.value;
   note.updatedAt = Date.now();
+  updateCursorPositionForText(secondaryEditorTextarea);
 
   // Auto-rename if not locked
   if (!note.isTitleLocked) {
@@ -2218,6 +2479,7 @@ function updateWordCharCountForText(el) {
   const totalChars = text.length;
   
   wordCharCount.textContent = `${totalWords} word${totalWords !== 1 ? 's' : ''} • ${totalChars} character${totalChars !== 1 ? 's' : ''}`;
+  updateCursorPositionForText(el);
 
   const start = el.selectionStart;
   const end = el.selectionEnd;
@@ -2232,6 +2494,18 @@ function updateWordCharCountForText(el) {
   } else {
     selectionCount.style.display = "none";
   }
+}
+
+function updateCursorPositionForText(el) {
+  const position = getCursorPosition(
+    el.value || "",
+    el.selectionStart ?? 0,
+    el.selectionEnd ?? el.selectionStart ?? 0,
+    el.selectionDirection || "none"
+  );
+
+  cursorPosition.textContent = `Ln ${position.line}, Col ${position.column}`;
+  cursorPosition.title = `Line ${position.line}, column ${position.column}`;
 }
 
 function moveNoteUp(noteId) {

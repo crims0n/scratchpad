@@ -136,6 +136,16 @@
                   <button class="find-option-btn" id="find-regex-toggle" title="Use Regular Expression (Alt+R)" aria-pressed="false">.*</button>
                 </div>
                 <span class="find-count" id="find-count">0 of 0</span>
+                <button class="find-btn" id="find-results-toggle" title="Show All Matches" aria-label="Show all matches" aria-controls="find-results-pane" aria-expanded="false" disabled>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="8" y1="6" x2="20" y2="6" />
+                    <line x1="8" y1="12" x2="20" y2="12" />
+                    <line x1="8" y1="18" x2="20" y2="18" />
+                    <circle cx="4" cy="6" r="1" fill="currentColor" stroke="none" />
+                    <circle cx="4" cy="12" r="1" fill="currentColor" stroke="none" />
+                    <circle cx="4" cy="18" r="1" fill="currentColor" stroke="none" />
+                  </svg>
+                </button>
                 <button class="find-btn" id="find-prev" title="Previous Match (Shift+Enter)" aria-label="Previous match">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="18 15 12 9 6 15" />
@@ -177,6 +187,23 @@
           </div>
         </div>
 
+        <!-- Find All Results -->
+        <aside class="find-results-pane" id="find-results-pane" role="region" aria-labelledby="find-results-title" style="display: none;">
+          <div class="find-results-header">
+            <div>
+              <h2 id="find-results-title">Find Results</h2>
+              <span id="find-results-summary" aria-live="polite">0 matches</span>
+            </div>
+            <button class="icon-btn find-results-close" id="find-results-close" title="Close Find Results" aria-label="Close find results">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+          <ol class="find-results-list" id="find-results-list"></ol>
+        </aside>
+
         <!-- Secondary Pane (Split Note View) -->
         <div class="pane-wrapper secondary-pane-wrapper" id="secondary-pane-wrapper" style="display: none;">
           <div class="secondary-pane-header">
@@ -217,6 +244,7 @@
       <footer class="statusbar">
         <div class="statusbar-left">
           <span id="word-char-count">0 words • 0 characters</span>
+          <span id="cursor-position" class="cursor-position-text">Ln 1, Col 1</span>
         </div>
         <div class="statusbar-right">
           <span id="selection-count" class="selection-count-text"></span>

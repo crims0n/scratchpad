@@ -686,6 +686,10 @@ body {
   border-left: 1px solid var(--border-color);
 }
 
+.panes-container.find-results-mode .primary-pane-wrapper {
+  flex: 1 1 auto;
+}
+
 /* Force disable markdown preview and dividers in Dual-Note Split Mode */
 .panes-container.dual-split-mode .preview-wrapper,
 .panes-container.dual-split-mode .editor-divider {
@@ -1007,6 +1011,17 @@ body {
   margin-bottom: 1em;
 }
 
+.markdown-preview mark.find-preview-match {
+  padding: 0 1px;
+  border-radius: 2px;
+  background-color: rgba(139, 92, 246, 0.3);
+  color: inherit;
+}
+
+.markdown-preview mark.find-preview-match.active-match {
+  background-color: rgba(234, 179, 8, 0.55);
+}
+
 /* ----------------------------------------------------
    App Layout Adjustments (Splits, Previews, Focus)
    ---------------------------------------------------- */
@@ -1073,6 +1088,14 @@ body {
 .statusbar-right {
   display: flex;
   align-items: center;
+}
+
+.cursor-position-text {
+  margin-left: 12px;
+  padding-left: 12px;
+  border-left: 1px solid var(--border-color);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .selection-count-text {
@@ -1227,6 +1250,21 @@ body {
   color: var(--text-primary);
 }
 
+.find-btn.active {
+  background-color: var(--accent-color);
+  color: #ffffff;
+}
+
+.find-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.find-btn:disabled:hover {
+  background: none;
+  color: var(--text-secondary);
+}
+
 .find-btn svg {
   width: 14px;
   height: 14px;
@@ -1261,6 +1299,140 @@ body {
 .find-action-btn:hover {
   background-color: var(--border-color);
   border-color: var(--text-secondary);
+}
+
+/* ----------------------------------------------------
+   Find All Results Pane
+   ---------------------------------------------------- */
+.find-results-pane {
+  flex: 0 0 clamp(280px, 32%, 380px);
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--sidebar-bg);
+  border-left: 1px solid var(--border-color);
+  color: var(--text-primary);
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.find-results-header {
+  min-height: 56px;
+  padding: 9px 12px 9px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--border-color);
+  box-sizing: border-box;
+}
+
+.find-results-header h2 {
+  margin: 0 0 2px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+#find-results-summary {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+}
+
+.find-results-close {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+}
+
+.find-results-close:hover {
+  background-color: #ef4444;
+  color: #ffffff;
+}
+
+.find-results-list {
+  flex: 1;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+}
+
+.find-result-item {
+  margin: 0;
+}
+
+.find-result-button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  overflow: hidden;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.find-result-button:hover {
+  background-color: var(--bg-note-hover);
+}
+
+.find-result-button:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: -2px;
+}
+
+.find-result-button.active {
+  background-color: var(--bg-note-active);
+  border-color: var(--accent-color);
+}
+
+.find-result-location {
+  flex: 0 0 64px;
+  color: var(--accent-color);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-align: right;
+}
+
+.find-result-snippet {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.find-results-empty {
+  margin: 0;
+  padding: 24px 16px;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .find-results-pane {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 90;
+    width: min(86%, 360px);
+    height: auto;
+    box-shadow: -8px 0 24px rgba(0, 0, 0, 0.22);
+  }
 }
 
 /* ----------------------------------------------------
@@ -1795,6 +1967,7 @@ kbd {
 :root[data-theme-style="windows-classic"] .custom-context-menu,
 :root[data-theme-style="windows-classic"] .help-modal,
 :root[data-theme-style="windows-classic"] .help-tab-btn,
+:root[data-theme-style="windows-classic"] .find-result-button,
 :root[data-theme-style="windows-classic"] .theme-card {
   border-radius: 0;
 }
@@ -1863,6 +2036,7 @@ kbd {
 :root[data-theme-style="mac-os-9"] .dropdown-content,
 :root[data-theme-style="mac-os-9"] .custom-context-menu,
 :root[data-theme-style="mac-os-9"] .help-modal,
+:root[data-theme-style="mac-os-9"] .find-result-button,
 :root[data-theme-style="mac-os-9"] .theme-card {
   border-radius: 4px;
 }

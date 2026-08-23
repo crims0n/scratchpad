@@ -1,7 +1,7 @@
 {
   "name": "scratchpad",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A lightweight, offline-first Markdown scratchpad for the desktop.",
   "license": "GPL-3.0-or-later",
   "author": "crims0n",
@@ -21,7 +21,7 @@
     "tauri": "tauri",
     "vendor:marked": "node scripts/vendor-marked.mjs",
     "check:versions": "node scripts/check-versions.mjs",
-    "check:js": "node --check src/main.js && node --check src/markdown.js && node --check src/note-preview.js && node --check src/storage.js",
+    "check:js": "node --check src/main.js && node --check src/editor-position.js && node --check src/find.js && node --check src/markdown.js && node --check src/note-preview.js && node --check src/storage.js",
     "test": "node --test",
     "check": "npm run check:versions && npm run check:js && npm test"
   },
