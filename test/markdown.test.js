@@ -51,6 +51,20 @@ test("checkboxes are always disabled", () => {
   assert.match(html, /disabled/);
 });
 
+test("task list items are marked so the preview can hide their bullet", () => {
+  const html = renderMarkdown("- [ ] todo\n- normal", "", marked);
+
+  assert.match(html, /<li class="task-list-item"><input[^>]+> todo<\/li>/);
+  assert.match(html, /<li>normal<\/li>/);
+});
+
+test("a parent bullet remains when only its nested child is a task", () => {
+  const html = renderMarkdown("- parent\n  - [ ] child", "", marked);
+
+  assert.match(html, /<li>parent<ul>/);
+  assert.match(html, /<li class="task-list-item"><input[^>]+> child<\/li>/);
+});
+
 test("rendered Markdown passes through the sanitizer", () => {
   const html = renderMarkdown('[unsafe](javascript:alert(1))\n\n<script>alert(2)</script>', "", marked);
 

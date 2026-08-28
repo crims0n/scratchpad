@@ -1069,6 +1069,10 @@ button.view-setting-value:hover {
   margin-bottom: 0.25em;
 }
 
+.markdown-preview li.task-list-item {
+  list-style: none;
+}
+
 .markdown-preview blockquote {
   border-left: 4px solid var(--preview-quote-border);
   background-color: var(--preview-quote-bg);

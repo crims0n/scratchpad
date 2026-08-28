@@ -132,6 +132,19 @@ export function sanitizeMarkdownHtml(html) {
     }
   });
 
+  template.content.querySelectorAll("li").forEach(listItem => {
+    const firstChild = listItem.firstElementChild;
+    const checkbox = firstChild?.matches('input[type="checkbox"]')
+      ? firstChild
+      : firstChild?.tagName === "P"
+        ? firstChild.firstElementChild
+        : null;
+
+    if (checkbox?.matches('input[type="checkbox"]')) {
+      listItem.classList.add("task-list-item");
+    }
+  });
+
   return template.innerHTML;
 }
 

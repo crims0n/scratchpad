@@ -1,18 +1,26 @@
-# Scratchpad Beta v0.5.0
+# Scratchpad Beta v0.5.1
 
 ## Highlights
 
-- Pin and unpin important notes so they stay at the top of the sidebar. Pinned state is saved in both local collections and portable SQLite workspaces.
-- Use `Tab` and `Shift+Tab` to indent or outdent text and multi-line selections in either editor pane.
-- Adjust editor zoom and line spacing from the reorganized hamburger menu without scaling the surrounding interface or Markdown preview.
-- Choose how much context sidebar note previews show, from 1 to 10 lines. New installations default to two lines.
-- Open Help & Reference directly from the bottom of the hamburger menu in addition to the existing toolbar button and keyboard shortcut.
+- Write lists faster with Markdown-aware continuation for bullets, numbered items, task lists, and nested lists. Ordered siblings renumber automatically when a new item is inserted.
+- Use `Tab` and `Shift+Tab` to nest or outdent list items and their children. Use `Alt+Up` and `Alt+Down` to move complete list branches.
+- Continue blockquotes and fenced code blocks naturally, including automatic closing fences and preserved code indentation.
+- Get lightweight pair editing for brackets, braces, quotes, and backticks, plus paired deletion and selection wrapping for Markdown emphasis and code.
+- Build Markdown tables from a header row, navigate cells with `Tab`, add rows with `Enter`, or paste a spreadsheet range as a table.
+- Paste a URL over selected text to create a Markdown link automatically.
+- See clean task lists in preview with checkboxes instead of a checkbox plus a redundant bullet.
+
+## Editing details
+
+- Autocomplete preserves existing bullet characters, indentation, and spacing styles.
+- Empty nested list items outdent one level; empty top-level items exit the list.
+- Smart Markdown behavior stays inactive inside fenced or inline code unless the behavior is code-specific.
+- Escaped Markdown characters remain literal, and custom edits use a single native undo transaction when supported by the system webview.
 
 ## Compatibility
 
-- Existing notes remain unpinned until you pin them.
-- Existing workspace databases are migrated automatically to store pinned state.
-- Editor and sidebar display preferences are stored locally and persist between launches.
+- Existing notes and workspaces require no migration.
+- The new editing behavior is available in both editor panes.
 
 ## Beta notice
 

@@ -11,6 +11,8 @@ import { getNotePreview } from "./note-preview.js";
 import { findTextMatches } from "./find.js";
 import { getCursorPosition } from "./editor-position.js";
 import { handleEditorTab } from "./editor-indent.js";
+import { handleMarkdownAutocomplete } from "./editor-autocomplete.js";
+import { handleEditorSmartKeydown, handleMarkdownPaste } from "./editor-smart.js";
 import {
   canMoveNote,
   insertNoteBelowPinned,
@@ -1359,6 +1361,9 @@ function attachEventListeners() {
   // Editor and Title inputs
   editorTextarea.addEventListener("input", handleEditorInput);
   editorTextarea.addEventListener("keydown", handleEditorTab);
+  editorTextarea.addEventListener("keydown", handleMarkdownAutocomplete);
+  editorTextarea.addEventListener("keydown", handleEditorSmartKeydown);
+  editorTextarea.addEventListener("paste", handleMarkdownPaste);
   editorTextarea.addEventListener("select", updateWordCharCount);
   editorTextarea.addEventListener("mouseup", updateWordCharCount);
   editorTextarea.addEventListener("keyup", updateWordCharCount);
@@ -1419,6 +1424,9 @@ function attachEventListeners() {
   });
   secondaryEditorTextarea.addEventListener("input", handleSecondaryEditorInput);
   secondaryEditorTextarea.addEventListener("keydown", handleEditorTab);
+  secondaryEditorTextarea.addEventListener("keydown", handleMarkdownAutocomplete);
+  secondaryEditorTextarea.addEventListener("keydown", handleEditorSmartKeydown);
+  secondaryEditorTextarea.addEventListener("paste", handleMarkdownPaste);
   secondaryEditorTextarea.addEventListener("select", () => updateWordCharCountForText(secondaryEditorTextarea));
   secondaryEditorTextarea.addEventListener("mouseup", () => updateWordCharCountForText(secondaryEditorTextarea));
   secondaryEditorTextarea.addEventListener("keyup", () => updateWordCharCountForText(secondaryEditorTextarea));
