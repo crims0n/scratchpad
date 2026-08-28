@@ -9,7 +9,7 @@
     "type": "git",
     "url": "git+https://github.com/crims0n/scratchpad.git"
   },
-  "homepage": "https://github.com/crims0n/scratchpad#readme",
+  "homepage": "https://crims0n.github.io/scratchpad/",
   "bugs": {
     "url": "https://github.com/crims0n/scratchpad/issues"
   },
@@ -21,7 +21,7 @@
     "tauri": "tauri",
     "vendor:marked": "node scripts/vendor-marked.mjs",
     "check:versions": "node scripts/check-versions.mjs",
-    "check:js": "node --check src/main.js && node --check src/editor-position.js && node --check src/find.js && node --check src/markdown.js && node --check src/note-preview.js && node --check src/storage.js",
+    "check:js": "node --check src/main.js && node --check src/editor-position.js && node --check src/find.js && node --check src/markdown.js && node --check src/note-preview.js && node --check src/storage.js && node --check site/app.js && node --check site/release-ui.js && node --check scripts/generate-release-manifest.mjs",
     "test": "node --test",
     "check": "npm run check:versions && npm run check:js && npm test"
   },

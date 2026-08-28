@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-23T22:03:45Z",
+  "repository": "crims0n/scratchpad",
+  "release": {
+    "tag": "scratchpad-beta-v0.4.0",
+    "name": "Scratchpad Beta v0.4.0",
+    "version": "0.4.0",
+    "prerelease": true,
+    "publishedAt": "2026-08-23T22:03:45Z",
+    "url": "https://github.com/crims0n/scratchpad/releases/tag/scratchpad-beta-v0.4.0",
+    "notes": "Scratchpad Beta v0.4.0 expands Find and improves editor highlighting in narrow windows.",
+    "assets": [
+      {
+        "name": "Scratchpad.Beta_0.4.0_universal.dmg",
+        "url": "https://github.com/crims0n/scratchpad/releases/download/scratchpad-beta-v0.4.0/Scratchpad.Beta_0.4.0_universal.dmg",
+        "size": 10972838,
+        "sha256": "2e8538997d6883fb0a5c82c2ef9be2c9f962dfc4f9939f762920fc9700d4f464",
+        "platform": "macos",
+        "format": "DMG",
+        "architecture": "Universal",
+        "primary": true,
+        "order": 0
+      },
+      {
+        "name": "Scratchpad.Beta_0.4.0_universal.app.tar.gz",
+        "url": "https://github.com/crims0n/scratchpad/releases/download/scratchpad-beta-v0.4.0/Scratchpad.Beta_0.4.0_universal.app.tar.gz",
+        "size": 9309544,
+        "sha256": "42dfb6432cedfb271837a69f4cc9f4f4df8dd8d3bbe887f0ec750143022b30f0",
+        "platform": "macos",
+        "format": "App archive",
+        "architecture": "Universal",
+        "primary": false,
+        "order": 1
+      },
+      {
+        "name": "Scratchpad.Beta_0.4.0_x64-setup.exe",
+        "url": "https://github.com/crims0n/scratchpad/releases/download/scratchpad-beta-v0.4.0/Scratchpad.Beta_0.4.0_x64-setup.exe",
+        "size": 2806637,
+        "sha256": "36a5ca188c20380d98c7fa4232dee7fb58a9dabd9727d58e9a6062d885c575db",
+        "platform": "windows",
+        "format": "EXE installer",
+        "architecture": "x64",
+        "primary": true,
+        "order": 0
+      },
+      {
+        "name": "Scratchpad.Beta_0.4.0_x64_en-US.msi",
+        "url": "https://github.com/crims0n/scratchpad/releases/download/scratchpad-beta-v0.4.0/Scratchpad.Beta_0.4.0_x64_en-US.msi",
+        "size": 4046848,
+        "sha256": "3b89e840e9db0bdad2d82b906e9b8f79ec5782c4b5c1af5125cce7c3eb06b04f",
+        "platform": "windows",
+        "format": "MSI installer",
+        "architecture": "x64",
+        "primary": false,
+        "order": 1
+      },
+      {
+        "name": "Scratchpad.Beta_0.4.0_amd64.AppImage",
+        "url": "https://github.com/crims0n/scratchpad/releases/download/scratchpad-beta-v0.4.0/Scratchpad.Beta_0.4.0_amd64.AppImage",
+        "size": 82782712,
+        "sha256": "418582ec074694e639f3e71f719258f6ee1615378af337f2ffeb50d8990bcaa7",
+        "platform": "linux",
+        "format": "AppImage",
+        "architecture": "x64",
+        "primary": true,
+        "order": 0
+      },
+      {
+        "name": "Scratchpad.Beta_0.4.0_amd64.deb",
+        "url": "https://github.com/crims0n/scratchpad/releases/download/scratchpad-beta-v0.4.0/Scratchpad.Beta_0.4.0_amd64.deb",
+        "size": 5427560,
+        "sha256": "485682165836f1597c5b0c3db5b11efeafb23720083ec50292d110904cec9977",
+        "platform": "linux",
+        "format": "Debian package",
+        "architecture": "x64",
+        "primary": false,
+        "order": 1
+      }
+    ]
+  }
+}

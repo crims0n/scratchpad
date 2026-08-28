@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Scratchpad is a lightweight, open-source, local-first Markdown scratchpad for macOS, Windows, and Linux.">
+  <meta name="theme-color" content="#090d16">
+  <meta property="og:title" content="Scratchpad — thoughts at the speed of typing">
+  <meta property="og:description" content="A lightweight, open-source, local-first Markdown scratchpad for the desktop.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://crims0n.github.io/scratchpad/">
+  <meta property="og:image" content="https://crims0n.github.io/scratchpad/assets/preview.png">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; upgrade-insecure-requests">
+  <title>Scratchpad — lightweight desktop notes</title>
+  <link rel="icon" href="./assets/logo.png">
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <a class="brand" href="./" aria-label="Scratchpad home">
+      <img src="./assets/logo.png" alt="" width="38" height="38">
+      <span>Scratchpad</span>
+    </a>
+    <nav aria-label="Primary navigation">
+      <a href="#features">Features</a>
+      <a href="#downloads">Downloads</a>
+      <a href="https://github.com/crims0n/scratchpad">GitHub</a>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <div class="eyebrow"><span class="status-dot"></span> Local-first · Open source</div>
+        <h1 id="hero-title">Thoughts at the<br><span>speed of typing.</span></h1>
+        <p class="hero-intro">A focused Markdown scratchpad for notes, snippets, and everything you need to get out of your head. No account, cloud service, or telemetry.</p>
+
+        <div class="download-panel" id="downloads">
+          <div class="release-line">
+            <span class="release-badge" id="release-badge">Latest beta</span>
+            <time id="release-date"></time>
+          </div>
+          <a class="primary-download" id="primary-download" href="https://github.com/crims0n/scratchpad/releases">View GitHub Releases</a>
+          <span class="primary-detail" id="primary-detail">Downloads for macOS, Windows, and Linux</span>
+          <p class="platform-hint" id="platform-hint">Detecting your platform…</p>
+          <p class="visually-hidden" id="download-status" aria-live="polite">Loading release downloads.</p>
+        </div>
+
+        <p class="security-note"><strong>Beta software:</strong> packages are not yet production-signed, so your operating system may display a security warning.</p>
+      </div>
+
+      <div class="hero-visual" aria-label="Scratchpad application preview">
+        <div class="preview-glow"></div>
+        <img src="./assets/preview.png" alt="Scratchpad displaying a Markdown note in its dark theme" width="1233" height="950">
+      </div>
+    </section>
+
+    <section class="features" id="features" aria-labelledby="features-title">
+      <div class="section-heading">
+        <span class="section-kicker">Small by design</span>
+        <h2 id="features-title">A scratchpad should stay out of the way.</h2>
+      </div>
+      <div class="feature-grid">
+        <article>
+          <span class="feature-number">01</span>
+          <h3>Local-first</h3>
+          <p>Your notes stay on your machine. Use local app storage or connect a portable workspace file you control.</p>
+        </article>
+        <article>
+          <span class="feature-number">02</span>
+          <h3>Markdown-native</h3>
+          <p>Write in a clean editor, work in synchronized split view, or switch to a full rendered preview.</p>
+        </article>
+        <article>
+          <span class="feature-number">03</span>
+          <h3>Built for finding</h3>
+          <p>Search one scratchpad or all of them with case, exact-match, regex, highlighting, and click-to-jump results.</p>
+        </article>
+        <article>
+          <span class="feature-number">04</span>
+          <h3>Make it yours</h3>
+          <p>Choose from modern and retro themes, import your own, and settle into a distraction-free focus mode.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="download-catalog" aria-labelledby="catalog-title">
+      <div class="catalog-copy">
+        <span class="section-kicker">Every package</span>
+        <h2 id="catalog-title">Downloads and checksums</h2>
+        <p>Choose an alternate installer or verify your download against its SHA-256 digest.</p>
+        <p class="release-notes" id="release-notes">Loading the newest release notes…</p>
+      </div>
+
+      <details class="platform-details" open>
+        <summary>All platforms &amp; architectures</summary>
+        <div class="platform-downloads" id="platform-downloads">
+          <p class="loading">Loading packages…</p>
+        </div>
+      </details>
+    </section>
+
+    <section class="open-source" aria-labelledby="source-title">
+      <div>
+        <span class="section-kicker">Yours to inspect</span>
+        <h2 id="source-title">Open source, end to end.</h2>
+        <p>Scratchpad is licensed under GPL-3.0-or-later. Read the code, report an issue, or help shape what comes next.</p>
+      </div>
+      <div class="source-links">
+        <a href="https://github.com/crims0n/scratchpad">Browse source <span aria-hidden="true">↗</span></a>
+        <a href="https://github.com/crims0n/scratchpad/issues">Issues &amp; ideas <span aria-hidden="true">↗</span></a>
+        <a href="https://github.com/crims0n/scratchpad/security/policy">Security policy <span aria-hidden="true">↗</span></a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Scratchpad</span>
+    <span>macOS · Windows · Linux</span>
+    <a href="https://github.com/crims0n/scratchpad/blob/main/LICENSE">GPL-3.0-or-later</a>
+  </footer>
+</body>
+</html>
