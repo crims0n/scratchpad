@@ -103,7 +103,37 @@
               </svg>
             </button>
             <div class="dropdown-content" id="actions-dropdown-content" aria-label="Scratchpad actions">
-              <button class="dropdown-item" id="theme-picker-btn" aria-haspopup="dialog" aria-expanded="false">Color Themes...</button>
+              <div class="dropdown-section-title dropdown-menu-section">Global</div>
+              <button class="dropdown-item" id="theme-picker-btn" aria-haspopup="dialog" aria-expanded="false">Color Themes</button>
+              <div class="dropdown-divider"></div>
+              <div class="view-settings" id="view-settings" aria-label="View settings">
+                <div class="dropdown-section-title">Sidebar</div>
+                <div class="view-setting-row">
+                  <span class="view-setting-label">Preview lines</span>
+                  <div class="view-setting-controls">
+                    <button class="view-setting-btn" id="preview-lines-decrease-btn" title="Show fewer note preview lines" aria-label="Show fewer note preview lines">−</button>
+                    <button class="view-setting-value" id="preview-lines-value" title="Reset note preview lines" aria-label="Reset note preview lines">2</button>
+                    <button class="view-setting-btn" id="preview-lines-increase-btn" title="Show more note preview lines" aria-label="Show more note preview lines">+</button>
+                  </div>
+                </div>
+                <div class="dropdown-section-title view-setting-section">Editor</div>
+                <div class="view-setting-row">
+                  <span class="view-setting-label">Zoom</span>
+                  <div class="view-setting-controls">
+                    <button class="view-setting-btn" id="zoom-out-btn" title="Zoom Editor Out (Cmd+-)" aria-label="Zoom editor out">−</button>
+                    <button class="view-setting-value" id="zoom-reset-btn" title="Reset Editor Zoom (Cmd+0)" aria-label="Reset editor zoom to 100%">100%</button>
+                    <button class="view-setting-btn" id="zoom-in-btn" title="Zoom Editor In (Cmd++)" aria-label="Zoom editor in">+</button>
+                  </div>
+                </div>
+                <div class="view-setting-row">
+                  <span class="view-setting-label">Line spacing</span>
+                  <div class="view-setting-controls">
+                    <button class="view-setting-btn" id="line-spacing-decrease-btn" title="Decrease editor line spacing" aria-label="Decrease editor line spacing">−</button>
+                    <button class="view-setting-value" id="line-spacing-value" title="Reset editor line spacing" aria-label="Reset editor line spacing">1.6×</button>
+                    <button class="view-setting-btn" id="line-spacing-increase-btn" title="Increase editor line spacing" aria-label="Increase editor line spacing">+</button>
+                  </div>
+                </div>
+              </div>
               <div class="dropdown-divider"></div>
               <button class="dropdown-item" id="copy-markdown">Copy Markdown</button>
               <button class="dropdown-item" id="copy-html">Copy HTML Preview</button>
@@ -113,6 +143,8 @@
               <div class="dropdown-divider" id="db-divider"></div>
               <button class="dropdown-item" id="db-connect-btn">Connect Workspace...</button>
               <button class="dropdown-item" id="db-disconnect-btn" style="display: none;">Disconnect Workspace</button>
+              <div class="dropdown-divider"></div>
+              <button class="dropdown-item" id="help-menu-btn" aria-haspopup="dialog">Help &amp; Reference...</button>
             </div>
           </div>
         </div>
@@ -287,6 +319,9 @@
       <span class="shortcut-hint">Cmd+\</span>
     </button>
     <div class="context-menu-divider" id="ctx-sidebar-divider" style="display: none;"></div>
+    <button class="context-menu-item" id="ctx-pin-note" style="display: none;">
+      <span>Pin to Top</span>
+    </button>
     <button class="context-menu-item" id="ctx-move-up" style="display: none;">
       <span>Move Up</span>
       <span class="shortcut-hint">Alt+↑</span>
@@ -344,6 +379,14 @@
             <div class="shortcut-row">
               <span class="shortcut-desc">Help & Cheatsheet</span>
               <div class="shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>/</kbd></div>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Zoom Editor In / Out</span>
+              <div class="shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>+</kbd><span class="key-plus">/</span><kbd>−</kbd></div>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Reset Editor Zoom</span>
+              <div class="shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>0</kbd></div>
             </div>
             <div class="shortcut-row">
               <span class="shortcut-desc">Switch Help Topic</span>
@@ -404,6 +447,10 @@
             <div class="shortcut-row">
               <span class="shortcut-desc">Select All</span>
               <div class="shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>A</kbd></div>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Indent / Outdent in Editor</span>
+              <div class="shortcut-keys"><kbd>Tab</kbd><span class="key-plus">/</span><kbd>Shift</kbd><span class="key-plus">+</span><kbd>Tab</kbd></div>
             </div>
           </div>
         </div>

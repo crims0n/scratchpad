@@ -86,6 +86,8 @@ struct Note {
     content: String,
     updated_at: i64,
     is_title_locked: bool,
+    #[serde(default)]
+    is_pinned: bool,
 }
 
 fn ensure_notes_table(conn: &rusqlite::Connection) -> Result<(), String> {
@@ -96,6 +98,7 @@ fn ensure_notes_table(conn: &rusqlite::Connection) -> Result<(), String> {
             content TEXT NOT NULL,
             updatedAt INTEGER NOT NULL,
             isTitleLocked INTEGER NOT NULL,
+            isPinned INTEGER NOT NULL DEFAULT 0,
             sortOrder INTEGER NOT NULL DEFAULT 0
         )",
         [],
@@ -115,6 +118,24 @@ fn ensure_notes_table(conn: &rusqlite::Connection) -> Result<(), String> {
     if !has_sort_order {
         conn.execute(
             "ALTER TABLE notes ADD COLUMN sortOrder INTEGER NOT NULL DEFAULT 0",
+            [],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    let has_is_pinned: bool = conn
+        .query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM pragma_table_info('notes') WHERE name = 'isPinned'
+            )",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    if !has_is_pinned {
+        conn.execute(
+            "ALTER TABLE notes ADD COLUMN isPinned INTEGER NOT NULL DEFAULT 0",
             [],
         )
         .map_err(|e| e.to_string())?;
@@ -240,7 +261,7 @@ fn load_db_notes(db_path: String) -> Result<Vec<Note>, String> {
 
     let mut stmt = conn
         .prepare(
-            "SELECT id, title, content, updatedAt, isTitleLocked
+            "SELECT id, title, content, updatedAt, isTitleLocked, isPinned
              FROM notes
              ORDER BY sortOrder ASC, updatedAt DESC",
         )
@@ -249,12 +270,14 @@ fn load_db_notes(db_path: String) -> Result<Vec<Note>, String> {
     let note_iter = stmt
         .query_map([], |row| {
             let is_title_locked_int: i32 = row.get(4)?;
+            let is_pinned_int: i32 = row.get(5)?;
             Ok(Note {
                 id: row.get(0)?,
                 title: row.get(1)?,
                 content: row.get(2)?,
                 updated_at: row.get(3)?,
                 is_title_locked: is_title_locked_int != 0,
+                is_pinned: is_pinned_int != 0,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -273,13 +296,14 @@ fn save_note_db(db_path: String, note: Note, sort_order: i64) -> Result<(), Stri
 
     conn.execute(
         "INSERT INTO notes (
-            id, title, content, updatedAt, isTitleLocked, sortOrder
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            id, title, content, updatedAt, isTitleLocked, isPinned, sortOrder
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
          ON CONFLICT(id) DO UPDATE SET
             title = excluded.title,
             content = excluded.content,
             updatedAt = excluded.updatedAt,
             isTitleLocked = excluded.isTitleLocked,
+            isPinned = excluded.isPinned,
             sortOrder = excluded.sortOrder",
         rusqlite::params![
             note.id,
@@ -287,6 +311,7 @@ fn save_note_db(db_path: String, note: Note, sort_order: i64) -> Result<(), Stri
             note.content,
             note.updated_at,
             if note.is_title_locked { 1 } else { 0 },
+            if note.is_pinned { 1 } else { 0 },
             sort_order,
         ],
     )
@@ -309,8 +334,8 @@ fn save_notes_db(db_path: String, notes: Vec<Note>) -> Result<(), String> {
         let mut statement = transaction
             .prepare(
                 "INSERT INTO notes (
-                    id, title, content, updatedAt, isTitleLocked, sortOrder
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    id, title, content, updatedAt, isTitleLocked, isPinned, sortOrder
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             )
             .map_err(|e| e.to_string())?;
 
@@ -322,6 +347,7 @@ fn save_notes_db(db_path: String, notes: Vec<Note>) -> Result<(), String> {
                     note.content,
                     note.updated_at,
                     if note.is_title_locked { 1 } else { 0 },
+                    if note.is_pinned { 1 } else { 0 },
                     sort_order as i64,
                 ])
                 .map_err(|e| e.to_string())?;
@@ -386,6 +412,7 @@ mod tests {
             content: content.to_string(),
             updated_at,
             is_title_locked: false,
+            is_pinned: false,
         }
     }
 
@@ -438,20 +465,23 @@ mod tests {
         assert_eq!(loaded[0].id, "older");
         assert_eq!(loaded[1].content, "edited in secondary pane");
 
-        let reordered = vec![loaded[1].clone(), loaded[0].clone()];
+        let mut pinned_note = loaded[1].clone();
+        pinned_note.is_pinned = true;
+        let reordered = vec![pinned_note, loaded[0].clone()];
         save_notes_db(db_path.clone(), reordered.clone()).expect("workspace should resave");
 
         let loaded = load_db_notes(db_path).expect("workspace should load");
         assert_eq!(loaded.len(), 2);
         assert_eq!(loaded[0].id, "newer");
         assert_eq!(loaded[0].content, "edited in secondary pane");
+        assert!(loaded[0].is_pinned);
         assert_eq!(loaded[1].id, "older");
 
         std::fs::remove_file(path).expect("temporary database should be removable");
     }
 
     #[test]
-    fn migrates_existing_databases_without_a_sort_order_column() {
+    fn migrates_existing_databases_without_ordering_columns() {
         let path = temporary_db_path("migration");
         let db_path = path.to_string_lossy().into_owned();
         let connection = rusqlite::Connection::open(&db_path).expect("database should open");
@@ -483,6 +513,16 @@ mod tests {
             )
             .expect("migration should be queryable");
         assert!(has_sort_order);
+        let has_is_pinned: bool = connection
+            .query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM pragma_table_info('notes') WHERE name = 'isPinned'
+                )",
+                [],
+                |row| row.get(0),
+            )
+            .expect("pin migration should be queryable");
+        assert!(has_is_pinned);
         drop(connection);
 
         std::fs::remove_file(path).expect("temporary database should be removable");

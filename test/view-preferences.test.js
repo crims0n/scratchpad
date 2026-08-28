@@ -1,0 +1,36 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  normalizeEditorLineSpacing,
+  normalizeEditorZoom,
+  normalizeNotePreviewLines,
+  stepEditorLineSpacing,
+  stepEditorZoom,
+  stepNotePreviewLines
+} from "../src/view-preferences.js";
+
+test("zoom levels are rounded, bounded, and reject invalid preferences", () => {
+  assert.equal(normalizeEditorZoom("1.26"), 1.3);
+  assert.equal(normalizeEditorZoom(0.1), 0.5);
+  assert.equal(normalizeEditorZoom(9), 2);
+  assert.equal(normalizeEditorZoom("invalid"), 1);
+  assert.equal(stepEditorZoom(1.9, 1), 2);
+});
+
+test("editor line spacing is rounded and bounded", () => {
+  assert.equal(normalizeEditorLineSpacing("1.84"), 1.8);
+  assert.equal(normalizeEditorLineSpacing(1), 1.2);
+  assert.equal(normalizeEditorLineSpacing(3), 2.4);
+  assert.equal(stepEditorLineSpacing(1.6, -1), 1.5);
+});
+
+test("note preview context is limited to one through ten lines", () => {
+  assert.equal(normalizeNotePreviewLines("3"), 3);
+  assert.equal(normalizeNotePreviewLines(0), 1);
+  assert.equal(normalizeNotePreviewLines(12), 10);
+  assert.equal(normalizeNotePreviewLines("invalid"), 2);
+  assert.equal(stepNotePreviewLines(9, 1), 10);
+});

@@ -22,22 +22,25 @@ Scratchpad is in beta. Download the newest prerelease from the [Scratchpad websi
 
 Beta packages are not yet production-signed. macOS and Windows may show a security warning, so only install artifacts downloaded from this repository. Back up important workspace files before testing.
 
+See [release notes](RELEASE_NOTES.md) for highlights, compatibility details, and beta caveats.
+
 ## Features
 
 - Multiple scratchpads with automatic saving and titles derived from the first line
 - Edit, synchronized edit/preview, and full Markdown preview layouts
 - Two-note side-by-side editing with drag-to-split
-- Sidebar search, note reordering, word counts, and distraction-free Focus Mode
+- Sidebar search, configurable note previews, pinned notes, manual note reordering, word counts, and distraction-free Focus Mode
 - Find and replace with case-sensitive, exact-match, and regular-expression modes, live highlighting, and results across one or every scratchpad
 - Native text-file import and Markdown export
 - Copy as Markdown or sanitized rendered HTML
 - Optional portable workspace files that reopen automatically
 - Built-in and importable color themes
+- Persistent editor zoom and adjustable editor line spacing
 - Keyboard shortcut reference and Markdown cheatsheet
 
 ## Storage and privacy
 
-By default, notes stay in the desktop webview's local storage. Scratchpad also supports optional portable workspace files for a durable collection of notes and their sidebar order. Workspace files use SQLite internally and may have a `.db` or `.sqlite` extension.
+By default, notes stay in the desktop webview's local storage. Scratchpad also supports optional portable workspace files for a durable collection of notes, their pinned state, and sidebar order. Workspace files use SQLite internally and may have a `.db` or `.sqlite` extension.
 
 Local notes and workspace notes are two separate collections. While a workspace is connected, changes are written to that workspace and the local collection is left exactly as it was, so disconnecting always returns the notes you had before. Connecting an empty workspace seeds it with the notes already available in the app; connecting a workspace that already has notes switches to those without touching your local ones.
 
@@ -63,6 +66,9 @@ The app displays `Cmd` on macOS and `Ctrl` on Windows or Linux.
 | `Alt + W` | Toggle exact whole-word matching while Find is open |
 | `Alt + R` | Toggle regular-expression mode while Find is open |
 | `Enter` / `Shift + Enter` | Select the next or previous match |
+| `Tab` / `Shift + Tab` | Indent or outdent in the editor |
+| `Cmd/Ctrl + +` / `Cmd/Ctrl + -` | Zoom the editor in or out |
+| `Cmd/Ctrl + 0` | Reset editor zoom to 100% |
 | `Cmd/Ctrl + Shift + F` | Toggle Focus Mode |
 | `Cmd/Ctrl + /` or `F1` | Open or close Help and Reference |
 | `Tab` / `Shift + Tab` | Switch topics while Help is open |

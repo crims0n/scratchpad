@@ -10,6 +10,31 @@ import { renderMarkdown, resolveLinkAction, sanitizeMarkdownHtml } from "./markd
 import { getNotePreview } from "./note-preview.js";
 import { findTextMatches } from "./find.js";
 import { getCursorPosition } from "./editor-position.js";
+import { handleEditorTab } from "./editor-indent.js";
+import {
+  canMoveNote,
+  insertNoteBelowPinned,
+  isNotePinned,
+  normalizePinnedNoteOrder,
+  setNotePinned
+} from "./note-order.js";
+import {
+  DEFAULT_EDITOR_LINE_SPACING,
+  DEFAULT_EDITOR_ZOOM,
+  DEFAULT_NOTE_PREVIEW_LINES,
+  MAX_EDITOR_LINE_SPACING,
+  MAX_EDITOR_ZOOM,
+  MAX_NOTE_PREVIEW_LINES,
+  MIN_EDITOR_LINE_SPACING,
+  MIN_EDITOR_ZOOM,
+  MIN_NOTE_PREVIEW_LINES,
+  normalizeEditorLineSpacing,
+  normalizeEditorZoom,
+  normalizeNotePreviewLines,
+  stepEditorLineSpacing,
+  stepEditorZoom,
+  stepNotePreviewLines
+} from "./view-preferences.js";
 
 // ----------------------------------------------------
 // Scratchpad - Core Application Logic
@@ -51,6 +76,17 @@ const exportBtn = document.getElementById("export-btn");
 const dbConnectBtn = document.getElementById("db-connect-btn");
 const dbDisconnectBtn = document.getElementById("db-disconnect-btn");
 const dbDivider = document.getElementById("db-divider");
+const helpMenuBtn = document.getElementById("help-menu-btn");
+const viewSettings = document.getElementById("view-settings");
+const zoomOutBtn = document.getElementById("zoom-out-btn");
+const zoomResetBtn = document.getElementById("zoom-reset-btn");
+const zoomInBtn = document.getElementById("zoom-in-btn");
+const lineSpacingDecreaseBtn = document.getElementById("line-spacing-decrease-btn");
+const lineSpacingValue = document.getElementById("line-spacing-value");
+const lineSpacingIncreaseBtn = document.getElementById("line-spacing-increase-btn");
+const previewLinesDecreaseBtn = document.getElementById("preview-lines-decrease-btn");
+const previewLinesValue = document.getElementById("preview-lines-value");
+const previewLinesIncreaseBtn = document.getElementById("preview-lines-increase-btn");
 
 const panesContainer = document.getElementById("panes-container");
 const primaryPaneWrapper = document.getElementById("primary-pane-wrapper");
@@ -96,6 +132,7 @@ const ctxSelectAllBtn = document.getElementById("ctx-select-all");
 const ctxFindBtn = document.getElementById("ctx-find");
 const ctxOpenSideBtn = document.getElementById("ctx-open-side");
 const ctxSidebarDivider = document.getElementById("ctx-sidebar-divider");
+const ctxPinBtn = document.getElementById("ctx-pin-note");
 const ctxMoveUpBtn = document.getElementById("ctx-move-up");
 const ctxMoveDownBtn = document.getElementById("ctx-move-down");
 
@@ -334,6 +371,9 @@ let dbSaveQueue = Promise.resolve();
 let isClosing = false;
 let localMirrorFailureNotified = false;
 let notificationSequence = 0;
+let currentEditorZoom = DEFAULT_EDITOR_ZOOM;
+let editorLineSpacing = DEFAULT_EDITOR_LINE_SPACING;
+let notePreviewLines = DEFAULT_NOTE_PREVIEW_LINES;
 
 function applyPlatformShortcutLabels() {
   const platform = navigator.userAgentData?.platform || navigator.platform || navigator.userAgent || "";
@@ -383,6 +423,7 @@ async function init() {
 
   // 2. Load the saved theme (Default Dark on first launch) and layout mode
   loadSavedThemes();
+  loadViewPreferences();
   const savedLayoutMode = localStorage.getItem("scratchpad_layout_mode");
   if (savedLayoutMode) {
     setLayoutMode(savedLayoutMode);
@@ -405,7 +446,7 @@ async function init() {
         throw new Error("Workspace returned an unexpected response");
       }
       if (dbNotes.length > 0) {
-        notes = dbNotes;
+        notes = normalizePinnedNoteOrder(dbNotes);
       } else if (notes.length > 0) {
         // Seed empty SQLite database with existing LocalStorage notes
         await invoke("save_notes_db", { dbPath: activeDbPath, notes });
@@ -441,6 +482,7 @@ Scratchpad is a fast, local-first place for notes, snippets, and Markdown. Every
 
 ## Find and organize
 - Search every scratchpad from the sidebar.
+- Pin important scratchpads to keep them at the top of the sidebar.
 - Use \`Cmd/Ctrl+F\` to find text or \`Cmd/Ctrl+H\` to find and replace.
 - Drag notes to reorder them, or use \`Alt+Up\` and \`Alt+Down\`.
 
@@ -496,10 +538,11 @@ function createNote(title = "Untitled Scratchpad", content = "") {
     title: title,
     content: content,
     updatedAt: Date.now(),
-    isTitleLocked: title !== "Untitled Scratchpad" && title !== "Welcome to Scratchpad!"
+    isTitleLocked: title !== "Untitled Scratchpad" && title !== "Welcome to Scratchpad!",
+    isPinned: false
   };
   
-  notes.unshift(newNote);
+  notes = insertNoteBelowPinned(notes, newNote);
   activeNoteId = newNote.id;
   
   saveNotesToStorage({ syncWorkspace: true });
@@ -566,13 +609,14 @@ function renderNoteList(filter = "") {
   
   filteredNotes.forEach(note => {
     const item = document.createElement("li");
-    item.className = `note-item ${note.id === activeNoteId ? "active" : ""}`;
+    item.className = `note-item ${note.id === activeNoteId ? "active" : ""} ${isNotePinned(note) ? "pinned" : ""}`;
     item.setAttribute("data-id", note.id);
+    item.setAttribute("data-pinned", String(isNotePinned(note)));
     item.tabIndex = 0;
-    item.setAttribute("aria-label", `Open ${note.title}`);
+    item.setAttribute("aria-label", `Open ${isNotePinned(note) ? "pinned " : ""}${note.title}`);
     if (note.id === activeNoteId) item.setAttribute("aria-current", "true");
     
-    const snippet = getNotePreview(note);
+    const snippet = getNotePreview(note, notePreviewLines);
     
     const formattedDate = new Date(note.updatedAt).toLocaleDateString(undefined, {
       month: "short",
@@ -584,11 +628,18 @@ function renderNoteList(filter = "") {
     item.innerHTML = `
       <div class="note-item-header">
         <span class="note-item-title">${escapeHTML(note.title)}</span>
-        <button class="note-item-delete" title="Delete scratchpad" aria-label="Delete ${escapeHTML(note.title)}">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-        </button>
+        <div class="note-item-actions">
+          <button class="note-item-pin" title="${isNotePinned(note) ? "Unpin scratchpad" : "Pin scratchpad to top"}" aria-label="${isNotePinned(note) ? "Unpin" : "Pin"} ${escapeHTML(note.title)}" aria-pressed="${String(isNotePinned(note))}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 17v5M5 17h14M15 3.5l5.5 5.5-3 1.5-4 4-1.5 3-5-5 3-1.5 4-4L15 3.5z" />
+            </svg>
+          </button>
+          <button class="note-item-delete" title="Delete scratchpad" aria-label="Delete ${escapeHTML(note.title)}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
+        </div>
       </div>
       <div class="note-item-snippet">${escapeHTML(snippet)}</div>
       <div class="note-item-meta">
@@ -616,7 +667,7 @@ function renderNoteList(filter = "") {
     });
 
     item.addEventListener("keydown", (e) => {
-      if ((e.key === "Enter" || e.key === " ") && !e.target.closest(".note-item-delete")) {
+      if ((e.key === "Enter" || e.key === " ") && !e.target.closest("button")) {
         e.preventDefault();
         item.click();
       }
@@ -631,7 +682,7 @@ function renderNoteList(filter = "") {
 
     // Pointer-based drag and drop for rock-solid reordering in desktop webviews
     item.addEventListener("pointerdown", (e) => {
-      if (e.button !== 0 || e.target.closest(".note-item-delete")) return;
+      if (e.button !== 0 || e.target.closest("button")) return;
       
       const pointerId = e.pointerId;
       try {
@@ -699,7 +750,11 @@ function renderNoteList(filter = "") {
               el.classList.remove("drag-over-top", "drag-over-bottom");
             });
 
-            if (targetItem && targetItem !== item) {
+            const targetNote = targetItem
+              ? notes.find(candidate => candidate.id === targetItem.getAttribute("data-id"))
+              : null;
+
+            if (targetItem && targetItem !== item && isNotePinned(targetNote) === isNotePinned(note)) {
               dropTarget = targetItem;
               const rect = targetItem.getBoundingClientRect();
               const isTop = (moveEvent.clientY - rect.top) < (rect.height / 2);
@@ -762,6 +817,11 @@ function renderNoteList(filter = "") {
       window.addEventListener("pointerup", onPointerUp);
     });
     
+    item.querySelector(".note-item-pin").addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleNotePinned(note.id);
+    });
+
     // Delete listener
     item.querySelector(".note-item-delete").addEventListener("click", (e) => {
       deleteNote(note.id, e);
@@ -1087,6 +1147,61 @@ function setLayoutMode(mode) {
   scheduleFindHighlightRedraw();
 }
 
+function applyEditorZoom(value, { persist = true } = {}) {
+  currentEditorZoom = normalizeEditorZoom(value);
+  document.documentElement.style.setProperty("--editor-font-size", `${currentEditorZoom}rem`);
+  zoomResetBtn.textContent = `${Math.round(currentEditorZoom * 100)}%`;
+  zoomOutBtn.disabled = currentEditorZoom <= MIN_EDITOR_ZOOM;
+  zoomInBtn.disabled = currentEditorZoom >= MAX_EDITOR_ZOOM;
+
+  if (persist) {
+    localStorage.setItem("scratchpad_editor_zoom", String(currentEditorZoom));
+  }
+  scheduleFindHighlightRedraw(80);
+}
+
+function applyEditorLineSpacing(value, { persist = true } = {}) {
+  editorLineSpacing = normalizeEditorLineSpacing(value);
+  document.documentElement.style.setProperty("--editor-line-height", String(editorLineSpacing));
+  lineSpacingValue.textContent = `${editorLineSpacing.toFixed(1)}×`;
+  lineSpacingDecreaseBtn.disabled = editorLineSpacing <= MIN_EDITOR_LINE_SPACING;
+  lineSpacingIncreaseBtn.disabled = editorLineSpacing >= MAX_EDITOR_LINE_SPACING;
+
+  if (persist) {
+    localStorage.setItem("scratchpad_editor_line_spacing", String(editorLineSpacing));
+  }
+  scheduleFindHighlightRedraw(80);
+}
+
+function applyNotePreviewLines(value, { persist = true, render = true } = {}) {
+  notePreviewLines = normalizeNotePreviewLines(value);
+  document.documentElement.style.setProperty("--note-preview-lines", String(notePreviewLines));
+  previewLinesValue.textContent = String(notePreviewLines);
+  previewLinesDecreaseBtn.disabled = notePreviewLines <= MIN_NOTE_PREVIEW_LINES;
+  previewLinesIncreaseBtn.disabled = notePreviewLines >= MAX_NOTE_PREVIEW_LINES;
+
+  if (persist) {
+    localStorage.setItem("scratchpad_note_preview_lines", String(notePreviewLines));
+  }
+  if (render) {
+    renderNoteList(searchInput.value);
+  }
+}
+
+function loadViewPreferences() {
+  applyEditorZoom(localStorage.getItem("scratchpad_editor_zoom") ?? DEFAULT_EDITOR_ZOOM, {
+    persist: false
+  });
+  applyEditorLineSpacing(
+    localStorage.getItem("scratchpad_editor_line_spacing") ?? DEFAULT_EDITOR_LINE_SPACING,
+    { persist: false }
+  );
+  applyNotePreviewLines(
+    localStorage.getItem("scratchpad_note_preview_lines") ?? DEFAULT_NOTE_PREVIEW_LINES,
+    { persist: false, render: false }
+  );
+}
+
 function toggleSidebar() {
   sidebar.classList.toggle("collapsed");
   toggleSidebarBtn.setAttribute("aria-expanded", String(!sidebar.classList.contains("collapsed")));
@@ -1243,6 +1358,7 @@ function showNotification(msg) {
 function attachEventListeners() {
   // Editor and Title inputs
   editorTextarea.addEventListener("input", handleEditorInput);
+  editorTextarea.addEventListener("keydown", handleEditorTab);
   editorTextarea.addEventListener("select", updateWordCharCount);
   editorTextarea.addEventListener("mouseup", updateWordCharCount);
   editorTextarea.addEventListener("keyup", updateWordCharCount);
@@ -1282,6 +1398,11 @@ function attachEventListeners() {
 
   // Help & Reference Modal
   helpBtn.addEventListener("click", () => openHelpModal());
+  helpMenuBtn.addEventListener("click", () => {
+    toggleActionsDropdown(false);
+    actionsBtn.focus({ preventScroll: true });
+    openHelpModal();
+  });
   closeHelpBtn.addEventListener("click", closeHelpModal);
   helpModalBackdrop.addEventListener("click", (e) => {
     if (e.target === helpModalBackdrop) closeHelpModal();
@@ -1297,6 +1418,7 @@ function attachEventListeners() {
     loadSecondaryNote();
   });
   secondaryEditorTextarea.addEventListener("input", handleSecondaryEditorInput);
+  secondaryEditorTextarea.addEventListener("keydown", handleEditorTab);
   secondaryEditorTextarea.addEventListener("select", () => updateWordCharCountForText(secondaryEditorTextarea));
   secondaryEditorTextarea.addEventListener("mouseup", () => updateWordCharCountForText(secondaryEditorTextarea));
   secondaryEditorTextarea.addEventListener("keyup", () => updateWordCharCountForText(secondaryEditorTextarea));
@@ -1329,6 +1451,29 @@ function attachEventListeners() {
     toggleActionsDropdown(false);
   });
 
+  viewSettings.addEventListener("click", (e) => e.stopPropagation());
+  zoomOutBtn.addEventListener("click", () => applyEditorZoom(stepEditorZoom(currentEditorZoom, -1)));
+  zoomResetBtn.addEventListener("click", () => applyEditorZoom(DEFAULT_EDITOR_ZOOM));
+  zoomInBtn.addEventListener("click", () => applyEditorZoom(stepEditorZoom(currentEditorZoom, 1)));
+  lineSpacingDecreaseBtn.addEventListener("click", () => {
+    applyEditorLineSpacing(stepEditorLineSpacing(editorLineSpacing, -1));
+  });
+  lineSpacingValue.addEventListener("click", () => {
+    applyEditorLineSpacing(DEFAULT_EDITOR_LINE_SPACING);
+  });
+  lineSpacingIncreaseBtn.addEventListener("click", () => {
+    applyEditorLineSpacing(stepEditorLineSpacing(editorLineSpacing, 1));
+  });
+  previewLinesDecreaseBtn.addEventListener("click", () => {
+    applyNotePreviewLines(stepNotePreviewLines(notePreviewLines, -1));
+  });
+  previewLinesValue.addEventListener("click", () => {
+    applyNotePreviewLines(DEFAULT_NOTE_PREVIEW_LINES);
+  });
+  previewLinesIncreaseBtn.addEventListener("click", () => {
+    applyNotePreviewLines(stepNotePreviewLines(notePreviewLines, 1));
+  });
+
   copyMarkdownBtn.addEventListener("click", copyMarkdownToClipboard);
   copyHtmlBtn.addEventListener("click", copyHtmlToClipboard);
   importBtn.addEventListener("click", importFile);
@@ -1351,6 +1496,12 @@ function attachEventListeners() {
     hideContextMenu();
     if (contextMenuNoteId) {
       openNoteInSecondaryPane(contextMenuNoteId);
+    }
+  });
+  ctxPinBtn.addEventListener("click", () => {
+    hideContextMenu();
+    if (contextMenuNoteId) {
+      toggleNotePinned(contextMenuNoteId);
     }
   });
   ctxMoveUpBtn.addEventListener("click", () => {
@@ -1432,6 +1583,22 @@ function attachEventListeners() {
     if (isHelpModalOpen && e.key === "Tab" && !isMeta && !e.altKey) {
       e.preventDefault();
       cycleHelpTab(isShift);
+      return;
+    }
+
+    if (isMeta && !e.altKey && (e.key === "+" || e.key === "=")) {
+      e.preventDefault();
+      applyEditorZoom(stepEditorZoom(currentEditorZoom, 1));
+      return;
+    }
+    if (isMeta && !e.altKey && (e.key === "-" || e.key === "_")) {
+      e.preventDefault();
+      applyEditorZoom(stepEditorZoom(currentEditorZoom, -1));
+      return;
+    }
+    if (isMeta && !e.altKey && e.key === "0") {
+      e.preventDefault();
+      applyEditorZoom(DEFAULT_EDITOR_ZOOM);
       return;
     }
 
@@ -1581,7 +1748,7 @@ function loadNotesFromLocalStorage() {
   const savedNotes = localStorage.getItem(LOCAL_NOTES_KEY);
   if (savedNotes) {
     try {
-      notes = JSON.parse(savedNotes);
+      notes = normalizePinnedNoteOrder(JSON.parse(savedNotes));
     } catch (e) {
       console.error("Failed to parse saved notes, resetting", e);
       notes = [];
@@ -1608,7 +1775,7 @@ function adoptLegacyStashedNotes() {
     const held = byId.get(note.id);
     if (!held || (note.updatedAt || 0) >= (held.updatedAt || 0)) byId.set(note.id, note);
   });
-  notes = [...byId.values()];
+  notes = normalizePinnedNoteOrder([...byId.values()]);
 
   const merged = persistNotesLocally(localStorage, notes);
   if (!merged.ok) {
@@ -1682,10 +1849,10 @@ async function connectDatabase() {
   // The local-only collection stays where it is. Nothing needs setting aside,
   // because a workspace session no longer writes to local storage at all.
   if (workspaceNotes.length > 0) {
-    notes = workspaceNotes;
+    notes = normalizePinnedNoteOrder(workspaceNotes);
   } else if (localNotes) {
     // Seed an empty workspace with the notes already in the app.
-    notes = localNotes;
+    notes = normalizePinnedNoteOrder(localNotes);
     try {
       await invoke("save_notes_db", { dbPath: path, notes });
     } catch (err) {
@@ -2353,12 +2520,15 @@ function showContextMenu(e, noteId = null) {
     contextMenuNoteId = noteId;
     ctxOpenSideBtn.style.display = "flex";
     ctxSidebarDivider.style.display = "block";
+    ctxPinBtn.style.display = "flex";
     ctxMoveUpBtn.style.display = "flex";
     ctxMoveDownBtn.style.display = "flex";
     
     const noteIndex = notes.findIndex(n => n.id === noteId);
-    ctxMoveUpBtn.disabled = noteIndex <= 0;
-    ctxMoveDownBtn.disabled = noteIndex === -1 || noteIndex >= notes.length - 1;
+    const note = notes[noteIndex];
+    ctxPinBtn.querySelector("span").textContent = isNotePinned(note) ? "Unpin from Top" : "Pin to Top";
+    ctxMoveUpBtn.disabled = !canMoveNote(notes, noteIndex, -1);
+    ctxMoveDownBtn.disabled = !canMoveNote(notes, noteIndex, 1);
     
     ctxCutBtn.style.display = "none";
     ctxCopyBtn.style.display = "none";
@@ -2369,6 +2539,7 @@ function showContextMenu(e, noteId = null) {
     contextMenuNoteId = null;
     ctxOpenSideBtn.style.display = "none";
     ctxSidebarDivider.style.display = "none";
+    ctxPinBtn.style.display = "none";
     ctxMoveUpBtn.style.display = "none";
     ctxMoveDownBtn.style.display = "none";
     
@@ -2398,7 +2569,7 @@ function showContextMenu(e, noteId = null) {
   }
   
   const menuWidth = 180;
-  const menuHeight = 180;
+  const menuHeight = 220;
   let x = e.clientX;
   let y = e.clientY;
   
@@ -2672,7 +2843,7 @@ function updateCursorPositionForText(el) {
 function moveNoteUp(noteId) {
   const targetId = noteId || activeNoteId;
   const index = notes.findIndex(n => n.id === targetId);
-  if (index <= 0) return;
+  if (!canMoveNote(notes, index, -1)) return;
   
   const [note] = notes.splice(index, 1);
   notes.splice(index - 1, 0, note);
@@ -2686,7 +2857,7 @@ function moveNoteUp(noteId) {
 function moveNoteDown(noteId) {
   const targetId = noteId || activeNoteId;
   const index = notes.findIndex(n => n.id === targetId);
-  if (index === -1 || index >= notes.length - 1) return;
+  if (!canMoveNote(notes, index, 1)) return;
   
   const [note] = notes.splice(index, 1);
   notes.splice(index + 1, 0, note);
@@ -2695,6 +2866,19 @@ function moveNoteDown(noteId) {
   renderNoteList(searchInput.value);
   populateSecondaryNoteSelect();
   showNotification("Note moved down");
+}
+
+function toggleNotePinned(noteId) {
+  const note = notes.find(candidate => candidate.id === noteId);
+  if (!note) return;
+
+  const willPin = !isNotePinned(note);
+  notes = setNotePinned(notes, noteId, willPin);
+
+  saveNotesToStorage({ syncWorkspace: true });
+  renderNoteList(searchInput.value);
+  populateSecondaryNoteSelect();
+  showNotification(willPin ? "Note pinned to top" : "Note unpinned");
 }
 
 // ----------------------------------------------------

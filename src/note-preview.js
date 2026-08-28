@@ -17,7 +17,10 @@ function comparableText(value) {
     .toLocaleLowerCase();
 }
 
-export function getNotePreview(note) {
+export function getNotePreview(note, lineCount = 2) {
+  const numericLineCount = Number(lineCount);
+  const normalizedLineCount = Number.isFinite(numericLineCount) ? Math.round(numericLineCount) : 2;
+  const previewLineCount = Math.min(10, Math.max(1, normalizedLineCount));
   const lines = String(note.content || "")
     .split(/\r?\n/)
     .map(cleanPreviewLine)
@@ -29,8 +32,9 @@ export function getNotePreview(note) {
     (!note.isTitleLocked && comparableText(lines[0]).startsWith(comparableText(note.title)));
 
   if (firstLineMatchesTitle) {
-    return lines[1] || "No additional content...";
+    const previewLines = lines.slice(1, 1 + previewLineCount);
+    return previewLines.length > 0 ? previewLines.join("\n") : "No additional content...";
   }
 
-  return lines[0];
+  return lines.slice(0, previewLineCount).join("\n");
 }

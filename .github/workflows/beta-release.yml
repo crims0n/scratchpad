@@ -131,6 +131,16 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Load release notes
+        id: release_notes
+        shell: bash
+        run: |
+          {
+            echo 'body<<SCRATCHPAD_RELEASE_NOTES'
+            cat RELEASE_NOTES.md
+            echo 'SCRATCHPAD_RELEASE_NOTES'
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build and draft beta release
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1
         env:
@@ -138,10 +148,8 @@ jobs:
         with:
           tagName: scratchpad-beta-v__VERSION__
           releaseName: Scratchpad Beta v__VERSION__
-          releaseBody: |
-            Beta build for testing. Back up important workspace files before testing.
-
-            These artifacts are not yet production-signed. macOS and Windows may display a security warning.
+          releaseBody: ${{ steps.release_notes.outputs.body }}
+          generateReleaseNotes: true
           releaseDraft: true
           prerelease: true
           args: ${{ matrix.args }}

@@ -11,7 +11,7 @@ test("uses the first content line when a custom title is different", () => {
     isTitleLocked: true
   });
 
-  assert.equal(preview, "First useful detail");
+  assert.equal(preview, "First useful detail\nAnother detail");
 });
 
 test("skips the line used to generate an automatic title", () => {
@@ -46,4 +46,19 @@ test("does not repeat a title-only scratchpad", () => {
 
 test("labels a blank scratchpad", () => {
   assert.equal(getNotePreview({ title: "Untitled", content: "" }), "Empty scratchpad...");
+});
+
+test("returns the requested number of distinct context lines", () => {
+  const preview = getNotePreview({
+    title: "Generated title",
+    content: "# Generated title\nFirst detail\n\n- Second detail\nThird detail",
+    isTitleLocked: false
+  }, 2);
+
+  assert.equal(preview, "First detail\nSecond detail");
+});
+
+test("limits preview context to ten lines", () => {
+  const content = Array.from({ length: 12 }, (_, index) => `Line ${index + 1}`).join("\n");
+  assert.equal(getNotePreview({ title: "Different", content, isTitleLocked: true }, 99).split("\n").length, 10);
 });

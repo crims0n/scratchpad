@@ -15,6 +15,9 @@
   /* Fonts */
   --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: 'JetBrains Mono', "Fira Code", Menlo, Monaco, Consolas, "Courier New", monospace;
+  --editor-font-size: 1rem;
+  --editor-line-height: 1.6;
+  --note-preview-lines: 2;
   
   /* Shared Easing & Animations */
   --transition-speed: 0.25s;
@@ -365,7 +368,8 @@ body {
   pointer-events: none;
 }
 
-.note-item .note-item-delete {
+.note-item .note-item-delete,
+.note-item .note-item-pin {
   pointer-events: auto;
 }
 
@@ -417,7 +421,14 @@ body {
   color: var(--text-primary);
 }
 
-.note-item-delete {
+.note-item-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.note-item-delete,
+.note-item-pin {
   opacity: 0;
   background: none;
   border: none;
@@ -431,8 +442,21 @@ body {
   transition: opacity 0.15s, color 0.15s;
 }
 
-.note-item:hover .note-item-delete {
+.note-item:hover .note-item-delete,
+.note-item:hover .note-item-pin,
+.note-item-delete:focus-visible,
+.note-item-pin:focus-visible,
+.note-item-pin[aria-pressed="true"] {
   opacity: 1;
+}
+
+.note-item-pin[aria-pressed="true"] {
+  color: var(--accent-color);
+}
+
+.note-item-pin:hover {
+  color: var(--accent-color);
+  background-color: var(--bg-input);
 }
 
 .note-item-delete:hover {
@@ -449,9 +473,12 @@ body {
 }
 
 .note-item-snippet {
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--note-preview-lines);
+  line-clamp: var(--note-preview-lines);
+  white-space: pre-line;
   overflow: hidden;
-  text-overflow: ellipsis;
   color: var(--text-muted);
   font-size: 0.8rem;
 }
@@ -621,7 +648,7 @@ body {
   top: 100%;
   margin-top: 6px;
   background-color: var(--dropdown-bg);
-  min-width: 160px;
+  min-width: 220px;
   border-radius: 8px;
   box-shadow: var(--dropdown-shadow);
   z-index: 100;
@@ -653,6 +680,101 @@ body {
   height: 1px;
   background-color: var(--border-color);
   margin: 4px 0;
+}
+
+.view-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 6px;
+}
+
+.dropdown-section-title {
+  padding: 2px 0 1px;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.dropdown-menu-section {
+  padding: 4px 12px 2px;
+}
+
+.view-setting-section {
+  margin-top: 3px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-color);
+}
+
+.view-setting-row {
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.view-setting-label {
+  color: var(--text-primary);
+  font-size: 0.85rem;
+}
+
+.view-setting-controls {
+  display: grid;
+  grid-template-columns: 26px 52px 26px;
+  align-items: center;
+}
+
+.view-setting-btn,
+.view-setting-value {
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.view-setting-btn {
+  cursor: pointer;
+}
+
+.view-setting-btn:first-child {
+  border-radius: 5px 0 0 5px;
+}
+
+.view-setting-btn:last-child {
+  border-radius: 0 5px 5px 0;
+}
+
+.view-setting-value {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 -1px;
+  color: var(--text-primary);
+  cursor: default;
+}
+
+button.view-setting-value {
+  cursor: pointer;
+}
+
+.view-setting-btn:hover,
+button.view-setting-value:hover {
+  position: relative;
+  background-color: var(--bg-input);
+  color: var(--text-primary);
+}
+
+.view-setting-btn:disabled {
+  color: var(--text-muted);
+  cursor: default;
+  opacity: 0.45;
 }
 
 /* ----------------------------------------------------
@@ -835,8 +957,9 @@ body {
   height: 100%;
   padding: 24px;
   font-family: var(--font-mono);
-  font-size: 1rem;
-  line-height: 1.6;
+  font-size: var(--editor-font-size);
+  line-height: var(--editor-line-height);
+  tab-size: 4;
   border: none;
   box-sizing: border-box;
   margin: 0;
