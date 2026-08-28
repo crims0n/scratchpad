@@ -310,13 +310,23 @@ h2 {
 }
 
 .feature-number {
+  width: 2rem;
+  height: 2rem;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(192, 132, 252, 0.34);
+  border-radius: 8px;
+  background: rgba(168, 85, 247, 0.1);
   color: var(--purple-light);
   font-family: var(--mono);
-  font-size: 0.68rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.025em;
 }
 
 .feature-grid h3 {
-  margin: 48px 0 10px;
+  margin: 32px 0 10px;
   font-size: 1.05rem;
 }
 
