@@ -14,6 +14,8 @@ export const DEFAULT_NOTE_PREVIEW_LINES = 2;
 export const MIN_NOTE_PREVIEW_LINES = 1;
 export const MAX_NOTE_PREVIEW_LINES = 10;
 
+export const DEFAULT_SYNTAX_HIGHLIGHTING = true;
+
 function normalizeSteppedValue(value, fallback, minimum, maximum) {
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue)) return fallback;
@@ -54,4 +56,10 @@ export function normalizeNotePreviewLines(value) {
 
 export function stepNotePreviewLines(value, direction) {
   return normalizeNotePreviewLines(normalizeNotePreviewLines(value) + direction);
+}
+
+export function normalizeSyntaxHighlighting(value) {
+  if (value === true || value === "true" || value === "1") return true;
+  if (value === false || value === "false" || value === "0") return false;
+  return DEFAULT_SYNTAX_HIGHLIGHTING;
 }

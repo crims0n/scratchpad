@@ -30,3 +30,17 @@ test("help and theme overlays expose modal dialog semantics", () => {
     assert.ok(dialog.getAttribute("aria-label") || dialog.getAttribute("aria-labelledby"));
   });
 });
+
+test("help and reference documents current Markdown editing behavior", () => {
+  const shortcuts = document.getElementById("pane-shortcuts").textContent;
+  const markdown = document.getElementById("pane-markdown").textContent;
+
+  assert.match(shortcuts, /F1/);
+  assert.match(shortcuts, /Jump to List Content \/ Line Start/);
+  assert.match(shortcuts, /Continue List, Quote, Fence, or Table/);
+  assert.match(shortcuts, /Pasting a URL over selected text makes a link/);
+  assert.match(markdown, /A language label enables Preview highlighting/);
+  assert.match(markdown, /Actions → Editor/);
+  assert.match(markdown, /Blockquotes/);
+  assert.doesNotMatch(markdown, /Callouts|\[!NOTE\]/);
+});

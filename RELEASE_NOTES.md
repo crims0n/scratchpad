@@ -1,26 +1,26 @@
-# Scratchpad Beta v0.5.1
+# Scratchpad Beta v0.5.2
 
 ## Highlights
 
-- Write lists faster with Markdown-aware continuation for bullets, numbered items, task lists, and nested lists. Ordered siblings renumber automatically when a new item is inserted.
-- Use `Tab` and `Shift+Tab` to nest or outdent list items and their children. Use `Alt+Up` and `Alt+Down` to move complete list branches.
-- Continue blockquotes and fenced code blocks naturally, including automatic closing fences and preserved code indentation.
-- Get lightweight pair editing for brackets, braces, quotes, and backticks, plus paired deletion and selection wrapping for Markdown emphasis and code.
-- Build Markdown tables from a header row, navigate cells with `Tab`, add rows with `Enter`, or paste a spreadsheet range as a table.
-- Paste a URL over selected text to create a Markdown link automatically.
-- See clean task lists in preview with checkboxes instead of a checkbox plus a redundant bullet.
+- See language-aware syntax colors in Preview for fenced code blocks labeled with a supported language such as `javascript`, `python`, `rust`, or `bash`.
+- Use lightweight Markdown coloring directly in both editor panes without changing the native textarea's caret, selection, undo, or autocomplete behavior.
+- Toggle both highlighting layers from **Actions → Editor → Syntax highlighting**. The setting is enabled by default and remembered between launches.
+- Keep working fully offline: Highlight.js and its common language definitions are bundled with Scratchpad rather than loaded from a CDN.
+- Start with an expanded welcome guide and updated Help & Reference content covering lists, tables, smart pairs, paste behavior, and highlighting controls.
 
-## Editing details
+## Highlighting details
 
-- Autocomplete preserves existing bullet characters, indentation, and spacing styles.
-- Empty nested list items outdent one level; empty top-level items exit the list.
-- Smart Markdown behavior stays inactive inside fenced or inline code unless the behavior is code-specific.
-- Escaped Markdown characters remain literal, and custom edits use a single native undo transaction when supported by the system webview.
+- Preview highlighting runs only after Markdown has passed through Scratchpad's allowlist sanitizer; highlight markup written in a note is not trusted.
+- Unknown or unlabeled code fences remain plain code instead of using language autodetection.
+- Editor highlighting is color-only, so line wrapping and cursor geometry stay aligned with the editable text layer.
+- Find-result highlighting composes with Markdown colors in the editor and rendered Preview.
 
 ## Compatibility
 
 - Existing notes and workspaces require no migration.
-- The new editing behavior is available in both editor panes.
+- Existing Markdown autocomplete and smart editing behavior is unchanged.
+- Highlighting is available in both editor panes and can be disabled at any time.
+- Highlight.js is distributed under the BSD 3-Clause License; its license and disclaimer are included in the app's third-party notices.
 
 ## Beta notice
 

@@ -7,6 +7,7 @@ import {
   normalizeEditorLineSpacing,
   normalizeEditorZoom,
   normalizeNotePreviewLines,
+  normalizeSyntaxHighlighting,
   stepEditorLineSpacing,
   stepEditorZoom,
   stepNotePreviewLines
@@ -33,4 +34,12 @@ test("note preview context is limited to one through ten lines", () => {
   assert.equal(normalizeNotePreviewLines(12), 10);
   assert.equal(normalizeNotePreviewLines("invalid"), 2);
   assert.equal(stepNotePreviewLines(9, 1), 10);
+});
+
+test("syntax highlighting preferences accept stored booleans and default on", () => {
+  assert.equal(normalizeSyntaxHighlighting("true"), true);
+  assert.equal(normalizeSyntaxHighlighting("1"), true);
+  assert.equal(normalizeSyntaxHighlighting("false"), false);
+  assert.equal(normalizeSyntaxHighlighting("0"), false);
+  assert.equal(normalizeSyntaxHighlighting(null), true);
 });

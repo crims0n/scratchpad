@@ -13,6 +13,8 @@ import { getCursorPosition } from "./editor-position.js";
 import { handleEditorTab } from "./editor-indent.js";
 import { handleMarkdownAutocomplete } from "./editor-autocomplete.js";
 import { handleEditorSmartKeydown, handleMarkdownPaste } from "./editor-smart.js";
+import { highlightPreviewCode, renderEditorBackdrop } from "./syntax-highlighting.js";
+import { WELCOME_NOTE_CONTENT, WELCOME_NOTE_TITLE } from "./welcome-note.js";
 import {
   canMoveNote,
   insertNoteBelowPinned,
@@ -24,6 +26,7 @@ import {
   DEFAULT_EDITOR_LINE_SPACING,
   DEFAULT_EDITOR_ZOOM,
   DEFAULT_NOTE_PREVIEW_LINES,
+  DEFAULT_SYNTAX_HIGHLIGHTING,
   MAX_EDITOR_LINE_SPACING,
   MAX_EDITOR_ZOOM,
   MAX_NOTE_PREVIEW_LINES,
@@ -33,6 +36,7 @@ import {
   normalizeEditorLineSpacing,
   normalizeEditorZoom,
   normalizeNotePreviewLines,
+  normalizeSyntaxHighlighting,
   stepEditorLineSpacing,
   stepEditorZoom,
   stepNotePreviewLines
@@ -89,6 +93,7 @@ const lineSpacingIncreaseBtn = document.getElementById("line-spacing-increase-bt
 const previewLinesDecreaseBtn = document.getElementById("preview-lines-decrease-btn");
 const previewLinesValue = document.getElementById("preview-lines-value");
 const previewLinesIncreaseBtn = document.getElementById("preview-lines-increase-btn");
+const syntaxHighlightingToggle = document.getElementById("syntax-highlighting-toggle");
 
 const panesContainer = document.getElementById("panes-container");
 const primaryPaneWrapper = document.getElementById("primary-pane-wrapper");
@@ -376,6 +381,7 @@ let notificationSequence = 0;
 let currentEditorZoom = DEFAULT_EDITOR_ZOOM;
 let editorLineSpacing = DEFAULT_EDITOR_LINE_SPACING;
 let notePreviewLines = DEFAULT_NOTE_PREVIEW_LINES;
+let syntaxHighlightingEnabled = DEFAULT_SYNTAX_HIGHLIGHTING;
 
 function applyPlatformShortcutLabels() {
   const platform = navigator.userAgentData?.platform || navigator.platform || navigator.userAgent || "";
@@ -472,32 +478,7 @@ async function init() {
 
   // 5. Create default note if none exist
   if (notes.length === 0) {
-    createNote("Welcome to Scratchpad!", `# Welcome to Scratchpad!
-
-Scratchpad is a fast, local-first place for notes, snippets, and Markdown. Everything is saved automatically as you write.
-
-## Start writing
-- Create a scratchpad with \`Cmd/Ctrl+N\` and find your notes from the sidebar.
-- Switch between **Edit**, **Split**, and **Preview** to work with rendered Markdown.
-- Open a second note beside this one with \`Cmd/Ctrl+\\\`.
-- Enter Focus Mode with \`Cmd/Ctrl+Shift+F\` when you want fewer distractions.
-
-## Find and organize
-- Search every scratchpad from the sidebar.
-- Pin important scratchpads to keep them at the top of the sidebar.
-- Use \`Cmd/Ctrl+F\` to find text or \`Cmd/Ctrl+H\` to find and replace.
-- Drag notes to reorder them, or use \`Alt+Up\` and \`Alt+Down\`.
-
-## Make it yours
-- Choose a built-in theme from the bottom of the sidebar, or import your own.
-- Use the actions menu to import files, export Markdown, or copy rendered HTML.
-- Connect a workspace file when you want a portable collection that Scratchpad reopens automatically.
-
-## Need a reference?
-Press \`Cmd/Ctrl+/\` (or \`F1\`) to open keyboard shortcuts and the Markdown cheatsheet. Use \`Tab\` and \`Shift+Tab\` to switch between them.
-
-Happy writing.
-`);
+    createNote(WELCOME_NOTE_TITLE, WELCOME_NOTE_CONTENT);
   } else {
     // Select first note by default
     activeNoteId = notes[0].id;
@@ -540,7 +521,7 @@ function createNote(title = "Untitled Scratchpad", content = "") {
     title: title,
     content: content,
     updatedAt: Date.now(),
-    isTitleLocked: title !== "Untitled Scratchpad" && title !== "Welcome to Scratchpad!",
+    isTitleLocked: title !== "Untitled Scratchpad" && title !== WELCOME_NOTE_TITLE,
     isPinned: false
   };
   
@@ -1101,6 +1082,7 @@ function updateMarkdownPreview() {
         throw new Error("window.marked is neither a function nor contains a parse function");
       }
       markdownPreview.innerHTML = html;
+      highlightPreviewCode(markdownPreview, window.hljs, syntaxHighlightingEnabled);
     } catch (e) {
       console.error("Marked parser error:", e);
       markdownPreview.innerHTML = `<div style="color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.05); padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 0.9rem;">
@@ -1190,6 +1172,29 @@ function applyNotePreviewLines(value, { persist = true, render = true } = {}) {
   }
 }
 
+function updateSecondaryEditorBackdrop() {
+  secondaryEditorBackdrop.innerHTML = renderEditorBackdrop(secondaryEditorTextarea.value, {
+    syntaxEnabled: syntaxHighlightingEnabled
+  });
+}
+
+function applySyntaxHighlighting(value, { persist = true, render = true } = {}) {
+  syntaxHighlightingEnabled = normalizeSyntaxHighlighting(value);
+  document.documentElement.classList.toggle("syntax-highlighting-enabled", syntaxHighlightingEnabled);
+  syntaxHighlightingToggle.textContent = syntaxHighlightingEnabled ? "On" : "Off";
+  syntaxHighlightingToggle.setAttribute("aria-pressed", String(syntaxHighlightingEnabled));
+
+  if (persist) {
+    localStorage.setItem("scratchpad_syntax_highlighting", String(syntaxHighlightingEnabled));
+  }
+  if (render) {
+    updateHighlights();
+    updateSecondaryEditorBackdrop();
+    updateMarkdownPreview();
+    updateSecondaryMarkdownPreview();
+  }
+}
+
 function loadViewPreferences() {
   applyEditorZoom(localStorage.getItem("scratchpad_editor_zoom") ?? DEFAULT_EDITOR_ZOOM, {
     persist: false
@@ -1200,6 +1205,10 @@ function loadViewPreferences() {
   );
   applyNotePreviewLines(
     localStorage.getItem("scratchpad_note_preview_lines") ?? DEFAULT_NOTE_PREVIEW_LINES,
+    { persist: false, render: false }
+  );
+  applySyntaxHighlighting(
+    localStorage.getItem("scratchpad_syntax_highlighting") ?? DEFAULT_SYNTAX_HIGHLIGHTING,
     { persist: false, render: false }
   );
 }
@@ -1480,6 +1489,9 @@ function attachEventListeners() {
   });
   previewLinesIncreaseBtn.addEventListener("click", () => {
     applyNotePreviewLines(stepNotePreviewLines(notePreviewLines, 1));
+  });
+  syntaxHighlightingToggle.addEventListener("click", () => {
+    applySyntaxHighlighting(!syntaxHighlightingEnabled);
   });
 
   copyMarkdownBtn.addEventListener("click", copyMarkdownToClipboard);
@@ -2489,33 +2501,17 @@ function updateHighlights() {
   updatePreviewHighlights();
   
   if (!isFindBarOpen || !query || findMatches.length === 0) {
-    editorBackdrop.innerHTML = escapeHTML(text) + "\n";
+    editorBackdrop.innerHTML = renderEditorBackdrop(text, {
+      syntaxEnabled: syntaxHighlightingEnabled
+    });
     return;
   }
-  
-  let html = "";
-  let lastIndex = 0;
-  
-  for (let i = 0; i < findMatches.length; i++) {
-    const match = findMatches[i];
-    if (match.start < lastIndex) continue;
-    
-    const before = text.substring(lastIndex, match.start);
-    const matchText = text.substring(match.start, match.end);
-    
-    const isActive = (i === activeMatchIndex);
-    const markClass = isActive ? 'class="active-match"' : '';
-    
-    html += escapeHTML(before) + `<mark ${markClass}>` + escapeHTML(matchText) + "</mark>";
-    lastIndex = match.end;
-  }
-  html += escapeHTML(text.substring(lastIndex));
-  
-  if (html.endsWith("\n")) {
-    html += "\n";
-  }
-  
-  editorBackdrop.innerHTML = html;
+
+  editorBackdrop.innerHTML = renderEditorBackdrop(text, {
+    syntaxEnabled: syntaxHighlightingEnabled,
+    matches: findMatches,
+    activeMatchIndex
+  });
 }
 
 // ----------------------------------------------------
@@ -2734,7 +2730,8 @@ function loadSecondaryNote() {
 
   secondaryNoteTitle.value = note.title;
   secondaryEditorTextarea.value = note.content;
-  
+
+  updateSecondaryEditorBackdrop();
   updateSecondaryMarkdownPreview();
   if (secondaryNoteSelect.value !== note.id) {
     secondaryNoteSelect.value = note.id;
@@ -2748,6 +2745,7 @@ function handleSecondaryEditorInput() {
   note.content = secondaryEditorTextarea.value;
   note.updatedAt = Date.now();
   updateCursorPositionForText(secondaryEditorTextarea);
+  updateSecondaryEditorBackdrop();
 
   // Auto-rename if not locked
   if (!note.isTitleLocked) {
@@ -2797,6 +2795,7 @@ function updateSecondaryMarkdownPreview() {
   if (currentLayoutMode === "edit") return;
   if (window.marked) {
     secondaryMarkdownPreview.innerHTML = renderMarkdown(secondaryEditorTextarea.value);
+    highlightPreviewCode(secondaryMarkdownPreview, window.hljs, syntaxHighlightingEnabled);
   }
 }
 

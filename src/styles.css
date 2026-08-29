@@ -56,6 +56,11 @@
   --preview-quote-bg: #f1f5f9;
   --preview-quote-border: #a855f7;
   --preview-hr: #e2e8f0;
+  --syntax-muted: #64748b;
+  --syntax-code: #047857;
+  --syntax-string: #15803d;
+  --syntax-number: #b45309;
+  --syntax-danger: #be123c;
   
   --statusbar-bg: #ffffff;
   --topbar-bg: #ffffff;
@@ -97,6 +102,11 @@
     --preview-quote-bg: #111625;
     --preview-quote-border: #a855f7;
     --preview-hr: #1e2640;
+    --syntax-muted: #9ca3af;
+    --syntax-code: #5eead4;
+    --syntax-string: #86efac;
+    --syntax-number: #fbbf24;
+    --syntax-danger: #fb7185;
     
     --statusbar-bg: #111625;
     --topbar-bg: #111625;
@@ -136,6 +146,11 @@ html.theme-light {
   --preview-quote-bg: #f1f5f9;
   --preview-quote-border: #a855f7;
   --preview-hr: #e2e8f0;
+  --syntax-muted: #64748b;
+  --syntax-code: #047857;
+  --syntax-string: #15803d;
+  --syntax-number: #b45309;
+  --syntax-danger: #be123c;
   
   --statusbar-bg: #ffffff;
   --topbar-bg: #ffffff;
@@ -176,6 +191,11 @@ html.theme-dark {
   --preview-quote-bg: #111625;
   --preview-quote-border: #a855f7;
   --preview-hr: #1e2640;
+  --syntax-muted: #9ca3af;
+  --syntax-code: #5eead4;
+  --syntax-string: #86efac;
+  --syntax-number: #fbbf24;
+  --syntax-danger: #fb7185;
   
   --statusbar-bg: #111625;
   --topbar-bg: #111625;
@@ -777,6 +797,29 @@ button.view-setting-value:hover {
   opacity: 0.45;
 }
 
+.view-setting-toggle {
+  min-width: 52px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.view-setting-toggle:hover {
+  background-color: var(--bg-input);
+  color: var(--text-primary);
+}
+
+.view-setting-toggle[aria-pressed="true"] {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+
 /* ----------------------------------------------------
    Editor & Multi-Pane Layout
    ---------------------------------------------------- */
@@ -1000,6 +1043,46 @@ button.view-setting-value:hover {
   background-color: rgba(139, 92, 246, 0.35) !important;
 }
 
+/* The textarea remains the editable surface; its color-only backdrop supplies
+   syntax colors without changing selection, caret, wrapping, or undo behavior. */
+.syntax-highlighting-enabled .editor-textarea {
+  color: transparent;
+  caret-color: var(--editor-text);
+}
+
+.syntax-highlighting-enabled .editor-textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.syntax-highlighting-enabled .editor-backdrop {
+  color: var(--editor-text);
+}
+
+.syntax-highlighting-enabled .editor-backdrop mark {
+  color: inherit;
+}
+
+.editor-backdrop .syntax-punctuation {
+  color: var(--syntax-muted);
+}
+
+.editor-backdrop .syntax-heading {
+  color: var(--accent-color);
+}
+
+.editor-backdrop .syntax-emphasis {
+  color: var(--accent-hover);
+}
+
+.editor-backdrop .syntax-link {
+  color: var(--accent-hover);
+}
+
+.editor-backdrop .syntax-code,
+.editor-backdrop .syntax-code-block {
+  color: var(--syntax-code);
+}
+
 /* Divider block between edit and preview (visible in split) */
 .editor-divider {
   width: 1px;
@@ -1107,6 +1190,48 @@ button.view-setting-value:hover {
   padding: 0;
   border-radius: 0;
   font-size: inherit;
+}
+
+/* Highlight.js token colors. Layout-affecting styles are intentionally omitted
+   so highlighted code wraps and selects exactly like unhighlighted code. */
+.markdown-preview .hljs-comment,
+.markdown-preview .hljs-quote {
+  color: var(--syntax-muted);
+}
+
+.markdown-preview .hljs-keyword,
+.markdown-preview .hljs-selector-tag,
+.markdown-preview .hljs-literal,
+.markdown-preview .hljs-type {
+  color: var(--accent-color);
+}
+
+.markdown-preview .hljs-string,
+.markdown-preview .hljs-regexp,
+.markdown-preview .hljs-addition,
+.markdown-preview .hljs-attribute {
+  color: var(--syntax-string);
+}
+
+.markdown-preview .hljs-number,
+.markdown-preview .hljs-symbol,
+.markdown-preview .hljs-bullet,
+.markdown-preview .hljs-variable,
+.markdown-preview .hljs-template-variable {
+  color: var(--syntax-number);
+}
+
+.markdown-preview .hljs-title,
+.markdown-preview .hljs-section,
+.markdown-preview .hljs-selector-id,
+.markdown-preview .hljs-selector-class,
+.markdown-preview .hljs-built_in {
+  color: var(--accent-hover);
+}
+
+.markdown-preview .hljs-deletion,
+.markdown-preview .hljs-meta {
+  color: var(--syntax-danger);
 }
 
 .markdown-preview hr {

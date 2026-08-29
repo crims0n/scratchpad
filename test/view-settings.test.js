@@ -12,6 +12,7 @@ test("editor and sidebar view settings are adjustable and persistent", async () 
       scratchpad_editor_zoom: "1.2",
       scratchpad_editor_line_spacing: "1.8",
       scratchpad_note_preview_lines: "2",
+      scratchpad_syntax_highlighting: "true",
       scratchpad_notes: [{
         id: "preview-note",
         title: "Preview note",
@@ -29,7 +30,7 @@ test("editor and sidebar view settings are adjustable and persistent", async () 
   assert.equal(document.getElementById("theme-picker-btn").textContent, "Color Themes");
   assert.deepEqual(
     [...document.querySelectorAll("#view-settings .view-setting-label")].map(label => label.textContent),
-    ["Preview lines", "Zoom", "Line spacing"]
+    ["Preview lines", "Zoom", "Line spacing", "Syntax highlighting"]
   );
   assert.deepEqual(
     [...document.querySelectorAll("#view-settings .dropdown-section-title")].map(label => label.textContent),
@@ -46,12 +47,16 @@ test("editor and sidebar view settings are adjustable and persistent", async () 
   assert.equal(document.getElementById("zoom-reset-btn").textContent, "120%");
   assert.equal(document.getElementById("line-spacing-value").textContent, "1.8×");
   assert.equal(document.getElementById("preview-lines-value").textContent, "2");
+  assert.equal(document.getElementById("syntax-highlighting-toggle").textContent, "On");
+  assert.equal(document.getElementById("syntax-highlighting-toggle").getAttribute("aria-pressed"), "true");
+  assert.equal(root.classList.contains("syntax-highlighting-enabled"), true);
   assert.equal(document.querySelector(".note-item-snippet").textContent, "First detail\nSecond detail");
 
   document.getElementById("actions-btn").click();
   document.getElementById("zoom-in-btn").click();
   document.getElementById("line-spacing-increase-btn").click();
   document.getElementById("preview-lines-increase-btn").click();
+  document.getElementById("syntax-highlighting-toggle").click();
 
   assert.equal(actionsDropdown.classList.contains("show"), true, "view controls keep the menu open");
   assert.equal(root.style.getPropertyValue("zoom"), "");
@@ -60,6 +65,9 @@ test("editor and sidebar view settings are adjustable and persistent", async () 
   assert.equal(app.storage.getItem("scratchpad_editor_zoom"), "1.3");
   assert.equal(app.storage.getItem("scratchpad_editor_line_spacing"), "1.9");
   assert.equal(app.storage.getItem("scratchpad_note_preview_lines"), "3");
+  assert.equal(app.storage.getItem("scratchpad_syntax_highlighting"), "false");
+  assert.equal(root.classList.contains("syntax-highlighting-enabled"), false);
+  assert.equal(document.getElementById("syntax-highlighting-toggle").textContent, "Off");
   assert.equal(document.querySelector(".note-item-snippet").textContent, "First detail\nSecond detail\nThird detail");
 
   for (let index = 0; index < 12; index += 1) {

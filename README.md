@@ -28,6 +28,9 @@ See [release notes](RELEASE_NOTES.md) for highlights, compatibility details, and
 
 - Multiple scratchpads with automatic saving and titles derived from the first line
 - Edit, synchronized edit/preview, and full Markdown preview layouts
+- Optional Markdown editor coloring and language-aware fenced-code highlighting in previews
+- Markdown-aware continuation for lists, task lists, blockquotes, code fences, and tables
+- Pair completion, selection wrapping, and smart URL or spreadsheet paste
 - Two-note side-by-side editing with drag-to-split
 - Sidebar search, configurable note previews, pinned notes, manual note reordering, word counts, and distraction-free Focus Mode
 - Find and replace with case-sensitive, exact-match, and regular-expression modes, live highlighting, and results across one or every scratchpad
@@ -59,20 +62,35 @@ The app displays `Cmd` on macOS and `Ctrl` on Windows or Linux.
 | `Cmd/Ctrl + N` | Create a scratchpad |
 | `Cmd/Ctrl + B` | Toggle the sidebar |
 | `Cmd/Ctrl + \` | Toggle two-note side-by-side editing |
-| `Alt + ↑` / `Alt + ↓` | Move the active note in the sidebar |
+| `Alt + ↑` / `Alt + ↓` | Move a list branch, or the active sidebar note outside a list |
 | `Cmd/Ctrl + F` | Open or close Find |
 | `Cmd/Ctrl + H` | Open Find and Replace |
 | `Alt + C` | Toggle case-sensitive matching while Find is open |
 | `Alt + W` | Toggle exact whole-word matching while Find is open |
 | `Alt + R` | Toggle regular-expression mode while Find is open |
 | `Enter` / `Shift + Enter` | Select the next or previous match |
-| `Tab` / `Shift + Tab` | Indent or outdent in the editor |
+| `Enter` | Continue a list or blockquote, close a new code fence, or extend a table |
+| `Tab` / `Shift + Tab` | Nest or outdent a list, navigate table cells, or insert plain indentation |
+| `Home` | Move to list-item content first, then the beginning of the line |
 | `Cmd/Ctrl + +` / `Cmd/Ctrl + -` | Zoom the editor in or out |
 | `Cmd/Ctrl + 0` | Reset editor zoom to 100% |
 | `Cmd/Ctrl + Shift + F` | Toggle Focus Mode |
 | `Cmd/Ctrl + /` or `F1` | Open or close Help and Reference |
 | `Tab` / `Shift + Tab` | Switch topics while Help is open |
 | `Escape` | Close the active modal or Find bar, or leave Focus Mode |
+
+## Markdown editing
+
+Scratchpad keeps its Markdown assistance lightweight and works directly in the native text editor:
+
+- `Enter` preserves the marker and spacing of bullet lists, advances ordered-list numbering, and creates unchecked task items. An empty item outdents or exits its list.
+- `Tab` at the start of a list item nests the complete item and its children; `Shift+Tab` outdents them. Elsewhere, Tab inserts indentation. Fenced code always receives literal indentation.
+- Blockquotes continue at the same depth. Starting a fenced code block closes the fence and leaves the cursor between the markers.
+- Parentheses, brackets, braces, quotes, and inline backticks pair automatically. Typing an existing closing character advances past it, and Backspace removes an empty pair. Selecting text before typing `*`, `_`, <code>`</code>, or `~` wraps the selection.
+- Finishing a table header creates its separator and first row. `Tab` moves through cells and creates another row from the final cell.
+- Pasting a URL over selected text makes a Markdown link. Pasting tab-separated spreadsheet cells makes a Markdown table.
+
+Syntax highlighting is enabled by default. Open **Actions → Editor → Syntax highlighting** to toggle both the editor’s Markdown coloring and language-aware Preview highlighting. Preview code highlighting requires a supported language after the opening fence, such as <code>```javascript</code>; unknown and unlabeled fences remain plain code.
 
 ## Themes
 
@@ -145,6 +163,7 @@ Production distribution will also require platform signing and, on macOS, notari
 | Desktop runtime | Tauri v2 and Rust |
 | Frontend | Vanilla HTML, CSS, and JavaScript |
 | Markdown | Bundled Marked parser with an allowlist sanitizer |
+| Syntax highlighting | Bundled Highlight.js for explicitly labeled fenced code blocks |
 | External links | `tauri-plugin-opener`, scoped to `http`, `https`, and `mailto` |
 | Local persistence | Desktop webview local storage |
 | Workspace persistence | Bundled SQLite through `rusqlite` |
@@ -157,4 +176,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow. Please repo
 
 ## License
 
-Scratchpad is free software licensed under [GPL-3.0-or-later](LICENSE). The bundled Marked parser is provided under the MIT License; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Scratchpad is free software licensed under [GPL-3.0-or-later](LICENSE). The bundled Marked parser is provided under the MIT License, and Highlight.js under the BSD 3-Clause License; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

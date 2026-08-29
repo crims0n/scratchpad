@@ -49,3 +49,12 @@ test("the landing page has named navigation, images, and download controls", () 
   assert.ok(document.getElementById("primary-download").textContent.trim());
   assert.ok(document.querySelector("meta[http-equiv='Content-Security-Policy']"));
 });
+
+test("the landing page describes current Markdown assistance", () => {
+  const document = new JSDOM(html).window.document;
+  const markdownFeature = [...document.querySelectorAll(".feature-grid article")]
+    .find((article) => article.querySelector("h3")?.textContent === "Markdown-native");
+
+  assert.match(markdownFeature.textContent, /smart list and table helpers/);
+  assert.match(markdownFeature.textContent, /language-aware code previews/);
+});

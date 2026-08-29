@@ -8,6 +8,8 @@
   <link rel="stylesheet" href="styles.css" />
   <!-- Offline-ready Markdown Parser -->
   <script src="vendor/marked.umd.js"></script>
+  <!-- Offline-ready fenced-code syntax highlighter -->
+  <script src="vendor/highlight.min.js"></script>
   <script type="module" src="main.js" defer></script>
 </head>
 <body>
@@ -132,6 +134,10 @@
                     <button class="view-setting-value" id="line-spacing-value" title="Reset editor line spacing" aria-label="Reset editor line spacing">1.6×</button>
                     <button class="view-setting-btn" id="line-spacing-increase-btn" title="Increase editor line spacing" aria-label="Increase editor line spacing">+</button>
                   </div>
+                </div>
+                <div class="view-setting-row">
+                  <span class="view-setting-label">Syntax highlighting</span>
+                  <button class="view-setting-toggle" id="syntax-highlighting-toggle" type="button" aria-label="Toggle syntax highlighting in the editor and preview" aria-pressed="true">On</button>
                 </div>
               </div>
               <div class="dropdown-divider"></div>
@@ -378,7 +384,7 @@
             </div>
             <div class="shortcut-row">
               <span class="shortcut-desc">Help & Cheatsheet</span>
-              <div class="shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>/</kbd></div>
+              <div class="shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>/</kbd><span class="key-plus">or</span><kbd>F1</kbd></div>
             </div>
             <div class="shortcut-row">
               <span class="shortcut-desc">Zoom Editor In / Out</span>
@@ -449,13 +455,22 @@
               <div class="shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>A</kbd></div>
             </div>
             <div class="shortcut-row">
-              <span class="shortcut-desc">Indent / Outdent in Editor</span>
+              <span class="shortcut-desc">Nest Lists / Navigate Table Cells / Indent</span>
               <div class="shortcut-keys"><kbd>Tab</kbd><span class="key-plus">/</span><kbd>Shift</kbd><span class="key-plus">+</span><kbd>Tab</kbd></div>
             </div>
             <div class="shortcut-row">
               <span class="shortcut-desc">Move List Item Up / Down</span>
               <div class="shortcut-keys"><kbd>Alt</kbd><span class="key-plus">+</span><kbd>↑</kbd><span class="key-plus">/</span><kbd>↓</kbd></div>
             </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Continue List, Quote, Fence, or Table</span>
+              <div class="shortcut-keys"><kbd>Enter</kbd></div>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Jump to List Content / Line Start</span>
+              <div class="shortcut-keys"><kbd>Home</kbd></div>
+            </div>
+            <p class="cheatsheet-note">Parentheses, brackets, braces, quotes, and backticks pair automatically. Backspace removes an empty pair or a list marker at the start of its content. Pasting a URL over selected text makes a link; pasting spreadsheet cells makes a table.</p>
           </div>
         </div>
 
@@ -463,7 +478,7 @@
         <div class="help-pane" id="pane-markdown" role="tabpanel" aria-labelledby="tab-markdown-btn" aria-hidden="true">
           <div class="cheatsheet-grid">
             <div class="cheatsheet-card">
-              <div class="cheatsheet-card-title">Headers</div>
+              <div class="cheatsheet-card-title">Headings</div>
               <pre class="cheatsheet-code"># Header 1
 ## Header 2
 ### Header 3
@@ -486,6 +501,7 @@
 2. Numbered item 2
 - [ ] Incomplete task
 - [x] Completed task</pre>
+              <p class="cheatsheet-note">Enter continues a list. Tab at the start of an item nests it; Shift+Tab outdents it.</p>
             </div>
 
             <div class="cheatsheet-card">
@@ -495,22 +511,21 @@ function hello() {
   console.log("Hello, World!");
 }
 ```</pre>
+              <p class="cheatsheet-note">A language label enables Preview highlighting. Typing a new fence and pressing Enter closes it automatically.</p>
             </div>
 
             <div class="cheatsheet-card">
-              <div class="cheatsheet-card-title">Quotes & Callouts</div>
+              <div class="cheatsheet-card-title">Blockquotes</div>
               <pre class="cheatsheet-code">> Blockquote quotation
-> Multiple lines supported
-
-> [!NOTE]
-> Helpful notice</pre>
+> Multiple lines supported</pre>
+              <p class="cheatsheet-note">Enter preserves the current quote depth. Press Enter again on an empty quote line to exit.</p>
             </div>
 
             <div class="cheatsheet-card">
               <div class="cheatsheet-card-title">Links & Images</div>
               <pre class="cheatsheet-code">[Link Text](https://example.com)
 ![Image Alt](data:image/png;base64,...)</pre>
-              <p class="cheatsheet-note">For privacy, previews block images loaded from the internet.</p>
+              <p class="cheatsheet-note">Paste a URL over selected text to make a link. For privacy, previews block images loaded from the internet.</p>
             </div>
 
             <div class="cheatsheet-card full-width">
@@ -519,7 +534,13 @@ function hello() {
 | :--- | :---: | ---: |
 | Left | Center | Right |
 
---- (Horizontal Divider)</pre>
+---</pre>
+              <p class="cheatsheet-note">Enter after a header creates the separator and first row. Tab moves between cells and adds rows.</p>
+            </div>
+
+            <div class="cheatsheet-card full-width">
+              <div class="cheatsheet-card-title">Editor Assistance</div>
+              <p class="cheatsheet-note">Select text and type <span class="code-mono">*</span>, <span class="code-mono">_</span>, a backtick, or <span class="code-mono">~</span> to wrap it. Escape a Markdown trigger with a backslash when you want it to remain literal. Syntax highlighting for the editor and Preview can be toggled under <strong>Actions → Editor</strong>.</p>
             </div>
           </div>
         </div>
