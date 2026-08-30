@@ -255,7 +255,11 @@ function escapeTableCell(text) {
 
 function getTsvTable(text) {
   const lines = text.replace(/\r\n?/g, "\n").replace(/\n$/, "").split("\n");
-  if (lines.length < 2 || !lines.every((line) => line.includes("\t"))) return null;
+  if (
+    lines.length < 2 ||
+    !lines.every((line) => line.includes("\t")) ||
+    lines.every((line) => line.startsWith("\t"))
+  ) return null;
 
   const rows = lines.map((line) => line.split("\t").map(escapeTableCell));
   const columnCount = rows[0].length;
