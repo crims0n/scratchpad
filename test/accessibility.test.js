@@ -21,10 +21,10 @@ test("interactive controls have an accessible name", () => {
   assert.deepEqual(unnamed, []);
 });
 
-test("help and theme overlays expose modal dialog semantics", () => {
+test("help, theme, and about overlays expose modal dialog semantics", () => {
   const dialogs = [...document.querySelectorAll("[role='dialog']")];
 
-  assert.equal(dialogs.length, 2);
+  assert.equal(dialogs.length, 3);
   dialogs.forEach((dialog) => {
     assert.equal(dialog.getAttribute("aria-modal"), "true");
     assert.ok(dialog.getAttribute("aria-label") || dialog.getAttribute("aria-labelledby"));
@@ -40,7 +40,9 @@ test("help and reference documents current Markdown editing behavior", () => {
   assert.match(shortcuts, /Continue List, Quote, Fence, or Table/);
   assert.match(shortcuts, /Pasting a URL over selected text makes a link/);
   assert.match(markdown, /A language label enables Preview highlighting/);
-  assert.match(markdown, /Actions → Editor/);
+  assert.match(markdown, /Scratchpad menu → Appearance/);
+  assert.match(markdown, /Right-click in the editor/);
+  assert.match(markdown, /empty generated row to exit the table/);
   assert.match(markdown, /Blockquotes/);
   assert.doesNotMatch(markdown, /Callouts|\[!NOTE\]/);
 });

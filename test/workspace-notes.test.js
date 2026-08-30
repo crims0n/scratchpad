@@ -38,6 +38,7 @@ const app = await bootApp({
 
 test("the local notes load on start-up", () => {
   assert.deepEqual(app.sidebarTitles(), ["Local one", "Local two"]);
+  assert.equal(document.getElementById("workspace-menu-value").textContent, "Local notes");
 });
 
 test("connecting a populated workspace leaves the local collection alone", async () => {
@@ -47,6 +48,11 @@ test("connecting a populated workspace leaves the local collection alone", async
   await app.settle();
 
   assert.deepEqual(app.sidebarTitles(), ["Workspace note"], "the workspace takes over the editor");
+  assert.equal(
+    document.getElementById("workspace-menu-value").textContent,
+    "scratchpad-test-workspace.db"
+  );
+  assert.equal(document.getElementById("db-disconnect-btn").textContent, "Return to local notes");
   assert.deepEqual(app.read("scratchpad_notes"), LOCAL_NOTES, "the local collection is untouched");
 });
 
@@ -66,6 +72,7 @@ test("disconnecting returns the local collection", async () => {
   await app.settle();
 
   assert.deepEqual(app.sidebarTitles(), ["Local one", "Local two"]);
+  assert.equal(document.getElementById("workspace-menu-value").textContent, "Local notes");
   assert.deepEqual(app.read("scratchpad_notes"), LOCAL_NOTES);
 });
 

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  normalizeEditorLineNumbers,
   normalizeEditorLineSpacing,
   normalizeEditorZoom,
   normalizeNotePreviewLines,
@@ -42,4 +43,12 @@ test("syntax highlighting preferences accept stored booleans and default on", ()
   assert.equal(normalizeSyntaxHighlighting("false"), false);
   assert.equal(normalizeSyntaxHighlighting("0"), false);
   assert.equal(normalizeSyntaxHighlighting(null), true);
+});
+
+test("editor line number preferences accept stored booleans and default off", () => {
+  assert.equal(normalizeEditorLineNumbers("true"), true);
+  assert.equal(normalizeEditorLineNumbers("1"), true);
+  assert.equal(normalizeEditorLineNumbers("false"), false);
+  assert.equal(normalizeEditorLineNumbers("0"), false);
+  assert.equal(normalizeEditorLineNumbers(null), false);
 });

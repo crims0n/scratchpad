@@ -1,26 +1,34 @@
-# Scratchpad Beta v0.5.2
+# Scratchpad Beta v0.5.5
 
 ## Highlights
 
-- See language-aware syntax colors in Preview for fenced code blocks labeled with a supported language such as `javascript`, `python`, `rust`, or `bash`.
-- Use lightweight Markdown coloring directly in both editor panes without changing the native textarea's caret, selection, undo, or autocomplete behavior.
-- Toggle both highlighting layers from **Actions → Editor → Syntax highlighting**. The setting is enabled by default and remembered between launches.
-- Keep working fully offline: Highlight.js and its common language definitions are bundled with Scratchpad rather than loaded from a CDN.
-- Start with an expanded welcome guide and updated Help & Reference content covering lists, tables, smart pairs, paste behavior, and highlighting controls.
+- Turn on subtle source line numbers from **Scratchpad menu → Appearance → Line numbers**. They are off by default, remembered between launches, and available in both editor panes.
+- Right-click either Markdown editor and choose **Insert** to add a starter table, task list, fenced code block, inline link, or reference-style link.
+- Use the reorganized Scratchpad menu, now grouped into **Note**, **Appearance**, **Workspace**, and **Help**, with live theme and workspace values.
+- Open **About Scratchpad** for the installed version plus direct repository and release-note links.
 
-## Highlighting details
+## Markdown editing refinements
 
-- Preview highlighting runs only after Markdown has passed through Scratchpad's allowlist sanitizer; highlight markup written in a note is not trusted.
-- Unknown or unlabeled code fences remain plain code instead of using language autodetection.
-- Editor highlighting is color-only, so line wrapping and cursor geometry stay aligned with the editable text layer.
-- Find-result highlighting composes with Markdown colors in the editor and rendered Preview.
+- Inserted templates use one editor transaction and select their first useful placeholder, so they remain easy to replace and undo.
+- Table navigation now recognizes every contiguous data row, including rows beyond the first one after the separator.
+- Enter in the final cell of a populated table row creates another correctly shaped row.
+- Enter or Backspace on an empty generated table row exits to an explicit normal line instead of creating another separator or trapping the caret.
+- The task-list template starts with one task. Enter continues with an unchecked item; Enter on the empty item removes its marker and exits to a normal line.
+- Empty list, table, and blockquote exits retain an explicit blank source line for stable caret placement.
+
+## Interface polish and fixes
+
+- The Scratchpad menu uses consistent sentence-case labels, aligned controls, logical sections, and no trailing ellipses.
+- The menu shows the active color theme and either **Local notes** or the current workspace filename.
+- Closing Dual-Note Split View immediately clears its temporary “enabled” notification.
+- Task-list previews now show the checkbox without a redundant bullet marker.
 
 ## Compatibility
 
-- Existing notes and workspaces require no migration.
-- Existing Markdown autocomplete and smart editing behavior is unchanged.
-- Highlighting is available in both editor panes and can be disabled at any time.
-- Highlight.js is distributed under the BSD 3-Clause License; its license and disclaimer are included in the app's third-party notices.
+- Existing notes and workspace files require no migration.
+- Line numbers are opt-in and do not alter note content, selection, native editing, or undo history.
+- Existing appearance preferences remain intact.
+- Scratchpad remains fully offline and does not load remote syntax-highlighting or image resources.
 
 ## Beta notice
 

@@ -43,7 +43,7 @@ test("Enter continues task lists with an unchecked item", () => {
 
 test("Enter on an empty list item outdents, then exits the list", () => {
   assert.deepEqual(getMarkdownAutocompleteEdit("- first\n- ", 10, 10), {
-    value: "- first\n",
+    value: "- first\n\n",
     selectionStart: 8,
     selectionEnd: 8
   });
@@ -85,7 +85,7 @@ test("Enter continues blockquotes and exits from an empty quote line", () => {
   });
 
   assert.deepEqual(getMarkdownAutocompleteEdit("> quote\n> ", 10, 10), {
-    value: "> quote\n",
+    value: "> quote\n\n",
     selectionStart: 8,
     selectionEnd: 8
   });

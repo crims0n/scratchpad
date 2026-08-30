@@ -13,7 +13,10 @@ import { getCursorPosition } from "./editor-position.js";
 import { handleEditorTab } from "./editor-indent.js";
 import { handleMarkdownAutocomplete } from "./editor-autocomplete.js";
 import { handleEditorSmartKeydown, handleMarkdownPaste } from "./editor-smart.js";
+import { applyEditorEdit } from "./editor-edit.js";
+import { getMarkdownTemplateEdit } from "./markdown-insert.js";
 import { highlightPreviewCode, renderEditorBackdrop } from "./syntax-highlighting.js";
+import { renderEditorLineNumbers } from "./editor-line-numbers.js";
 import { WELCOME_NOTE_CONTENT, WELCOME_NOTE_TITLE } from "./welcome-note.js";
 import {
   canMoveNote,
@@ -24,6 +27,7 @@ import {
 } from "./note-order.js";
 import {
   DEFAULT_EDITOR_LINE_SPACING,
+  DEFAULT_EDITOR_LINE_NUMBERS,
   DEFAULT_EDITOR_ZOOM,
   DEFAULT_NOTE_PREVIEW_LINES,
   DEFAULT_SYNTAX_HIGHLIGHTING,
@@ -34,6 +38,7 @@ import {
   MIN_EDITOR_ZOOM,
   MIN_NOTE_PREVIEW_LINES,
   normalizeEditorLineSpacing,
+  normalizeEditorLineNumbers,
   normalizeEditorZoom,
   normalizeNotePreviewLines,
   normalizeSyntaxHighlighting,
@@ -59,6 +64,7 @@ const noteList = document.getElementById("note-list");
 const noteTitleInput = document.getElementById("note-title");
 const editorWrapper = document.getElementById("editor-wrapper");
 const editorTextarea = document.getElementById("editor-textarea");
+const editorLineNumbers = document.getElementById("editor-line-numbers");
 const previewWrapper = document.getElementById("preview-wrapper");
 const markdownPreview = document.getElementById("markdown-preview");
 const wordCharCount = document.getElementById("word-char-count");
@@ -81,8 +87,9 @@ const importBtn = document.getElementById("import-btn");
 const exportBtn = document.getElementById("export-btn");
 const dbConnectBtn = document.getElementById("db-connect-btn");
 const dbDisconnectBtn = document.getElementById("db-disconnect-btn");
-const dbDivider = document.getElementById("db-divider");
+const workspaceMenuValue = document.getElementById("workspace-menu-value");
 const helpMenuBtn = document.getElementById("help-menu-btn");
+const aboutMenuBtn = document.getElementById("about-menu-btn");
 const viewSettings = document.getElementById("view-settings");
 const zoomOutBtn = document.getElementById("zoom-out-btn");
 const zoomResetBtn = document.getElementById("zoom-reset-btn");
@@ -94,6 +101,7 @@ const previewLinesDecreaseBtn = document.getElementById("preview-lines-decrease-
 const previewLinesValue = document.getElementById("preview-lines-value");
 const previewLinesIncreaseBtn = document.getElementById("preview-lines-increase-btn");
 const syntaxHighlightingToggle = document.getElementById("syntax-highlighting-toggle");
+const lineNumbersToggle = document.getElementById("line-numbers-toggle");
 
 const panesContainer = document.getElementById("panes-container");
 const primaryPaneWrapper = document.getElementById("primary-pane-wrapper");
@@ -104,6 +112,7 @@ const closeSecondaryBtn = document.getElementById("close-secondary-btn");
 const secondaryEditorPane = document.getElementById("secondary-editor-pane");
 const secondaryEditorWrapper = document.getElementById("secondary-editor-wrapper");
 const secondaryEditorTextarea = document.getElementById("secondary-editor-textarea");
+const secondaryEditorLineNumbers = document.getElementById("secondary-editor-line-numbers");
 const secondaryEditorBackdrop = document.getElementById("secondary-editor-backdrop");
 const secondaryEditorDivider = document.getElementById("secondary-editor-divider");
 const secondaryPreviewWrapper = document.getElementById("secondary-preview-wrapper");
@@ -135,6 +144,10 @@ const customContextMenu = document.getElementById("custom-context-menu");
 const ctxCutBtn = document.getElementById("ctx-cut");
 const ctxCopyBtn = document.getElementById("ctx-copy");
 const ctxPasteBtn = document.getElementById("ctx-paste");
+const ctxInsertDivider = document.getElementById("ctx-insert-divider");
+const ctxInsertGroup = document.getElementById("ctx-insert-group");
+const ctxInsertBtn = document.getElementById("ctx-insert");
+const ctxInsertMenu = document.getElementById("ctx-insert-menu");
 const ctxSelectAllBtn = document.getElementById("ctx-select-all");
 const ctxFindBtn = document.getElementById("ctx-find");
 const ctxOpenSideBtn = document.getElementById("ctx-open-side");
@@ -154,12 +167,16 @@ const paneMarkdown = document.getElementById("pane-markdown");
 const splitDropOverlay = document.getElementById("split-drop-overlay");
 
 const themePickerBtn = document.getElementById("theme-picker-btn");
+const activeThemeMenuValue = document.getElementById("active-theme-menu-value");
 const themeModalBackdrop = document.getElementById("theme-modal-backdrop");
 const themeModal = document.getElementById("theme-modal");
 const closeThemeBtn = document.getElementById("close-theme-btn");
 const themeImportBtn = document.getElementById("theme-import-btn");
 const themeExportBtn = document.getElementById("theme-export-btn");
 const themeGrid = document.getElementById("theme-grid");
+const aboutModalBackdrop = document.getElementById("about-modal-backdrop");
+const aboutModal = document.getElementById("about-modal");
+const closeAboutBtn = document.getElementById("close-about-btn");
 
 // Built-in Developer Palette Presets
 const PRESET_THEMES = [
@@ -354,6 +371,8 @@ let isHelpModalOpen = false;
 let helpModalPreviousFocus = null;
 let isThemeModalOpen = false;
 let themeModalPreviousFocus = null;
+let isAboutModalOpen = false;
+let aboutModalPreviousFocus = null;
 let customThemes = [];
 let activeThemeId = "default-dark";
 let findMatches = [];
@@ -378,10 +397,12 @@ let dbSaveQueue = Promise.resolve();
 let isClosing = false;
 let localMirrorFailureNotified = false;
 let notificationSequence = 0;
+let activeNotification = null;
 let currentEditorZoom = DEFAULT_EDITOR_ZOOM;
 let editorLineSpacing = DEFAULT_EDITOR_LINE_SPACING;
 let notePreviewLines = DEFAULT_NOTE_PREVIEW_LINES;
 let syntaxHighlightingEnabled = DEFAULT_SYNTAX_HIGHLIGHTING;
+let editorLineNumbersEnabled = DEFAULT_EDITOR_LINE_NUMBERS;
 
 function applyPlatformShortcutLabels() {
   const platform = navigator.userAgentData?.platform || navigator.platform || navigator.userAgent || "";
@@ -499,10 +520,12 @@ function setTheme(theme, pin = true) {
     document.documentElement.classList.add("theme-dark");
     document.documentElement.classList.remove("theme-light");
     themeToggleBtn.querySelector(".btn-text").textContent = "Theme: Default Dark";
+    activeThemeMenuValue.textContent = "Default Dark";
   } else {
     document.documentElement.classList.add("theme-light");
     document.documentElement.classList.remove("theme-dark");
     themeToggleBtn.querySelector(".btn-text").textContent = "Theme: Default Light";
+    activeThemeMenuValue.textContent = "Default Light";
   }
 
   if (pin) {
@@ -574,6 +597,7 @@ function loadActiveNote() {
   // Reset scrolling of editor & preview
   editorTextarea.scrollTop = 0;
   editorBackdrop.scrollTop = 0;
+  editorLineNumbers.scrollTop = 0;
   markdownPreview.scrollTop = 0;
   if (isFindBarOpen) {
     runFind({ selectActive: false });
@@ -1176,6 +1200,37 @@ function updateSecondaryEditorBackdrop() {
   secondaryEditorBackdrop.innerHTML = renderEditorBackdrop(secondaryEditorTextarea.value, {
     syntaxEnabled: syntaxHighlightingEnabled
   });
+  updateEditorLineNumberGutter(
+    secondaryEditorTextarea,
+    secondaryEditorLineNumbers,
+    secondaryEditorWrapper
+  );
+}
+
+function updateEditorLineNumberGutter(textarea, gutter, wrapper) {
+  const lineCount = textarea.value.split("\n").length;
+  const digitCount = String(lineCount).length;
+  wrapper.style.setProperty("--editor-line-number-gutter", `calc(${digitCount}ch + 1.5em)`);
+  gutter.innerHTML = renderEditorLineNumbers(textarea.value);
+}
+
+function applyEditorLineNumbers(value, { persist = true, render = true } = {}) {
+  editorLineNumbersEnabled = normalizeEditorLineNumbers(value);
+  document.documentElement.classList.toggle("editor-line-numbers-enabled", editorLineNumbersEnabled);
+  lineNumbersToggle.textContent = editorLineNumbersEnabled ? "On" : "Off";
+  lineNumbersToggle.setAttribute("aria-pressed", String(editorLineNumbersEnabled));
+
+  if (persist) {
+    localStorage.setItem("scratchpad_editor_line_numbers", String(editorLineNumbersEnabled));
+  }
+  if (render) {
+    updateEditorLineNumberGutter(editorTextarea, editorLineNumbers, editorWrapper);
+    updateEditorLineNumberGutter(
+      secondaryEditorTextarea,
+      secondaryEditorLineNumbers,
+      secondaryEditorWrapper
+    );
+  }
 }
 
 function applySyntaxHighlighting(value, { persist = true, render = true } = {}) {
@@ -1211,6 +1266,10 @@ function loadViewPreferences() {
     localStorage.getItem("scratchpad_syntax_highlighting") ?? DEFAULT_SYNTAX_HIGHLIGHTING,
     { persist: false, render: false }
   );
+  applyEditorLineNumbers(
+    localStorage.getItem("scratchpad_editor_line_numbers") ?? DEFAULT_EDITOR_LINE_NUMBERS,
+    { persist: false }
+  );
 }
 
 function toggleSidebar() {
@@ -1235,7 +1294,7 @@ function toggleFocusMode() {
 }
 
 // ----------------------------------------------------
-// Actions: Export, Copy, Share
+// Scratchpad menu actions
 // ----------------------------------------------------
 function toggleActionsDropdown(show) {
   if (show === undefined) {
@@ -1348,19 +1407,36 @@ function importFile() {
 
 function showNotification(msg) {
   const sequence = ++notificationSequence;
-  const originalStatus = saveStatus.textContent;
-  const originalClass = saveStatus.className;
-  const originalTitle = saveStatus.title;
+  const restoreState = activeNotification && saveStatus.textContent === activeNotification.message
+    ? activeNotification.restoreState
+    : {
+        textContent: saveStatus.textContent,
+        className: saveStatus.className,
+        title: saveStatus.title
+      };
+
+  activeNotification = { sequence, message: msg, restoreState };
   
   saveStatus.textContent = msg;
   saveStatus.className = ""; // clear unsaved indicator during alert
   
   setTimeout(() => {
-    if (sequence !== notificationSequence || saveStatus.textContent !== msg) return;
-    saveStatus.textContent = originalStatus;
-    saveStatus.className = originalClass;
-    saveStatus.title = originalTitle;
+    dismissNotification(msg, sequence);
   }, 2000);
+}
+
+function dismissNotification(message, sequence = null) {
+  if (!activeNotification || activeNotification.message !== message) return;
+  if (sequence !== null && activeNotification.sequence !== sequence) return;
+
+  const { restoreState } = activeNotification;
+  activeNotification = null;
+  notificationSequence += 1;
+
+  if (saveStatus.textContent !== message) return;
+  saveStatus.textContent = restoreState.textContent;
+  saveStatus.className = restoreState.className;
+  saveStatus.title = restoreState.title;
 }
 
 // ----------------------------------------------------
@@ -1423,6 +1499,18 @@ function attachEventListeners() {
   });
   tabShortcutsBtn.addEventListener("click", () => switchHelpTab("shortcuts"));
   tabMarkdownBtn.addEventListener("click", () => switchHelpTab("markdown"));
+
+  // About Modal
+  aboutMenuBtn.addEventListener("click", () => {
+    toggleActionsDropdown(false);
+    actionsBtn.focus({ preventScroll: true });
+    openAboutModal();
+  });
+  closeAboutBtn.addEventListener("click", closeAboutModal);
+  aboutModalBackdrop.addEventListener("click", (e) => {
+    if (e.target === aboutModalBackdrop) closeAboutModal();
+  });
+  aboutModal.addEventListener("click", handlePreviewLinkClick);
 
   // Split Note toggle
   splitNoteBtn.addEventListener("click", () => toggleSplitNoteMode());
@@ -1493,6 +1581,9 @@ function attachEventListeners() {
   syntaxHighlightingToggle.addEventListener("click", () => {
     applySyntaxHighlighting(!syntaxHighlightingEnabled);
   });
+  lineNumbersToggle.addEventListener("click", () => {
+    applyEditorLineNumbers(!editorLineNumbersEnabled);
+  });
 
   copyMarkdownBtn.addEventListener("click", copyMarkdownToClipboard);
   copyHtmlBtn.addEventListener("click", copyHtmlToClipboard);
@@ -1510,6 +1601,24 @@ function attachEventListeners() {
   ctxCutBtn.addEventListener("click", handleContextCut);
   ctxCopyBtn.addEventListener("click", handleContextCopy);
   ctxPasteBtn.addEventListener("click", handleContextPaste);
+  ctxInsertBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const isOpen = ctxInsertGroup.classList.toggle("open");
+    ctxInsertBtn.setAttribute("aria-expanded", String(isOpen));
+    if (isOpen) ctxInsertMenu.querySelector("button")?.focus();
+  });
+  ctxInsertMenu.addEventListener("click", (event) => {
+    const item = event.target.closest("[data-markdown-template]");
+    if (item) handleContextInsert(item.dataset.markdownTemplate);
+  });
+  ctxInsertMenu.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowLeft" && event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopPropagation();
+    ctxInsertGroup.classList.remove("open");
+    ctxInsertBtn.setAttribute("aria-expanded", "false");
+    ctxInsertBtn.focus();
+  });
   ctxSelectAllBtn.addEventListener("click", handleContextSelectAll);
   ctxFindBtn.addEventListener("click", handleContextFind);
   ctxOpenSideBtn.addEventListener("click", () => {
@@ -1606,6 +1715,11 @@ function attachEventListeners() {
       return;
     }
 
+    if (isAboutModalOpen && e.key === "Tab" && !isMeta && !e.altKey) {
+      trapModalFocus(e, aboutModal);
+      return;
+    }
+
     if (isMeta && !e.altKey && (e.key === "+" || e.key === "=")) {
       e.preventDefault();
       applyEditorZoom(stepEditorZoom(currentEditorZoom, 1));
@@ -1681,7 +1795,10 @@ function attachEventListeners() {
       toggleFocusMode();
     }
     if (e.key === "Escape") {
-      if (isThemeModalOpen) {
+      if (isAboutModalOpen) {
+        e.preventDefault();
+        closeAboutModal();
+      } else if (isThemeModalOpen) {
         e.preventDefault();
         closeThemeModal();
       } else if (isHelpModalOpen) {
@@ -1699,6 +1816,7 @@ function attachEventListeners() {
   // Sync scrolling of Edit & Preview in Split mode + Backdrop scroll always
   editorTextarea.addEventListener("scroll", () => {
     editorBackdrop.scrollTop = editorTextarea.scrollTop;
+    editorLineNumbers.scrollTop = editorTextarea.scrollTop;
 
     if (currentLayoutMode !== "split") return;
     
@@ -1713,6 +1831,7 @@ function attachEventListeners() {
 
   secondaryEditorTextarea.addEventListener("scroll", () => {
     secondaryEditorBackdrop.scrollTop = secondaryEditorTextarea.scrollTop;
+    secondaryEditorLineNumbers.scrollTop = secondaryEditorTextarea.scrollTop;
 
     if (currentLayoutMode !== "split") return;
     
@@ -1817,11 +1936,15 @@ function updateDbUiState(isConnected) {
     dbDisconnectBtn.style.display = "block";
     
     const fileName = activeDbPath.split(/[/\\]/).pop();
+    workspaceMenuValue.textContent = fileName;
+    workspaceMenuValue.title = activeDbPath;
     saveStatus.textContent = `Saved (${fileName})`;
     saveStatus.title = `Workspace: ${activeDbPath}`;
   } else {
     dbConnectBtn.style.display = "block";
     dbDisconnectBtn.style.display = "none";
+    workspaceMenuValue.textContent = "Local notes";
+    workspaceMenuValue.title = "Notes stored in local webview storage";
     
     saveStatus.textContent = "Saved";
     saveStatus.title = "Saved to local webview storage";
@@ -2498,6 +2621,8 @@ function updateHighlights() {
   const text = editorTextarea.value;
   const query = findInput.value;
 
+  updateEditorLineNumberGutter(editorTextarea, editorLineNumbers, editorWrapper);
+
   updatePreviewHighlights();
   
   if (!isFindBarOpen || !query || findMatches.length === 0) {
@@ -2519,6 +2644,7 @@ function updateHighlights() {
 // ----------------------------------------------------
 function showContextMenu(e, noteId = null) {
   e.preventDefault();
+  let hasInsertMenu = false;
   
   if (noteId) {
     contextMenuNoteId = noteId;
@@ -2539,6 +2665,8 @@ function showContextMenu(e, noteId = null) {
     ctxPasteBtn.style.display = "none";
     ctxSelectAllBtn.style.display = "none";
     ctxFindBtn.style.display = "none";
+    ctxInsertDivider.style.display = "none";
+    ctxInsertGroup.style.display = "none";
   } else {
     contextMenuNoteId = null;
     ctxOpenSideBtn.style.display = "none";
@@ -2560,6 +2688,9 @@ function showContextMenu(e, noteId = null) {
     }
     
     contextMenuTarget = target;
+    hasInsertMenu = target === editorTextarea || target === secondaryEditorTextarea;
+    ctxInsertDivider.style.display = hasInsertMenu ? "block" : "none";
+    ctxInsertGroup.style.display = hasInsertMenu ? "block" : "none";
     
     let hasSelection = false;
     if (target.tagName === "TEXTAREA" || target.tagName === "INPUT") {
@@ -2573,7 +2704,8 @@ function showContextMenu(e, noteId = null) {
   }
   
   const menuWidth = 180;
-  const menuHeight = 220;
+  const menuHeight = noteId ? 180 : (hasInsertMenu ? 285 : 220);
+  const submenuWidth = 175;
   let x = e.clientX;
   let y = e.clientY;
   
@@ -2586,11 +2718,34 @@ function showContextMenu(e, noteId = null) {
   
   customContextMenu.style.left = `${Math.max(8, x)}px`;
   customContextMenu.style.top = `${Math.max(8, y)}px`;
+  customContextMenu.classList.toggle(
+    "submenu-opens-left",
+    x + menuWidth + submenuWidth + 8 > window.innerWidth
+  );
   customContextMenu.style.display = "flex";
 }
 
 function hideContextMenu() {
   customContextMenu.style.display = "none";
+  ctxInsertGroup.classList.remove("open");
+  ctxInsertBtn.setAttribute("aria-expanded", "false");
+}
+
+function handleContextInsert(templateName) {
+  const target = contextMenuTarget;
+  if (target !== editorTextarea && target !== secondaryEditorTextarea) return;
+
+  const edit = getMarkdownTemplateEdit(
+    target.value,
+    target.selectionStart,
+    target.selectionEnd,
+    templateName
+  );
+  if (!edit) return;
+
+  hideContextMenu();
+  target.focus({ preventScroll: true });
+  applyEditorEdit(target, edit);
 }
 
 async function handleContextCut() {
@@ -2686,6 +2841,7 @@ function toggleSplitNoteMode(forceState) {
     loadSecondaryNote();
     showNotification("Dual-Note Split View enabled");
   } else {
+    dismissNotification("Dual-Note Split View enabled");
     appContainer.classList.remove("dual-note-active");
     panesContainer.classList.remove("dual-split-mode");
     secondaryPaneWrapper.style.display = "none";
@@ -2949,6 +3105,42 @@ function cycleHelpTab(backwards = false) {
 }
 
 // ----------------------------------------------------
+// About Modal Logic
+// ----------------------------------------------------
+function openAboutModal() {
+  aboutModalPreviousFocus = document.activeElement;
+  isAboutModalOpen = true;
+  aboutModalBackdrop.style.display = "flex";
+  aboutModalBackdrop.setAttribute("aria-hidden", "false");
+  closeAboutBtn.focus({ preventScroll: true });
+}
+
+function closeAboutModal() {
+  isAboutModalOpen = false;
+  aboutModalBackdrop.style.display = "none";
+  aboutModalBackdrop.setAttribute("aria-hidden", "true");
+  if (aboutModalPreviousFocus && aboutModalPreviousFocus.isConnected) {
+    aboutModalPreviousFocus.focus({ preventScroll: true });
+  }
+  aboutModalPreviousFocus = null;
+}
+
+function trapModalFocus(event, modal) {
+  const focusable = [...modal.querySelectorAll(
+    "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"
+  )];
+  if (focusable.length === 0) return;
+
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if ((event.shiftKey && document.activeElement === first) ||
+      (!event.shiftKey && document.activeElement === last)) {
+    event.preventDefault();
+    (event.shiftKey ? last : first).focus();
+  }
+}
+
+// ----------------------------------------------------
 // Color Themes & Palette Engine
 // ----------------------------------------------------
 function openThemeModal() {
@@ -3066,6 +3258,7 @@ function applyTheme(themeId) {
   if (themeBtnText) {
     themeBtnText.textContent = `Theme: ${theme.name}`;
   }
+  activeThemeMenuValue.textContent = theme.name;
 
   renderThemeGrid();
 }

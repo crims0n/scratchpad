@@ -56,5 +56,7 @@ test("the landing page describes current Markdown assistance", () => {
     .find((article) => article.querySelector("h3")?.textContent === "Markdown-native");
 
   assert.match(markdownFeature.textContent, /smart list and table helpers/);
+  assert.match(markdownFeature.textContent, /right-click starter templates/);
+  assert.match(markdownFeature.textContent, /optional line numbers/);
   assert.match(markdownFeature.textContent, /language-aware code previews/);
 });

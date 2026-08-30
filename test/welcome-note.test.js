@@ -15,5 +15,7 @@ test("a fresh install creates the current welcome guide", async () => {
   assert.equal(notes[0].content, WELCOME_NOTE_CONTENT);
   assert.match(notes[0].content, /Markdown that helps as you type/);
   assert.match(notes[0].content, /syntax highlighting/);
+  assert.match(notes[0].content, /line numbers/);
+  assert.match(notes[0].content, /Right-click in the editor/);
   assert.match(notes[0].content, /Paste a URL over selected text/);
 });

@@ -95,62 +95,81 @@
             </svg>
           </button>
           
-          <!-- Actions Menu -->
+          <!-- Scratchpad Menu -->
           <div class="actions-dropdown">
-            <button class="icon-btn" id="actions-btn" title="Actions Menu" aria-label="Open actions menu" aria-haspopup="true" aria-expanded="false" aria-controls="actions-dropdown-content">
+            <button class="icon-btn" id="actions-btn" title="Scratchpad Menu" aria-label="Open Scratchpad menu" aria-haspopup="true" aria-expanded="false" aria-controls="actions-dropdown-content">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="4" y1="6" x2="20" y2="6" stroke-linecap="round" stroke-linejoin="round" />
                 <line x1="4" y1="12" x2="20" y2="12" stroke-linecap="round" stroke-linejoin="round" />
                 <line x1="4" y1="18" x2="20" y2="18" stroke-linecap="round" stroke-linejoin="round" />
               </svg>
             </button>
-            <div class="dropdown-content" id="actions-dropdown-content" aria-label="Scratchpad actions">
-              <div class="dropdown-section-title dropdown-menu-section">Global</div>
-              <button class="dropdown-item" id="theme-picker-btn" aria-haspopup="dialog" aria-expanded="false">Color Themes</button>
+            <div class="dropdown-content" id="actions-dropdown-content" aria-label="Scratchpad menu">
+              <div class="dropdown-section" id="note-menu-section">
+                <div class="dropdown-section-title">Note</div>
+                <button class="dropdown-item" id="copy-markdown">Copy Markdown</button>
+                <button class="dropdown-item" id="copy-html">Copy rendered HTML</button>
+                <button class="dropdown-item" id="import-btn">Import text file</button>
+                <button class="dropdown-item" id="export-btn">Export Markdown file</button>
+              </div>
               <div class="dropdown-divider"></div>
-              <div class="view-settings" id="view-settings" aria-label="View settings">
-                <div class="dropdown-section-title">Sidebar</div>
-                <div class="view-setting-row">
-                  <span class="view-setting-label">Preview lines</span>
-                  <div class="view-setting-controls">
-                    <button class="view-setting-btn" id="preview-lines-decrease-btn" title="Show fewer note preview lines" aria-label="Show fewer note preview lines">−</button>
-                    <button class="view-setting-value" id="preview-lines-value" title="Reset note preview lines" aria-label="Reset note preview lines">2</button>
-                    <button class="view-setting-btn" id="preview-lines-increase-btn" title="Show more note preview lines" aria-label="Show more note preview lines">+</button>
+              <div class="dropdown-section" id="appearance-menu-section">
+                <div class="dropdown-section-title">Appearance</div>
+                <button class="dropdown-item dropdown-item-with-value" id="theme-picker-btn" aria-haspopup="dialog" aria-expanded="false">
+                  <span>Color theme</span>
+                  <span class="dropdown-item-value" id="active-theme-menu-value">Default Dark</span>
+                </button>
+                <div class="view-settings" id="view-settings" aria-label="Appearance settings">
+                  <div class="view-setting-row">
+                    <span class="view-setting-label">Sidebar preview lines</span>
+                    <div class="view-setting-controls">
+                      <button class="view-setting-btn" id="preview-lines-decrease-btn" title="Show fewer note preview lines" aria-label="Show fewer note preview lines">−</button>
+                      <button class="view-setting-value" id="preview-lines-value" title="Reset note preview lines" aria-label="Reset note preview lines">2</button>
+                      <button class="view-setting-btn" id="preview-lines-increase-btn" title="Show more note preview lines" aria-label="Show more note preview lines">+</button>
+                    </div>
                   </div>
-                </div>
-                <div class="dropdown-section-title view-setting-section">Editor</div>
-                <div class="view-setting-row">
-                  <span class="view-setting-label">Zoom</span>
-                  <div class="view-setting-controls">
-                    <button class="view-setting-btn" id="zoom-out-btn" title="Zoom Editor Out (Cmd+-)" aria-label="Zoom editor out">−</button>
-                    <button class="view-setting-value" id="zoom-reset-btn" title="Reset Editor Zoom (Cmd+0)" aria-label="Reset editor zoom to 100%">100%</button>
-                    <button class="view-setting-btn" id="zoom-in-btn" title="Zoom Editor In (Cmd++)" aria-label="Zoom editor in">+</button>
+                  <div class="view-setting-row">
+                    <span class="view-setting-label">Editor zoom</span>
+                    <div class="view-setting-controls">
+                      <button class="view-setting-btn" id="zoom-out-btn" title="Zoom Editor Out (Cmd+-)" aria-label="Zoom editor out">−</button>
+                      <button class="view-setting-value" id="zoom-reset-btn" title="Reset Editor Zoom (Cmd+0)" aria-label="Reset editor zoom to 100%">100%</button>
+                      <button class="view-setting-btn" id="zoom-in-btn" title="Zoom Editor In (Cmd++)" aria-label="Zoom editor in">+</button>
+                    </div>
                   </div>
-                </div>
-                <div class="view-setting-row">
-                  <span class="view-setting-label">Line spacing</span>
-                  <div class="view-setting-controls">
-                    <button class="view-setting-btn" id="line-spacing-decrease-btn" title="Decrease editor line spacing" aria-label="Decrease editor line spacing">−</button>
-                    <button class="view-setting-value" id="line-spacing-value" title="Reset editor line spacing" aria-label="Reset editor line spacing">1.6×</button>
-                    <button class="view-setting-btn" id="line-spacing-increase-btn" title="Increase editor line spacing" aria-label="Increase editor line spacing">+</button>
+                  <div class="view-setting-row">
+                    <span class="view-setting-label">Line spacing</span>
+                    <div class="view-setting-controls">
+                      <button class="view-setting-btn" id="line-spacing-decrease-btn" title="Decrease editor line spacing" aria-label="Decrease editor line spacing">−</button>
+                      <button class="view-setting-value" id="line-spacing-value" title="Reset editor line spacing" aria-label="Reset editor line spacing">1.6×</button>
+                      <button class="view-setting-btn" id="line-spacing-increase-btn" title="Increase editor line spacing" aria-label="Increase editor line spacing">+</button>
+                    </div>
                   </div>
-                </div>
-                <div class="view-setting-row">
-                  <span class="view-setting-label">Syntax highlighting</span>
-                  <button class="view-setting-toggle" id="syntax-highlighting-toggle" type="button" aria-label="Toggle syntax highlighting in the editor and preview" aria-pressed="true">On</button>
+                  <div class="view-setting-row">
+                    <span class="view-setting-label">Syntax highlighting</span>
+                    <button class="view-setting-toggle" id="syntax-highlighting-toggle" type="button" aria-label="Toggle syntax highlighting in the editor and preview" aria-pressed="true">On</button>
+                  </div>
+                  <div class="view-setting-row">
+                    <span class="view-setting-label">Line numbers</span>
+                    <button class="view-setting-toggle" id="line-numbers-toggle" type="button" aria-label="Toggle editor line numbers" aria-pressed="false">Off</button>
+                  </div>
                 </div>
               </div>
               <div class="dropdown-divider"></div>
-              <button class="dropdown-item" id="copy-markdown">Copy Markdown</button>
-              <button class="dropdown-item" id="copy-html">Copy HTML Preview</button>
+              <div class="dropdown-section" id="workspace-menu-section">
+                <div class="dropdown-section-title">Workspace</div>
+                <div class="dropdown-status-row" aria-label="Current workspace">
+                  <span>Current</span>
+                  <span class="dropdown-item-value" id="workspace-menu-value">Local notes</span>
+                </div>
+                <button class="dropdown-item" id="db-connect-btn">Open workspace</button>
+                <button class="dropdown-item" id="db-disconnect-btn" style="display: none;">Return to local notes</button>
+              </div>
               <div class="dropdown-divider"></div>
-              <button class="dropdown-item" id="import-btn">Import File</button>
-              <button class="dropdown-item" id="export-btn">Export as File</button>
-              <div class="dropdown-divider" id="db-divider"></div>
-              <button class="dropdown-item" id="db-connect-btn">Connect Workspace...</button>
-              <button class="dropdown-item" id="db-disconnect-btn" style="display: none;">Disconnect Workspace</button>
-              <div class="dropdown-divider"></div>
-              <button class="dropdown-item" id="help-menu-btn" aria-haspopup="dialog">Help &amp; Reference...</button>
+              <div class="dropdown-section" id="help-menu-section">
+                <div class="dropdown-section-title">Help</div>
+                <button class="dropdown-item" id="help-menu-btn" aria-haspopup="dialog">Help &amp; reference</button>
+                <button class="dropdown-item" id="about-menu-btn" aria-haspopup="dialog">About Scratchpad</button>
+              </div>
             </div>
           </div>
         </div>
@@ -213,6 +232,7 @@
             </div>
             <!-- Edit Area -->
             <div class="editor-wrapper" id="editor-wrapper">
+              <div class="editor-line-numbers" id="editor-line-numbers" aria-hidden="true"></div>
               <div class="editor-backdrop" id="editor-backdrop"></div>
               <textarea class="editor-textarea" id="editor-textarea" aria-label="Scratchpad content" placeholder="Type something here... Supports Markdown formatting." spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off"></textarea>
             </div>
@@ -261,6 +281,7 @@
           </div>
           <div class="editor-pane" id="secondary-editor-pane">
             <div class="editor-wrapper" id="secondary-editor-wrapper">
+              <div class="editor-line-numbers" id="secondary-editor-line-numbers" aria-hidden="true"></div>
               <div class="editor-backdrop" id="secondary-editor-backdrop"></div>
               <textarea class="editor-textarea" id="secondary-editor-textarea" aria-label="Secondary scratchpad content" placeholder="Type something here... Supports Markdown formatting." spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off"></textarea>
             </div>
@@ -298,41 +319,55 @@
   </div>
 
   <!-- Custom Context Menu for Text Editing -->
-  <div class="custom-context-menu" id="custom-context-menu" style="display: none;">
-    <button class="context-menu-item" id="ctx-cut">
+  <div class="custom-context-menu" id="custom-context-menu" role="menu" style="display: none;">
+    <button class="context-menu-item" id="ctx-cut" role="menuitem">
       <span>Cut</span>
       <span class="shortcut-hint">Cmd+X</span>
     </button>
-    <button class="context-menu-item" id="ctx-copy">
+    <button class="context-menu-item" id="ctx-copy" role="menuitem">
       <span>Copy</span>
       <span class="shortcut-hint">Cmd+C</span>
     </button>
-    <button class="context-menu-item" id="ctx-paste">
+    <button class="context-menu-item" id="ctx-paste" role="menuitem">
       <span>Paste</span>
       <span class="shortcut-hint">Cmd+V</span>
     </button>
+    <div class="context-menu-divider" id="ctx-insert-divider" style="display: none;"></div>
+    <div class="context-menu-submenu" id="ctx-insert-group" style="display: none;">
+      <button class="context-menu-item" id="ctx-insert" role="menuitem" aria-haspopup="menu" aria-expanded="false">
+        <span>Insert</span>
+        <span class="context-menu-caret" aria-hidden="true">›</span>
+      </button>
+      <div class="context-menu-submenu-content" id="ctx-insert-menu" role="menu" aria-label="Insert Markdown">
+        <button class="context-menu-item" role="menuitem" data-markdown-template="table">Table</button>
+        <button class="context-menu-item" role="menuitem" data-markdown-template="task-list">Task list</button>
+        <button class="context-menu-item" role="menuitem" data-markdown-template="code-block">Code block</button>
+        <button class="context-menu-item" role="menuitem" data-markdown-template="link">Link</button>
+        <button class="context-menu-item" role="menuitem" data-markdown-template="reference-link">Reference link</button>
+      </div>
+    </div>
     <div class="context-menu-divider"></div>
-    <button class="context-menu-item" id="ctx-select-all">
+    <button class="context-menu-item" id="ctx-select-all" role="menuitem">
       <span>Select All</span>
       <span class="shortcut-hint">Cmd+A</span>
     </button>
-    <button class="context-menu-item" id="ctx-find">
+    <button class="context-menu-item" id="ctx-find" role="menuitem">
       <span>Find in Note</span>
       <span class="shortcut-hint">Cmd+F</span>
     </button>
-    <button class="context-menu-item" id="ctx-open-side" style="display: none;">
+    <button class="context-menu-item" id="ctx-open-side" role="menuitem" style="display: none;">
       <span>Open to the Side</span>
       <span class="shortcut-hint">Cmd+\</span>
     </button>
     <div class="context-menu-divider" id="ctx-sidebar-divider" style="display: none;"></div>
-    <button class="context-menu-item" id="ctx-pin-note" style="display: none;">
+    <button class="context-menu-item" id="ctx-pin-note" role="menuitem" style="display: none;">
       <span>Pin to Top</span>
     </button>
-    <button class="context-menu-item" id="ctx-move-up" style="display: none;">
+    <button class="context-menu-item" id="ctx-move-up" role="menuitem" style="display: none;">
       <span>Move Up</span>
       <span class="shortcut-hint">Alt+↑</span>
     </button>
-    <button class="context-menu-item" id="ctx-move-down" style="display: none;">
+    <button class="context-menu-item" id="ctx-move-down" role="menuitem" style="display: none;">
       <span>Move Down</span>
       <span class="shortcut-hint">Alt+↓</span>
     </button>
@@ -501,7 +536,7 @@
 2. Numbered item 2
 - [ ] Incomplete task
 - [x] Completed task</pre>
-              <p class="cheatsheet-note">Enter continues a list. Tab at the start of an item nests it; Shift+Tab outdents it.</p>
+              <p class="cheatsheet-note">Enter continues a list and always creates an unchecked task. Press Enter on an empty item to outdent or exit. Tab at the start of an item nests it; Shift+Tab outdents it.</p>
             </div>
 
             <div class="cheatsheet-card">
@@ -535,12 +570,12 @@ function hello() {
 | Left | Center | Right |
 
 ---</pre>
-              <p class="cheatsheet-note">Enter after a header creates the separator and first row. Tab moves between cells and adds rows.</p>
+              <p class="cheatsheet-note">Enter after a header creates the separator and first row. Enter in the final cell or Tab past it adds a row. Press Enter or Backspace on an empty generated row to exit the table.</p>
             </div>
 
             <div class="cheatsheet-card full-width">
               <div class="cheatsheet-card-title">Editor Assistance</div>
-              <p class="cheatsheet-note">Select text and type <span class="code-mono">*</span>, <span class="code-mono">_</span>, a backtick, or <span class="code-mono">~</span> to wrap it. Escape a Markdown trigger with a backslash when you want it to remain literal. Syntax highlighting for the editor and Preview can be toggled under <strong>Actions → Editor</strong>.</p>
+              <p class="cheatsheet-note">Right-click in the editor and choose <strong>Insert</strong> for starter tables, task lists, code blocks, and links. Select text and type <span class="code-mono">*</span>, <span class="code-mono">_</span>, a backtick, or <span class="code-mono">~</span> to wrap it. Escape a Markdown trigger with a backslash when you want it to remain literal. Syntax highlighting and line numbers can be toggled under <strong>Scratchpad menu → Appearance</strong>.</p>
             </div>
           </div>
         </div>
@@ -581,6 +616,37 @@ function hello() {
         <div class="theme-grid" id="theme-grid">
           <!-- Dynamically populated theme cards -->
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- About Modal -->
+  <div class="help-modal-backdrop" id="about-modal-backdrop" style="display: none;" aria-hidden="true">
+    <div class="help-modal about-modal" id="about-modal" role="dialog" aria-modal="true" aria-labelledby="about-modal-heading">
+      <div class="help-modal-header">
+        <div class="about-modal-title">
+          <svg class="about-modal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <h3 id="about-modal-heading">About Scratchpad</h3>
+        </div>
+        <button class="close-help-btn" id="close-about-btn" title="Close (Escape)" aria-label="Close About Scratchpad">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="help-modal-body about-modal-body">
+        <p class="about-description">A lightweight, offline-first Markdown scratchpad for the desktop.</p>
+        <div class="about-version-row">
+          <span>Program version</span>
+          <strong id="about-version">0.5.5</strong>
+        </div>
+        <nav class="about-links" aria-label="Scratchpad project links">
+          <a href="https://github.com/crims0n/scratchpad" target="_blank" rel="noopener noreferrer">Repository <span aria-hidden="true">↗</span></a>
+          <a href="https://github.com/crims0n/scratchpad/blob/main/RELEASE_NOTES.md" target="_blank" rel="noopener noreferrer">Release notes <span aria-hidden="true">↗</span></a>
+        </nav>
       </div>
     </div>
   </div>

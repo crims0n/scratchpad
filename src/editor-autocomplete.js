@@ -18,6 +18,17 @@ function applyTextEdits(value, edits) {
   ), value);
 }
 
+function preserveExplicitTrailingLine(edit) {
+  if (
+    edit.selectionStart > 0 &&
+    edit.selectionStart === edit.value.length &&
+    edit.value.endsWith("\n")
+  ) {
+    return { ...edit, value: `${edit.value}\n` };
+  }
+  return edit;
+}
+
 function renumberFollowingItems(value, position, listItem, nextNumber) {
   const edits = [];
   let lineStart = value.indexOf("\n", position);
@@ -72,11 +83,11 @@ function getListContinuationEdit(value, selectionStart) {
     }
 
     const cursor = lineStart + item.container.length;
-    return {
+    return preserveExplicitTrailingLine({
       value: value.slice(0, lineStart) + item.container + value.slice(lineEnd),
       selectionStart: cursor,
       selectionEnd: cursor
-    };
+    });
   }
 
   const marker = item.number === null
@@ -158,11 +169,11 @@ function getBlockquoteEdit(value, selectionStart) {
   if (!prefix) return null;
 
   if (!beforeCursor.slice(prefix.length).trim() && !afterCursor.trim()) {
-    return {
+    return preserveExplicitTrailingLine({
       value: value.slice(0, lineStart) + value.slice(lineEnd),
       selectionStart: lineStart,
       selectionEnd: lineStart
-    };
+    });
   }
 
   const insertion = `\n${prefix}`;

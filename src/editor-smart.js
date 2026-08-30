@@ -9,6 +9,7 @@ import {
   parseListLine
 } from "./editor-context.js";
 import { applyEditorEdit } from "./editor-edit.js";
+import { getTableBackspaceEdit } from "./editor-tables.js";
 
 const PAIRS = {
   "(": ")",
@@ -80,6 +81,9 @@ function getPairEdit(value, selectionStart, selectionEnd, key) {
 
 function getBackspaceEdit(value, selectionStart, selectionEnd) {
   if (selectionStart !== selectionEnd || selectionStart === 0) return null;
+
+  const tableEdit = getTableBackspaceEdit(value, selectionStart, selectionEnd);
+  if (tableEdit) return tableEdit;
 
   const previous = value[selectionStart - 1];
   const next = value[selectionStart];

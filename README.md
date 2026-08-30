@@ -29,8 +29,10 @@ See [release notes](RELEASE_NOTES.md) for highlights, compatibility details, and
 - Multiple scratchpads with automatic saving and titles derived from the first line
 - Edit, synchronized edit/preview, and full Markdown preview layouts
 - Optional Markdown editor coloring and language-aware fenced-code highlighting in previews
+- Optional, theme-aware source line numbers in either editor pane
 - Markdown-aware continuation for lists, task lists, blockquotes, code fences, and tables
 - Pair completion, selection wrapping, and smart URL or spreadsheet paste
+- Right-click Markdown starter templates for tables, task lists, code blocks, and links
 - Two-note side-by-side editing with drag-to-split
 - Sidebar search, configurable note previews, pinned notes, manual note reordering, word counts, and distraction-free Focus Mode
 - Find and replace with case-sensitive, exact-match, and regular-expression modes, live highlighting, and results across one or every scratchpad
@@ -39,7 +41,7 @@ See [release notes](RELEASE_NOTES.md) for highlights, compatibility details, and
 - Optional portable workspace files that reopen automatically
 - Built-in and importable color themes
 - Persistent editor zoom and adjustable editor line spacing
-- Keyboard shortcut reference and Markdown cheatsheet
+- A sectioned Scratchpad menu, About panel, keyboard shortcut reference, and Markdown cheatsheet
 
 ## Storage and privacy
 
@@ -87,10 +89,13 @@ Scratchpad keeps its Markdown assistance lightweight and works directly in the n
 - `Tab` at the start of a list item nests the complete item and its children; `Shift+Tab` outdents them. Elsewhere, Tab inserts indentation. Fenced code always receives literal indentation.
 - Blockquotes continue at the same depth. Starting a fenced code block closes the fence and leaves the cursor between the markers.
 - Parentheses, brackets, braces, quotes, and inline backticks pair automatically. Typing an existing closing character advances past it, and Backspace removes an empty pair. Selecting text before typing `*`, `_`, <code>`</code>, or `~` wraps the selection.
-- Finishing a table header creates its separator and first row. `Tab` moves through cells and creates another row from the final cell.
+- Finishing a table header creates its separator and first row. `Enter` in the final cell or `Tab` past it adds a row; `Enter` or Backspace on an empty generated row exits the table.
 - Pasting a URL over selected text makes a Markdown link. Pasting tab-separated spreadsheet cells makes a Markdown table.
+- Right-click in either editor and choose **Insert** for a starter table, task list, fenced code block, inline link, or reference-style link. The first useful placeholder is selected so typing replaces it immediately.
 
-Syntax highlighting is enabled by default. Open **Actions → Editor → Syntax highlighting** to toggle both the editor’s Markdown coloring and language-aware Preview highlighting. Preview code highlighting requires a supported language after the opening fence, such as <code>```javascript</code>; unknown and unlabeled fences remain plain code.
+Syntax highlighting is enabled by default. Open **Scratchpad menu → Appearance → Syntax highlighting** to toggle both the editor’s Markdown coloring and language-aware Preview highlighting. Preview code highlighting requires a supported language after the opening fence, such as <code>```javascript</code>; unknown and unlabeled fences remain plain code.
+
+Source line numbers are off by default. Open **Scratchpad menu → Appearance → Line numbers** to show a subtle, theme-aware gutter in both editor panes; the preference is remembered between launches.
 
 ## Themes
 
@@ -152,7 +157,7 @@ Bundles and installers are written beneath `src-tauri/target/release/bundle/`.
 
 The **CI** workflow validates every push to `main` and every pull request. The manually triggered **Beta Release** workflow validates the project, builds macOS, Windows, and Linux packages, and attaches them to a draft prerelease.
 
-Before triggering a beta release, update the version in `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`. The validation command checks that all three match, and the workflow refuses to overwrite an existing release tag. Review the generated draft and its assets before publishing it.
+Before triggering a beta release, update the version in `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, and the About panel in `src/index.html`. The validation command checks that all four match, and the workflow refuses to overwrite an existing release tag. Review the generated draft and its assets before publishing it.
 
 Production distribution will also require platform signing and, on macOS, notarization credentials configured as repository secrets.
 

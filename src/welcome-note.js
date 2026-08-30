@@ -17,7 +17,8 @@ Scratchpad is a fast, local-first place for notes, snippets, and Markdown. Every
 - Press \`Tab\` at the start of a list item to nest it, \`Shift+Tab\` to outdent it, or \`Alt+Up\` / \`Alt+Down\` to move the item with its children.
 - Type a fenced code marker and press \`Enter\` to close the fence automatically. Add a language such as \`javascript\` to highlight its Preview.
 - Parentheses, brackets, braces, quotes, and inline backticks pair automatically. Select text before typing \`*\`, \`_\`, \`~\`, or a backtick to wrap it.
-- Finish a Markdown table header with \`Enter\`, then use \`Tab\` and \`Shift+Tab\` to move between cells.
+- Finish a Markdown table header with \`Enter\`, then use \`Tab\` and \`Shift+Tab\` to move between cells. Enter in the final cell adds a row; Enter or Backspace on an empty row exits the table.
+- Right-click in the editor and choose **Insert** for starter tables, task lists, code blocks, and links.
 - Paste a URL over selected text to make a link, or paste spreadsheet cells to make a table.
 
 ## Find and organize
@@ -27,8 +28,8 @@ Scratchpad is a fast, local-first place for notes, snippets, and Markdown. Every
 
 ## Make it yours
 - Choose a built-in theme from the bottom of the sidebar, or import your own.
-- Open the actions menu to adjust sidebar previews, editor zoom, line spacing, and syntax highlighting.
-- The actions menu also imports and exports files, copies Markdown or rendered HTML, and connects portable workspace files.
+- Open the Scratchpad menu to adjust sidebar previews, editor zoom, line spacing, syntax highlighting, and optional line numbers.
+- The Scratchpad menu also imports and exports files, copies Markdown or rendered HTML, and opens portable workspace files.
 
 ## Need a reference?
 Press \`Cmd/Ctrl+/\` (or \`F1\`) to open keyboard shortcuts and the Markdown cheatsheet. Use \`Tab\` and \`Shift+Tab\` to switch between them.

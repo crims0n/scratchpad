@@ -52,10 +52,34 @@ function getNextLineStart(value, lineStart) {
 }
 
 function isTableContext(value, lineStart) {
-  const previous = getPreviousLineStart(value, lineStart);
-  const next = getNextLineStart(value, lineStart);
-  return (previous >= 0 && isSeparatorRow(getLine(value, previous))) ||
-    (next >= 0 && isSeparatorRow(getLine(value, next)));
+  let candidateStart = lineStart;
+  while (candidateStart >= 0) {
+    const line = getLine(value, candidateStart);
+    if (!parseTableRow(line)) break;
+    if (isSeparatorRow(line)) return true;
+    candidateStart = getPreviousLineStart(value, candidateStart);
+  }
+
+  candidateStart = getNextLineStart(value, lineStart);
+  while (candidateStart >= 0) {
+    const line = getLine(value, candidateStart);
+    if (!parseTableRow(line)) break;
+    if (isSeparatorRow(line)) return true;
+    candidateStart = getNextLineStart(value, candidateStart);
+  }
+
+  return false;
+}
+
+function hasSeparatorBefore(value, lineStart) {
+  let candidateStart = getPreviousLineStart(value, lineStart);
+  while (candidateStart >= 0) {
+    const line = getLine(value, candidateStart);
+    if (!parseTableRow(line)) return false;
+    if (isSeparatorRow(line)) return true;
+    candidateStart = getPreviousLineStart(value, candidateStart);
+  }
+  return false;
 }
 
 function makeRow(indentation, cellCount, separator = false) {
@@ -67,6 +91,22 @@ function getCellCursor(lineStart, cell) {
   return lineStart + cell.start + 1;
 }
 
+function isEmptyRow(line, row) {
+  return row.cells.every(({ start, end }) => !line.slice(start, end).trim());
+}
+
+function getTableExitEdit(value, lineStart, lineEnd) {
+  let nextValue = value.slice(0, lineStart) + value.slice(lineEnd);
+  if (lineStart > 0 && lineStart === nextValue.length && nextValue.endsWith("\n")) {
+    nextValue += "\n";
+  }
+  return {
+    value: nextValue,
+    selectionStart: lineStart,
+    selectionEnd: lineStart
+  };
+}
+
 export function getTableEnterEdit(value, selectionStart, selectionEnd) {
   if (selectionStart !== selectionEnd || isInsideFencedCode(value, selectionStart)) return null;
 
@@ -74,10 +114,11 @@ export function getTableEnterEdit(value, selectionStart, selectionEnd) {
   const lineEnd = getLineEnd(value, selectionStart);
   const line = value.slice(lineStart, lineEnd);
   const row = parseTableRow(line);
-  if (!row || selectionStart !== lineEnd) return null;
+  if (!row) return null;
 
   const nextStart = getNextLineStart(value, lineStart);
   if (!isTableContext(value, lineStart)) {
+    if (selectionStart !== lineEnd) return null;
     if (nextStart >= 0 && isSeparatorRow(getLine(value, nextStart))) return null;
 
     const separator = makeRow(row.indentation, row.cells.length, true);
@@ -92,14 +133,44 @@ export function getTableEnterEdit(value, selectionStart, selectionEnd) {
   }
 
   if (isSeparatorRow(line)) return null;
+  if (!hasSeparatorBefore(value, lineStart)) return null;
+  if (isEmptyRow(line, row)) return getTableExitEdit(value, lineStart, lineEnd);
+
+  const positionInLine = selectionStart - lineStart;
+  const lastCell = row.cells[row.cells.length - 1];
+  const isInLastCell = positionInLine >= lastCell.start && positionInLine <= lastCell.end;
+  if (!isInLastCell && selectionStart !== lineEnd) return null;
+
   const newRow = makeRow(row.indentation, row.cells.length);
   const insertion = `\n${newRow}`;
-  const cursor = selectionStart + 3 + row.indentation.length;
+  const cursor = lineEnd + 3 + row.indentation.length;
   return {
-    value: value.slice(0, selectionStart) + insertion + value.slice(selectionStart),
+    value: value.slice(0, lineEnd) + insertion + value.slice(lineEnd),
     selectionStart: cursor,
     selectionEnd: cursor
   };
+}
+
+export function getTableBackspaceEdit(value, selectionStart, selectionEnd) {
+  if (
+    selectionStart !== selectionEnd ||
+    isInsideFencedCode(value, selectionStart) ||
+    isInsideInlineCode(value, selectionStart)
+  ) return null;
+
+  const lineStart = getLineStart(value, selectionStart);
+  const lineEnd = getLineEnd(value, selectionStart);
+  const line = value.slice(lineStart, lineEnd);
+  const row = parseTableRow(line);
+  if (
+    !row ||
+    !isTableContext(value, lineStart) ||
+    !hasSeparatorBefore(value, lineStart) ||
+    !isEmptyRow(line, row) ||
+    selectionStart !== getCellCursor(lineStart, row.cells[0])
+  ) return null;
+
+  return getTableExitEdit(value, lineStart, lineEnd);
 }
 
 function findAdjacentTableCell(value, lineStart, backwards) {
