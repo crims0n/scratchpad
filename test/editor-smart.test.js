@@ -84,3 +84,9 @@ test("pasting a spreadsheet range creates a Markdown table", () => {
     selectionEnd: table.length
   });
 });
+
+test("pasting tab-indented code or ragged rows leaves the text unchanged", () => {
+  assert.equal(getMarkdownPasteEdit("", 0, 0, "def f():\n\treturn 42"), null);
+  assert.equal(getMarkdownPasteEdit("", 0, 0, "\tfoo\n\tbar"), null);
+  assert.equal(getMarkdownPasteEdit("", 0, 0, "Name\tScore\nAda"), null);
+});

@@ -255,10 +255,15 @@ function escapeTableCell(text) {
 
 function getTsvTable(text) {
   const lines = text.replace(/\r\n?/g, "\n").replace(/\n$/, "").split("\n");
-  if (lines.length < 2 || !lines.some((line) => line.includes("\t"))) return null;
+  if (
+    lines.length < 2 ||
+    !lines.every((line) => line.includes("\t")) ||
+    lines.every((line) => line.startsWith("\t"))
+  ) return null;
 
   const rows = lines.map((line) => line.split("\t").map(escapeTableCell));
-  const columnCount = Math.max(...rows.map((row) => row.length));
+  const columnCount = rows[0].length;
+  if (columnCount < 2 || !rows.every((row) => row.length === columnCount)) return null;
   const makeRow = (cells) => `| ${[
     ...cells,
     ...Array(columnCount - cells.length).fill("")
