@@ -30,3 +30,26 @@ test("editor changes use one native insertText transaction when available", () =
   assert.equal(textarea.value, "one\n- ");
   assert.equal(textarea.selectionStart, 6);
 });
+
+test("editor changes dispatch one input event when native insertion is unavailable", () => {
+  const dom = new JSDOM("<textarea>before</textarea>");
+  globalThis.window = dom.window;
+  globalThis.document = dom.window.document;
+  const textarea = document.querySelector("textarea");
+  let inputEvents = 0;
+
+  document.execCommand = () => false;
+  textarea.addEventListener("input", () => {
+    inputEvents += 1;
+  });
+
+  applyEditorEdit(textarea, {
+    value: "after",
+    selectionStart: 5,
+    selectionEnd: 5
+  });
+
+  assert.equal(textarea.value, "after");
+  assert.equal(textarea.selectionStart, 5);
+  assert.equal(inputEvents, 1);
+});

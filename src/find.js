@@ -36,6 +36,10 @@ function addLocationContext(text, matches) {
 
 const WORD_CHARACTER = /[\p{L}\p{N}\p{M}\p{Pc}]/u;
 
+function escapeRegularExpression(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function characterAt(text, index) {
   if (index < 0 || index >= text.length) return "";
   return String.fromCodePoint(text.codePointAt(index));
@@ -97,17 +101,17 @@ export function findTextMatches(
       });
     }
   } else {
-    const searchText = matchCase ? text : text.toLowerCase();
-    const searchQuery = matchCase ? query : query.toLowerCase();
-    let index = 0;
-
-    while ((index = searchText.indexOf(searchQuery, index)) !== -1) {
+    // Search the original text so match offsets stay in the same coordinate
+    // system. Lowercasing a copy is unsafe because some characters expand
+    // when case-folded (for example, U+0130 becomes two UTF-16 code units).
+    const regex = new RegExp(escapeRegularExpression(query), matchCase ? "g" : "gi");
+    let match;
+    while ((match = regex.exec(text)) !== null) {
       matches.push({
-        start: index,
-        end: index + query.length,
-        text: text.slice(index, index + query.length)
+        start: match.index,
+        end: match.index + match[0].length,
+        text: match[0]
       });
-      index += query.length;
     }
   }
 

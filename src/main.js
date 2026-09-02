@@ -2265,6 +2265,16 @@ function findPrev() {
   selectMatch(prevIndex);
 }
 
+function applyFindReplacement(edit) {
+  const previouslyFocused = document.activeElement;
+  editorTextarea.focus({ preventScroll: true });
+  applyEditorEdit(editorTextarea, edit);
+
+  if (previouslyFocused && previouslyFocused !== editorTextarea) {
+    previouslyFocused.focus?.({ preventScroll: true });
+  }
+}
+
 function replaceOne() {
   if (findMatches.length === 0 || activeMatchIndex < 0) return;
   const match = findMatches[activeMatchIndex];
@@ -2280,21 +2290,16 @@ function replaceOne() {
   }
   
   const newContent = text.substring(0, match.start) + replacement + text.substring(match.end);
-  editorTextarea.value = newContent;
-  
-  // Keep active note updated
-  const activeNote = notes.find(n => n.id === activeNoteId);
-  if (activeNote) {
-    activeNote.content = newContent;
-    activeNote.updatedAt = Date.now();
-    saveNotesToStorage();
-    renderNoteList(searchInput.value);
-    updateMarkdownPreview();
-    updateWordCharCount();
-  }
-  
   const targetIndex = activeMatchIndex;
-  runFind();
+  const selectionAfterReplacement = match.start + replacement.length;
+  applyFindReplacement({
+    value: newContent,
+    selectionStart: selectionAfterReplacement,
+    selectionEnd: selectionAfterReplacement
+  });
+
+  // The edit's input event refreshes findMatches through handleEditorInput.
+  // Keep advancing from the match the user just replaced.
   if (findMatches.length > 0) {
     selectMatch(Math.min(targetIndex, findMatches.length - 1), false);
   }
@@ -2326,21 +2331,17 @@ function replaceAll() {
       replacement +
       newContent.substring(match.end);
   }
-  
-  editorTextarea.value = newContent;
-  
-  const activeNote = notes.find(n => n.id === activeNoteId);
-  if (activeNote) {
-    activeNote.content = newContent;
-    activeNote.updatedAt = Date.now();
-    saveNotesToStorage();
-    renderNoteList(searchInput.value);
-    updateMarkdownPreview();
-    updateWordCharCount();
-  }
-  
+
+  applyFindReplacement({
+    value: newContent,
+    selectionStart: newContent.length,
+    selectionEnd: newContent.length
+  });
+
   showNotification(`Replaced ${totalMatches} occurrences`);
-  runFind();
+  if (findMatches.length > 0) {
+    selectMatch(0, false);
+  }
 }
 
 function updateFindCount(customText) {

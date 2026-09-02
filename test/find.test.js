@@ -35,6 +35,33 @@ test("match case requires matching capitalization", () => {
   ]);
 });
 
+test("case-insensitive plain-text find keeps offsets after expanding lowercase characters", () => {
+  const text = "İstanbul trip. Book a hotel, then book a flight.";
+  const { matches } = findTextMatches(text, "book");
+
+  assert.deepEqual(
+    matches.map(({ start, end, text: matchText, line, column }) => ({
+      start,
+      end,
+      text: matchText,
+      line,
+      column
+    })),
+    [
+      { start: 15, end: 19, text: "Book", line: 1, column: 16 },
+      { start: 34, end: 38, text: "book", line: 1, column: 35 }
+    ]
+  );
+});
+
+test("plain-text find treats regular-expression characters literally", () => {
+  const { matches } = findTextMatches("Use [draft] or [final].", "[draft]");
+
+  assert.deepEqual(matches.map(({ start, end, text }) => ({ start, end, text })), [
+    { start: 4, end: 11, text: "[draft]" }
+  ]);
+});
+
 test("exact match excludes results contained within larger words", () => {
   const { matches } = findTextMatches(
     "cat scatter cat2 cat_note cat. Cat",
