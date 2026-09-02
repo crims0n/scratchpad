@@ -46,6 +46,7 @@ test("primary and secondary line-number gutters update and follow editor scrolli
 
   editor.value += "\nthree";
   editor.dispatchEvent(new app.dom.window.Event("input", { bubbles: true }));
+  await app.settle(30);
   assert.equal(gutter.children.length, 3);
   assert.equal(
     document.getElementById("editor-wrapper").style.getPropertyValue("--editor-line-number-gutter"),
@@ -54,6 +55,7 @@ test("primary and secondary line-number gutters update and follow editor scrolli
 
   editor.value = Array.from({ length: 10 }, (_, index) => `line ${index + 1}`).join("\n");
   editor.dispatchEvent(new app.dom.window.Event("input", { bubbles: true }));
+  await app.settle(30);
   assert.equal(gutter.children.length, 10);
   assert.equal(
     document.getElementById("editor-wrapper").style.getPropertyValue("--editor-line-number-gutter"),
@@ -74,8 +76,9 @@ test("primary and secondary line-number gutters update and follow editor scrolli
   assert.equal(secondaryGutter.scrollTop, 32);
 });
 
-test("line numbers are off by default", async () => {
-  await bootApp({
+test("line numbers are off by default and their hidden gutters stay empty", async () => {
+  const app = await bootApp({
+    instance: 2,
     storage: {
       scratchpad_notes: [{
         id: "default-note",
@@ -90,4 +93,19 @@ test("line numbers are off by default", async () => {
   assert.equal(document.documentElement.classList.contains("editor-line-numbers-enabled"), false);
   assert.equal(document.getElementById("line-numbers-toggle").textContent, "Off");
   assert.equal(document.getElementById("line-numbers-toggle").getAttribute("aria-pressed"), "false");
+  const editor = document.getElementById("editor-textarea");
+  const gutter = document.getElementById("editor-line-numbers");
+  const secondaryGutter = document.getElementById("secondary-editor-line-numbers");
+  assert.equal(gutter.childNodes.length, 0);
+  assert.equal(secondaryGutter.childNodes.length, 0);
+
+  editor.value = "one\ntwo\nthree";
+  editor.dispatchEvent(new app.dom.window.Event("input", { bubbles: true }));
+  await app.settle(30);
+  assert.equal(gutter.childNodes.length, 0);
+
+  document.getElementById("line-numbers-toggle").click();
+  assert.equal(gutter.children.length, 3);
+  document.getElementById("line-numbers-toggle").click();
+  assert.equal(gutter.childNodes.length, 0);
 });

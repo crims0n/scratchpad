@@ -17,6 +17,7 @@ import { applyEditorEdit } from "./editor-edit.js";
 import { getMarkdownTemplateEdit } from "./markdown-insert.js";
 import { highlightPreviewCode, renderEditorBackdrop } from "./syntax-highlighting.js";
 import { renderEditorLineNumbers } from "./editor-line-numbers.js";
+import { createEditorRenderScheduler } from "./editor-render-scheduler.js";
 import { WELCOME_NOTE_CONTENT, WELCOME_NOTE_TITLE } from "./welcome-note.js";
 import {
   canMoveNote,
@@ -403,6 +404,24 @@ let editorLineSpacing = DEFAULT_EDITOR_LINE_SPACING;
 let notePreviewLines = DEFAULT_NOTE_PREVIEW_LINES;
 let syntaxHighlightingEnabled = DEFAULT_SYNTAX_HIGHLIGHTING;
 let editorLineNumbersEnabled = DEFAULT_EDITOR_LINE_NUMBERS;
+let previewHighlightsRendered = false;
+
+const editorRenderFrameOptions = {
+  requestFrame: typeof window.requestAnimationFrame === "function"
+    ? (callback) => window.requestAnimationFrame(callback)
+    : undefined,
+  cancelFrame: typeof window.cancelAnimationFrame === "function"
+    ? (frameId) => window.cancelAnimationFrame(frameId)
+    : undefined
+};
+const primaryEditorRenderScheduler = createEditorRenderScheduler(
+  () => updateHighlights(),
+  editorRenderFrameOptions
+);
+const secondaryEditorRenderScheduler = createEditorRenderScheduler(
+  () => updateSecondaryEditorBackdrop(),
+  editorRenderFrameOptions
+);
 
 function applyPlatformShortcutLabels() {
   const platform = navigator.userAgentData?.platform || navigator.platform || navigator.userAgent || "";
@@ -994,7 +1013,7 @@ function handleEditorInput() {
   if (isFindBarOpen) {
     runFind({ preserveActive: true, selectActive: false });
   } else {
-    updateHighlights();
+    primaryEditorRenderScheduler.schedule();
   }
 
   // Auto-rename the title from the first line until the user edits it manually.
@@ -1197,6 +1216,7 @@ function applyNotePreviewLines(value, { persist = true, render = true } = {}) {
 }
 
 function updateSecondaryEditorBackdrop() {
+  secondaryEditorRenderScheduler.cancel();
   secondaryEditorBackdrop.innerHTML = renderEditorBackdrop(secondaryEditorTextarea.value, {
     syntaxEnabled: syntaxHighlightingEnabled
   });
@@ -1208,6 +1228,11 @@ function updateSecondaryEditorBackdrop() {
 }
 
 function updateEditorLineNumberGutter(textarea, gutter, wrapper) {
+  if (!editorLineNumbersEnabled) {
+    if (gutter.childNodes.length > 0) gutter.replaceChildren();
+    return;
+  }
+
   const lineCount = textarea.value.split("\n").length;
   const digitCount = String(lineCount).length;
   wrapper.style.setProperty("--editor-line-number-gutter", `calc(${digitCount}ch + 1.5em)`);
@@ -2528,10 +2553,13 @@ function handleFindResultKeydown(event) {
 }
 
 function clearPreviewHighlights() {
+  if (!previewHighlightsRendered) return;
+
   markdownPreview.querySelectorAll("mark.find-preview-match").forEach((highlight) => {
     highlight.replaceWith(document.createTextNode(highlight.textContent));
   });
   markdownPreview.normalize();
+  previewHighlightsRendered = false;
 }
 
 function updatePreviewHighlights() {
@@ -2579,6 +2607,7 @@ function updatePreviewHighlights() {
       }
 
       matchedText.replaceWith(highlight);
+      previewHighlightsRendered = true;
     }
   });
 }
@@ -2618,6 +2647,7 @@ function redrawFindHighlights() {
 }
 
 function updateHighlights() {
+  primaryEditorRenderScheduler.cancel();
   const text = editorTextarea.value;
   const query = findInput.value;
 
@@ -2901,7 +2931,7 @@ function handleSecondaryEditorInput() {
   note.content = secondaryEditorTextarea.value;
   note.updatedAt = Date.now();
   updateCursorPositionForText(secondaryEditorTextarea);
-  updateSecondaryEditorBackdrop();
+  secondaryEditorRenderScheduler.schedule();
 
   // Auto-rename if not locked
   if (!note.isTitleLocked) {
