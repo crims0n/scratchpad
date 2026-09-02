@@ -1,34 +1,32 @@
-# Scratchpad Beta v0.5.5
+# Scratchpad Beta v0.5.6
 
 ## Highlights
 
-- Turn on subtle source line numbers from **Scratchpad menu → Appearance → Line numbers**. They are off by default, remembered between launches, and available in both editor panes.
-- Right-click either Markdown editor and choose **Insert** to add a starter table, task list, fenced code block, inline link, or reference-style link.
-- Use the reorganized Scratchpad menu, now grouped into **Note**, **Appearance**, **Workspace**, and **Help**, with live theme and workspace values.
-- Open **About Scratchpad** for the installed version plus direct repository and release-note links.
+- Find and Replace now keeps correct match positions after Unicode characters whose lowercase form changes length, including `İ` in words such as `İstanbul`.
+- Replace and Replace All now participate in the editor's native undo history. A Replace All operation is grouped into one edit and can be reversed with one undo.
+- Editor backdrop rendering is coalesced to one update per animation frame during normal typing, reducing repeated full-document work on rapid input.
+- Spreadsheet paste conversion is more conservative: ragged rows and tab-indented or mixed-indentation text remain unchanged instead of becoming malformed Markdown tables.
 
-## Markdown editing refinements
+## Find and Replace reliability
 
-- Inserted templates use one editor transaction and select their first useful placeholder, so they remain easy to replace and undo.
-- Table navigation now recognizes every contiguous data row, including rows beyond the first one after the separator.
-- Enter in the final cell of a populated table row creates another correctly shaped row.
-- Enter or Backspace on an empty generated table row exits to an explicit normal line instead of creating another separator or trapping the caret.
-- The task-list template starts with one task. Enter continues with an unchecked item; Enter on the empty item removes its marker and exits to a normal line.
-- Empty list, table, and blockquote exits retain an explicit blank source line for stable caret placement.
+- Case-insensitive literal searches now run against the original note, so highlights, line and column details, result snippets, and replacement ranges share the same offsets.
+- Literal Find continues to treat regular-expression characters such as brackets as ordinary text unless Regex mode is enabled.
+- Replace actions use the same editor transaction path as Markdown autocomplete, preserve focus in the Find controls, and flow through normal saving and preview updates.
 
-## Interface polish and fixes
+## Editor performance and paste safety
 
-- The Scratchpad menu uses consistent sentence-case labels, aligned controls, logical sections, and no trailing ellipses.
-- The menu shows the active color theme and either **Local notes** or the current workspace filename.
-- Closing Dual-Note Split View immediately clears its temporary “enabled” notification.
-- Task-list previews now show the checkbox without a redundant bullet marker.
+- Rapid editor input schedules one syntax backdrop render with the newest text instead of rebuilding it for every input event.
+- Hidden line-number gutters remain empty while line numbers are disabled, and stale gutter rows are removed when the setting is turned off.
+- Preview Find highlighting avoids unnecessary document scans when no preview highlights have been rendered.
+- Tab-separated paste converts only rectangular ranges with the same number of columns on every row. Code-like indentation is preserved, while a normal spreadsheet row may still contain an empty first cell.
+- The bundled Marked parser is updated from 18.0.10 to 18.0.11.
 
 ## Compatibility
 
 - Existing notes and workspace files require no migration.
-- Line numbers are opt-in and do not alter note content, selection, native editing, or undo history.
-- Existing appearance preferences remain intact.
-- Scratchpad remains fully offline and does not load remote syntax-highlighting or image resources.
+- Existing preferences and Markdown editing settings remain intact.
+- Find, Replace, and paste fixes apply in place without changing stored note formats.
+- Scratchpad remains fully offline; the Marked maintenance update is bundled with the application.
 
 ## Beta notice
 

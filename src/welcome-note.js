@@ -19,7 +19,7 @@ Scratchpad is a fast, local-first place for notes, snippets, and Markdown. Every
 - Parentheses, brackets, braces, quotes, and inline backticks pair automatically. Select text before typing \`*\`, \`_\`, \`~\`, or a backtick to wrap it.
 - Finish a Markdown table header with \`Enter\`, then use \`Tab\` and \`Shift+Tab\` to move between cells. Enter in the final cell adds a row; Enter or Backspace on an empty row exits the table.
 - Right-click in the editor and choose **Insert** for starter tables, task lists, code blocks, and links.
-- Paste a URL over selected text to make a link, or paste spreadsheet cells to make a table.
+- Paste a URL over selected text to make a link, or paste a rectangular spreadsheet range to make a table. Tab-indented text stays literal.
 
 ## Find and organize
 - Search scratchpad titles and content from the sidebar.
