@@ -253,12 +253,17 @@ function escapeTableCell(text) {
   return text.trim().replaceAll("|", "\\|");
 }
 
+function hasOnlyIndentationBeforeFirstTab(line) {
+  const firstTab = line.indexOf("\t");
+  return firstTab !== -1 && line.slice(0, firstTab).trim() === "";
+}
+
 function getTsvTable(text) {
   const lines = text.replace(/\r\n?/g, "\n").replace(/\n$/, "").split("\n");
   if (
     lines.length < 2 ||
     !lines.every((line) => line.includes("\t")) ||
-    lines.every((line) => line.startsWith("\t"))
+    lines.every(hasOnlyIndentationBeforeFirstTab)
   ) return null;
 
   const rows = lines.map((line) => line.split("\t").map(escapeTableCell));

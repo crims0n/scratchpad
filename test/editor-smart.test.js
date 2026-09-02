@@ -83,10 +83,19 @@ test("pasting a spreadsheet range creates a Markdown table", () => {
     selectionStart: table.length,
     selectionEnd: table.length
   });
+
+  const tableWithEmptyCell = "| Name | Score |\n| --- | --- |\n|  | 10 |";
+  assert.deepEqual(getMarkdownPasteEdit("", 0, 0, "Name\tScore\n\t10"), {
+    value: tableWithEmptyCell,
+    selectionStart: tableWithEmptyCell.length,
+    selectionEnd: tableWithEmptyCell.length
+  });
 });
 
 test("pasting tab-indented code or ragged rows leaves the text unchanged", () => {
   assert.equal(getMarkdownPasteEdit("", 0, 0, "def f():\n\treturn 42"), null);
   assert.equal(getMarkdownPasteEdit("", 0, 0, "\tfoo\n\tbar"), null);
+  assert.equal(getMarkdownPasteEdit("", 0, 0, " \tfoo\n \tbar"), null);
+  assert.equal(getMarkdownPasteEdit("", 0, 0, "  \tfoo\n\tbar"), null);
   assert.equal(getMarkdownPasteEdit("", 0, 0, "Name\tScore\nAda"), null);
 });
