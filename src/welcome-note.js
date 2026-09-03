@@ -10,6 +10,7 @@ Scratchpad is a fast, local-first place for notes, snippets, and Markdown. Every
 - Create a scratchpad with \`Cmd/Ctrl+N\` and find your notes from the sidebar.
 - Switch between **Edit**, **Split**, and **Preview** to work with rendered Markdown.
 - Open a second note beside this one with \`Cmd/Ctrl+\\\`.
+- With two notes open, choose **Compare** in the toolbar to highlight removed text on the left and added text on the right as you edit.
 - Enter Focus Mode with \`Cmd/Ctrl+Shift+F\` when you want fewer distractions.
 
 ## Markdown that helps as you type
@@ -23,7 +24,9 @@ Scratchpad is a fast, local-first place for notes, snippets, and Markdown. Every
 
 ## Find and organize
 - Search scratchpad titles and content from the sidebar.
-- Pin important scratchpads to keep them at the top, then drag to reorder them.
+- Use the folder button in the sidebar to group related scratchpads. Folders collapse to keep the sidebar compact; notes without a folder remain at the top level.
+- Drag a note onto a folder to move it, or right-click a folder for note and folder actions.
+- Pin important scratchpads to keep them at the very top of the sidebar without placing them inside a folder. Unpinning returns a scratchpad to its folder.
 - Use \`Cmd/Ctrl+F\` to find text or \`Cmd/Ctrl+H\` to find and replace. Find Results can search one scratchpad or all of them.
 
 ## Make it yours

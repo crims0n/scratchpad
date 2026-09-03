@@ -35,5 +35,5 @@ test("the workspace is not left active after the failure", () => {
 });
 
 test("nothing is written to the unavailable workspace", () => {
-  assert.equal(app.invocations.some(({ command }) => command === "save_notes_db"), false);
+  assert.equal(app.invocations.some(({ command }) => command === "save_workspace_db"), false);
 });

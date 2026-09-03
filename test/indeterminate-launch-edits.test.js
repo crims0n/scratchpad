@@ -48,6 +48,7 @@ test("the indeterminate launch never touches a workspace", () => {
   assert.equal(commands.includes("load_db_notes"), false);
   assert.equal(commands.includes("save_note_db"), false);
   assert.equal(commands.includes("save_notes_db"), false);
+  assert.equal(commands.includes("save_workspace_db"), false);
 });
 
 // --- Launch 2: the preference reads, the workspace opens ---

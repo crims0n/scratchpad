@@ -29,7 +29,7 @@ const app = await bootApp({
       workspaceWrites.push(note);
       return null;
     },
-    save_notes_db: ({ notes }) => {
+    save_workspace_db: ({ notes }) => {
       workspaceNotes = notes;
       return null;
     }

@@ -5,7 +5,9 @@ import test from "node:test";
 
 import {
   canMoveNote,
+  getNoteMoveTargetIndex,
   insertNoteBelowPinned,
+  moveNoteInGroup,
   normalizePinnedNoteOrder,
   setNotePinned
 } from "../src/note-order.js";
@@ -41,4 +43,14 @@ test("new notes and manual moves stay on their side of the pin boundary", () => 
   assert.equal(canMoveNote(notes, 0, 1), false);
   assert.equal(canMoveNote(notes, 1, -1), false);
   assert.equal(canMoveNote(notes, 1, 1), true);
+});
+
+test("manual note movement skips notes belonging to other folders", () => {
+  const notes = [
+    { id: "work-one", folderId: "work" },
+    { id: "personal", folderId: "personal" },
+    { id: "work-two", folderId: "work" }
+  ];
+  assert.equal(getNoteMoveTargetIndex(notes, 0, 1), 2);
+  assert.deepEqual(ids(moveNoteInGroup(notes, "work-one", 1)), ["personal", "work-two", "work-one"]);
 });

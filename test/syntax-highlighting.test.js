@@ -43,6 +43,27 @@ test("editor highlighting composes safely with find matches and can be disabled"
   assert.equal(dom.window.document.querySelector("div").textContent, `${text}\n`);
 });
 
+test("editor highlighting composes diff decorations with syntax and find matches", () => {
+  const text = "# changed heading";
+  const html = renderEditorBackdrop(text, {
+    matches: [{ start: 2, end: 9 }],
+    activeMatchIndex: 0,
+    decorations: [
+      { start: 0, end: text.length, className: "diff-line-removed" },
+      { start: 2, end: 9, className: "diff-text-removed" },
+      { start: 0, end: 2, className: 'unsafe\" onclick="alert(1)' }
+    ]
+  });
+  const dom = new JSDOM(`<div id="backdrop">${html}</div>`);
+  const backdrop = dom.window.document.getElementById("backdrop");
+
+  assert.equal(backdrop.textContent, `${text}\n`);
+  assert.equal(backdrop.querySelector("mark.active-match").textContent, "changed");
+  assert.equal(backdrop.querySelector(".syntax-heading").textContent, "changed");
+  assert.equal(backdrop.querySelector(".diff-text-removed").textContent, "changed");
+  assert.doesNotMatch(html, /onclick/);
+});
+
 test("preview highlighting only processes supported, explicitly labeled fences", () => {
   const dom = new JSDOM(`
     <main>

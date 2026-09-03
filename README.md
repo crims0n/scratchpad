@@ -33,8 +33,8 @@ See [release notes](RELEASE_NOTES.md) for highlights, compatibility details, and
 - Markdown-aware continuation for lists, task lists, blockquotes, code fences, and tables
 - Pair completion, selection wrapping, and smart URL or spreadsheet paste
 - Right-click Markdown starter templates for tables, task lists, code blocks, and links
-- Two-note side-by-side editing with drag-to-split
-- Sidebar search, configurable note previews, pinned notes, manual note reordering, word counts, and distraction-free Focus Mode
+- Two-note side-by-side editing with drag-to-split and live source comparison
+- Top-level pinned notes, collapsible sidebar folders with drag-and-drop organization, search, configurable note previews, manual ordering, word counts, and distraction-free Focus Mode
 - Find and replace with case-sensitive, exact-match, and regular-expression modes, live highlighting, and results across one or every scratchpad
 - Native text-file import and Markdown export
 - Copy as Markdown or sanitized rendered HTML
@@ -45,7 +45,7 @@ See [release notes](RELEASE_NOTES.md) for highlights, compatibility details, and
 
 ## Storage and privacy
 
-By default, notes stay in the desktop webview's local storage. Scratchpad also supports optional portable workspace files for a durable collection of notes, their pinned state, and sidebar order. Workspace files use SQLite internally and may have a `.db` or `.sqlite` extension.
+By default, notes and folders stay in the desktop webview's local storage. Scratchpad also supports optional portable workspace files for a durable collection of notes, folders, pinned state, and sidebar order. Workspace files use SQLite internally and may have a `.db` or `.sqlite` extension. Notes without a folder remain at the top level of the sidebar; deleting a folder returns its notes there rather than deleting them.
 
 Local notes and workspace notes are two separate collections. While a workspace is connected, changes are written to that workspace and the local collection is left exactly as it was, so disconnecting always returns the notes you had before. Connecting an empty workspace seeds it with the notes already available in the app; connecting a workspace that already has notes switches to those without touching your local ones.
 
@@ -96,6 +96,8 @@ Scratchpad keeps its Markdown assistance lightweight and works directly in the n
 Syntax highlighting is enabled by default. Open **Scratchpad menu → Appearance → Syntax highlighting** to toggle both the editor’s Markdown coloring and language-aware Preview highlighting. Preview code highlighting requires a supported language after the opening fence, such as <code>```javascript</code>; unknown and unlabeled fences remain plain code.
 
 Source line numbers are off by default. Open **Scratchpad menu → Appearance → Line numbers** to show a subtle, theme-aware gutter in both editor panes; the preference is remembered between launches.
+
+Open two notes side by side, then choose **Compare** in the toolbar to highlight source differences without changing either note. Removed text is marked on the left, added text on the right, and related words receive contiguous substring detail. The toolbar reports the total number of changed lines across both notes. Comparison updates as either note changes and turns off when split view closes.
 
 ## Themes
 
@@ -169,6 +171,7 @@ Production distribution will also require platform signing and, on macOS, notari
 | Frontend | Vanilla HTML, CSS, and JavaScript |
 | Markdown | Bundled Marked parser with an allowlist sanitizer |
 | Syntax highlighting | Bundled Highlight.js for explicitly labeled fenced code blocks |
+| Note comparison | Bundled jsdiff with line and word-level source comparison |
 | External links | `tauri-plugin-opener`, scoped to `http`, `https`, and `mailto` |
 | Local persistence | Desktop webview local storage |
 | Workspace persistence | Bundled SQLite through `rusqlite` |
@@ -181,4 +184,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow. Please repo
 
 ## License
 
-Scratchpad is free software licensed under [GPL-3.0-or-later](LICENSE). The bundled Marked parser is provided under the MIT License, and Highlight.js under the BSD 3-Clause License; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Scratchpad is free software licensed under [GPL-3.0-or-later](LICENSE). The bundled Marked parser is provided under the MIT License; Highlight.js and jsdiff are provided under the BSD 3-Clause License. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

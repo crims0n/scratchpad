@@ -7,13 +7,17 @@ import { renderEditorLineNumbers } from "../src/editor-line-numbers.js";
 import { bootApp } from "./helpers/app-harness.js";
 
 test("line number rows preserve source lines and escape their mirror text", () => {
-  const html = renderEditorLineNumbers("first\n\n<b>third</b>\n");
+  const html = renderEditorLineNumbers("first\n\n<b>third</b>\n", {
+    changedLines: [1, 2],
+    changeType: "removed"
+  });
 
   assert.equal((html.match(/editor-line-number-row/g) ?? []).length, 4);
   assert.match(html, /data-line-number="1">first/);
   assert.match(html, /data-line-number="2">&#8203;/);
   assert.match(html, /data-line-number="3">&lt;b&gt;third&lt;\/b&gt;/);
   assert.match(html, /data-line-number="4">&#8203;/);
+  assert.equal((html.match(/editor-line-number-diff-removed/g) ?? []).length, 2);
   assert.doesNotMatch(html, /<b>third<\/b>/);
 });
 

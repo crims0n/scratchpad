@@ -10,6 +10,8 @@
   <script src="vendor/marked.umd.js"></script>
   <!-- Offline-ready fenced-code syntax highlighter -->
   <script src="vendor/highlight.min.js"></script>
+  <!-- Offline-ready note comparison engine -->
+  <script src="vendor/diff.min.js"></script>
   <script type="module" src="main.js" defer></script>
 </head>
 <body>
@@ -23,11 +25,19 @@
           </svg>
           <span>Scratchpad</span>
         </div>
-        <button class="icon-btn" id="new-note-btn" title="Create new scratch (Cmd+N)" aria-label="Create new scratch">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-        </button>
+        <div class="sidebar-header-actions">
+          <button class="icon-btn" id="new-folder-btn" title="Create folder" aria-label="Create folder">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 6.75A1.75 1.75 0 014.75 5h4l2 2h8.5A1.75 1.75 0 0121 8.75v8.5A1.75 1.75 0 0119.25 19H4.75A1.75 1.75 0 013 17.25V6.75z" />
+              <path stroke-linecap="round" d="M12 10v6m-3-3h6" />
+            </svg>
+          </button>
+          <button class="icon-btn" id="new-note-btn" title="Create new scratch (Cmd+N)" aria-label="Create new scratch">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div class="search-box">
@@ -54,7 +64,7 @@
     <main class="workspace" id="workspace">
       <!-- Top Bar / Header -->
       <header class="topbar">
-        <div class="topbar-left">
+        <div class="topbar-left" id="topbar-left">
           <button class="icon-btn toggle-sidebar-btn" id="toggle-sidebar" title="Toggle Sidebar (Cmd+B)" aria-label="Toggle sidebar" aria-expanded="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7" />
@@ -71,6 +81,14 @@
         </div>
 
         <div class="topbar-right">
+          <button class="icon-btn compare-notes-btn" id="compare-notes-btn" title="Compare note contents" aria-label="Compare note contents" aria-pressed="false" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h11M5 7h.01M8 12h8M5 12h.01M8 17h11M5 17h.01" />
+            </svg>
+            <span>Compare</span>
+            <span class="compare-notes-count" id="compare-notes-count" aria-live="polite" hidden></span>
+          </button>
+
           <!-- Split Note View Toggle -->
           <button class="icon-btn" id="split-note-btn" title="Toggle Dual Note Split View (Cmd+\)" aria-label="Toggle two-note split view" aria-pressed="false">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -179,6 +197,7 @@
       <div class="panes-container" id="panes-container">
         <!-- Primary Pane -->
         <div class="pane-wrapper active-pane" id="primary-pane-wrapper">
+          <div class="primary-pane-header" id="primary-pane-header" style="display: none;"></div>
           <div class="editor-pane" id="editor-pane">
             <!-- Find & Replace Bar -->
             <div class="find-bar" id="find-bar">
@@ -270,8 +289,8 @@
         <!-- Secondary Pane (Split Note View) -->
         <div class="pane-wrapper secondary-pane-wrapper" id="secondary-pane-wrapper" style="display: none;">
           <div class="secondary-pane-header">
-            <select class="secondary-note-select" id="secondary-note-select" title="Switch Secondary Note" aria-label="Secondary scratchpad"></select>
             <input type="text" class="note-title-input secondary-title-input" id="secondary-note-title" aria-label="Secondary scratchpad title" placeholder="Untitled Scratchpad" autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
+            <select class="secondary-note-select" id="secondary-note-select" title="Switch Secondary Note" aria-label="Secondary scratchpad"></select>
             <button class="icon-btn close-secondary-btn" id="close-secondary-btn" title="Close Split View (Cmd+\)" aria-label="Close split view">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
@@ -371,6 +390,29 @@
       <span>Move Down</span>
       <span class="shortcut-hint">Alt+↓</span>
     </button>
+    <div class="context-menu-submenu" id="ctx-move-folder-group" style="display: none;">
+      <button class="context-menu-item" id="ctx-move-folder" role="menuitem" aria-haspopup="menu" aria-expanded="false">
+        <span>Move to Folder</span>
+        <span class="context-menu-caret" aria-hidden="true">›</span>
+      </button>
+      <div class="context-menu-submenu-content" id="ctx-move-folder-menu" role="menu" aria-label="Move note to folder"></div>
+    </div>
+    <button class="context-menu-item" id="ctx-folder-new-note" role="menuitem" style="display: none;">
+      <span>New Note in Folder</span>
+    </button>
+    <button class="context-menu-item" id="ctx-folder-rename" role="menuitem" style="display: none;">
+      <span>Rename Folder</span>
+    </button>
+    <div class="context-menu-divider" id="ctx-folder-divider" style="display: none;"></div>
+    <button class="context-menu-item" id="ctx-folder-move-up" role="menuitem" style="display: none;">
+      <span>Move Folder Up</span>
+    </button>
+    <button class="context-menu-item" id="ctx-folder-move-down" role="menuitem" style="display: none;">
+      <span>Move Folder Down</span>
+    </button>
+    <button class="context-menu-item danger" id="ctx-folder-delete" role="menuitem" style="display: none;">
+      <span>Delete Folder</span>
+    </button>
   </div>
 
   <!-- Help & Reference Modal -->
@@ -393,6 +435,7 @@
         <div class="help-pane active" id="pane-shortcuts" role="tabpanel" aria-labelledby="tab-shortcuts-btn">
           <div class="shortcuts-section">
             <h4 class="shortcuts-heading">Workspace & Notes</h4>
+            <p class="shortcuts-note">Use the folder button in the sidebar to create collapsible folders. Pinned notes stay at the very top as ordinary notes, while unpinned notes without a folder remain below the folders. Drag notes onto folders to move them, or right-click a folder to add a note, rename, reorder, or safely remove it. Deleting a folder returns its notes to the top level.</p>
             <div class="shortcut-row">
               <span class="shortcut-desc">New Scratchpad</span>
               <div class="shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>N</kbd></div>
@@ -405,6 +448,7 @@
               <span class="shortcut-desc">Dual-Note Split View (Side-by-Side)</span>
               <div class="shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>\</kbd></div>
             </div>
+            <p class="shortcuts-note">When two notes are open side by side, choose <strong>Compare</strong> in the toolbar to highlight removed source text on the left and added source text on the right. The comparison updates live and turns off when split view closes.</p>
             <div class="shortcut-row">
               <span class="shortcut-desc">Move Active Note Up in Sidebar</span>
               <div class="shortcut-keys"><kbd>Alt</kbd><span class="key-plus">+</span><kbd>↑</kbd></div>
@@ -638,10 +682,11 @@ function hello() {
       </div>
 
       <div class="help-modal-body about-modal-body">
-        <p class="about-description">A lightweight, offline-first Markdown scratchpad for the desktop.</p>
+        <p class="about-description">Scratchpad is an open-source, local-first Markdown editor for notes, drafts, and code snippets. It pairs a focused desktop writing experience with live preview, flexible organization, and Markdown-aware editing tools.</p>
+        <p class="about-description">Built for macOS, Windows, and Linux, Scratchpad works without an account, cloud service, analytics, or telemetry. Your notes remain on your device unless you choose to move or share them.</p>
         <div class="about-version-row">
           <span>Program version</span>
-          <strong id="about-version">0.5.6</strong>
+          <strong id="about-version">0.6.0</strong>
         </div>
         <nav class="about-links" aria-label="Scratchpad project links">
           <a href="https://github.com/crims0n/scratchpad" target="_blank" rel="noopener noreferrer">Repository <span aria-hidden="true">↗</span></a>

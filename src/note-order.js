@@ -29,7 +29,35 @@ export function setNotePinned(notes, noteId, pinned) {
 }
 
 export function canMoveNote(notes, noteIndex, offset) {
-  const targetIndex = noteIndex + offset;
-  if (noteIndex < 0 || targetIndex < 0 || targetIndex >= notes.length) return false;
-  return isNotePinned(notes[noteIndex]) === isNotePinned(notes[targetIndex]);
+  return getNoteMoveTargetIndex(notes, noteIndex, offset) !== -1;
+}
+
+function noteOrderGroup(note) {
+  if (isNotePinned(note)) return "__pinned__";
+  return typeof note?.folderId === "string" && note.folderId ? note.folderId : "__unfiled__";
+}
+
+export function getNoteMoveTargetIndex(notes, noteIndex, offset) {
+  if (noteIndex < 0 || noteIndex >= notes.length || ![-1, 1].includes(offset)) return -1;
+  const group = noteOrderGroup(notes[noteIndex]);
+
+  for (
+    let candidateIndex = noteIndex + offset;
+    candidateIndex >= 0 && candidateIndex < notes.length;
+    candidateIndex += offset
+  ) {
+    if (noteOrderGroup(notes[candidateIndex]) === group) return candidateIndex;
+  }
+  return -1;
+}
+
+export function moveNoteInGroup(notes, noteId, offset) {
+  const noteIndex = notes.findIndex((note) => note.id === noteId);
+  const targetIndex = getNoteMoveTargetIndex(notes, noteIndex, offset);
+  if (targetIndex === -1) return notes;
+
+  const updated = [...notes];
+  const [note] = updated.splice(noteIndex, 1);
+  updated.splice(targetIndex, 0, note);
+  return updated;
 }

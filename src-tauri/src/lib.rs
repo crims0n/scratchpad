@@ -88,9 +88,17 @@ struct Note {
     is_title_locked: bool,
     #[serde(default)]
     is_pinned: bool,
+    #[serde(default)]
+    folder_id: Option<String>,
 }
 
-fn ensure_notes_table(conn: &rusqlite::Connection) -> Result<(), String> {
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+struct Folder {
+    id: String,
+    name: String,
+}
+
+fn ensure_workspace_schema(conn: &rusqlite::Connection) -> Result<(), String> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS notes (
             id TEXT PRIMARY KEY,
@@ -99,6 +107,7 @@ fn ensure_notes_table(conn: &rusqlite::Connection) -> Result<(), String> {
             updatedAt INTEGER NOT NULL,
             isTitleLocked INTEGER NOT NULL,
             isPinned INTEGER NOT NULL DEFAULT 0,
+            folderId TEXT,
             sortOrder INTEGER NOT NULL DEFAULT 0
         )",
         [],
@@ -140,6 +149,31 @@ fn ensure_notes_table(conn: &rusqlite::Connection) -> Result<(), String> {
         )
         .map_err(|e| e.to_string())?;
     }
+
+    let has_folder_id: bool = conn
+        .query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM pragma_table_info('notes') WHERE name = 'folderId'
+            )",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    if !has_folder_id {
+        conn.execute("ALTER TABLE notes ADD COLUMN folderId TEXT", [])
+            .map_err(|e| e.to_string())?;
+    }
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS folders (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            sortOrder INTEGER NOT NULL DEFAULT 0
+        )",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -257,11 +291,11 @@ fn select_db_file() -> Result<Option<String>, String> {
 #[tauri::command]
 fn load_db_notes(db_path: String) -> Result<Vec<Note>, String> {
     let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
-    ensure_notes_table(&conn)?;
+    ensure_workspace_schema(&conn)?;
 
     let mut stmt = conn
         .prepare(
-            "SELECT id, title, content, updatedAt, isTitleLocked, isPinned
+            "SELECT id, title, content, updatedAt, isTitleLocked, isPinned, folderId
              FROM notes
              ORDER BY sortOrder ASC, updatedAt DESC",
         )
@@ -278,6 +312,7 @@ fn load_db_notes(db_path: String) -> Result<Vec<Note>, String> {
                 updated_at: row.get(3)?,
                 is_title_locked: is_title_locked_int != 0,
                 is_pinned: is_pinned_int != 0,
+                folder_id: row.get(6)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -292,18 +327,19 @@ fn load_db_notes(db_path: String) -> Result<Vec<Note>, String> {
 #[tauri::command]
 fn save_note_db(db_path: String, note: Note, sort_order: i64) -> Result<(), String> {
     let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
-    ensure_notes_table(&conn)?;
+    ensure_workspace_schema(&conn)?;
 
     conn.execute(
         "INSERT INTO notes (
-            id, title, content, updatedAt, isTitleLocked, isPinned, sortOrder
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            id, title, content, updatedAt, isTitleLocked, isPinned, folderId, sortOrder
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
          ON CONFLICT(id) DO UPDATE SET
             title = excluded.title,
             content = excluded.content,
             updatedAt = excluded.updatedAt,
             isTitleLocked = excluded.isTitleLocked,
             isPinned = excluded.isPinned,
+            folderId = excluded.folderId,
             sortOrder = excluded.sortOrder",
         rusqlite::params![
             note.id,
@@ -312,6 +348,7 @@ fn save_note_db(db_path: String, note: Note, sort_order: i64) -> Result<(), Stri
             note.updated_at,
             if note.is_title_locked { 1 } else { 0 },
             if note.is_pinned { 1 } else { 0 },
+            note.folder_id,
             sort_order,
         ],
     )
@@ -323,7 +360,7 @@ fn save_note_db(db_path: String, note: Note, sort_order: i64) -> Result<(), Stri
 #[tauri::command]
 fn save_notes_db(db_path: String, notes: Vec<Note>) -> Result<(), String> {
     let mut conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
-    ensure_notes_table(&conn)?;
+    ensure_workspace_schema(&conn)?;
 
     let transaction = conn.transaction().map_err(|e| e.to_string())?;
     transaction
@@ -334,8 +371,8 @@ fn save_notes_db(db_path: String, notes: Vec<Note>) -> Result<(), String> {
         let mut statement = transaction
             .prepare(
                 "INSERT INTO notes (
-                    id, title, content, updatedAt, isTitleLocked, isPinned, sortOrder
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    id, title, content, updatedAt, isTitleLocked, isPinned, folderId, sortOrder
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             )
             .map_err(|e| e.to_string())?;
 
@@ -348,6 +385,112 @@ fn save_notes_db(db_path: String, notes: Vec<Note>) -> Result<(), String> {
                     note.updated_at,
                     if note.is_title_locked { 1 } else { 0 },
                     if note.is_pinned { 1 } else { 0 },
+                    note.folder_id,
+                    sort_order as i64,
+                ])
+                .map_err(|e| e.to_string())?;
+        }
+    }
+
+    transaction.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn load_db_folders(db_path: String) -> Result<Vec<Folder>, String> {
+    let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
+    ensure_workspace_schema(&conn)?;
+
+    let mut stmt = conn
+        .prepare("SELECT id, name FROM folders ORDER BY sortOrder ASC, name COLLATE NOCASE ASC")
+        .map_err(|e| e.to_string())?;
+    let folder_iter = stmt
+        .query_map([], |row| {
+            Ok(Folder {
+                id: row.get(0)?,
+                name: row.get(1)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut folders = Vec::new();
+    for folder in folder_iter {
+        folders.push(folder.map_err(|e| e.to_string())?);
+    }
+    Ok(folders)
+}
+
+#[tauri::command]
+fn save_folders_db(db_path: String, folders: Vec<Folder>) -> Result<(), String> {
+    let mut conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
+    ensure_workspace_schema(&conn)?;
+
+    let transaction = conn.transaction().map_err(|e| e.to_string())?;
+    transaction
+        .execute("DELETE FROM folders", [])
+        .map_err(|e| e.to_string())?;
+
+    {
+        let mut statement = transaction
+            .prepare("INSERT INTO folders (id, name, sortOrder) VALUES (?1, ?2, ?3)")
+            .map_err(|e| e.to_string())?;
+        for (sort_order, folder) in folders.into_iter().enumerate() {
+            statement
+                .execute(rusqlite::params![folder.id, folder.name, sort_order as i64])
+                .map_err(|e| e.to_string())?;
+        }
+    }
+
+    transaction.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn save_workspace_db(
+    db_path: String,
+    notes: Vec<Note>,
+    folders: Vec<Folder>,
+) -> Result<(), String> {
+    let mut conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
+    ensure_workspace_schema(&conn)?;
+
+    let transaction = conn.transaction().map_err(|e| e.to_string())?;
+    transaction
+        .execute("DELETE FROM notes", [])
+        .map_err(|e| e.to_string())?;
+    transaction
+        .execute("DELETE FROM folders", [])
+        .map_err(|e| e.to_string())?;
+
+    {
+        let mut statement = transaction
+            .prepare("INSERT INTO folders (id, name, sortOrder) VALUES (?1, ?2, ?3)")
+            .map_err(|e| e.to_string())?;
+        for (sort_order, folder) in folders.into_iter().enumerate() {
+            statement
+                .execute(rusqlite::params![folder.id, folder.name, sort_order as i64])
+                .map_err(|e| e.to_string())?;
+        }
+    }
+
+    {
+        let mut statement = transaction
+            .prepare(
+                "INSERT INTO notes (
+                    id, title, content, updatedAt, isTitleLocked, isPinned, folderId, sortOrder
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            )
+            .map_err(|e| e.to_string())?;
+        for (sort_order, note) in notes.into_iter().enumerate() {
+            statement
+                .execute(rusqlite::params![
+                    note.id,
+                    note.title,
+                    note.content,
+                    note.updated_at,
+                    if note.is_title_locked { 1 } else { 0 },
+                    if note.is_pinned { 1 } else { 0 },
+                    note.folder_id,
                     sort_order as i64,
                 ])
                 .map_err(|e| e.to_string())?;
@@ -381,8 +524,11 @@ pub fn run() {
             import_file_native,
             select_db_file,
             load_db_notes,
+            load_db_folders,
             save_note_db,
             save_notes_db,
+            save_folders_db,
+            save_workspace_db,
             show_alert_dialog
         ])
         .run(tauri::generate_context!())
@@ -413,6 +559,14 @@ mod tests {
             updated_at,
             is_title_locked: false,
             is_pinned: false,
+            folder_id: None,
+        }
+    }
+
+    fn folder(id: &str, name: &str) -> Folder {
+        Folder {
+            id: id.to_string(),
+            name: name.to_string(),
         }
     }
 
@@ -481,6 +635,58 @@ mod tests {
     }
 
     #[test]
+    fn saves_folders_and_note_assignments_in_sidebar_order() {
+        let path = temporary_db_path("folder-workspace");
+        let db_path = path.to_string_lossy().into_owned();
+        let folders = vec![folder("work", "Work"), folder("personal", "Personal")];
+        save_folders_db(db_path.clone(), folders).expect("folders should save");
+
+        let mut assigned = note("assigned", "in work", 1);
+        assigned.folder_id = Some("work".to_string());
+        save_notes_db(db_path.clone(), vec![assigned]).expect("assigned note should save");
+
+        let loaded_folders = load_db_folders(db_path.clone()).expect("folders should load");
+        let loaded_notes = load_db_notes(db_path.clone()).expect("notes should load");
+        assert_eq!(loaded_folders[0].id, "work");
+        assert_eq!(loaded_folders[1].name, "Personal");
+        assert_eq!(loaded_notes[0].folder_id.as_deref(), Some("work"));
+
+        std::fs::remove_file(path).expect("temporary database should be removable");
+    }
+
+    #[test]
+    fn workspace_structure_save_is_atomic() {
+        let path = temporary_db_path("atomic-workspace");
+        let db_path = path.to_string_lossy().into_owned();
+        let mut original_note = note("original", "keep me", 1);
+        original_note.folder_id = Some("original-folder".to_string());
+        save_workspace_db(
+            db_path.clone(),
+            vec![original_note],
+            vec![folder("original-folder", "Original")],
+        )
+        .expect("initial workspace should save");
+
+        let failed = save_workspace_db(
+            db_path.clone(),
+            vec![note("replacement", "must roll back", 2)],
+            vec![folder("duplicate", "One"), folder("duplicate", "Two")],
+        );
+        assert!(failed.is_err());
+
+        let loaded_notes = load_db_notes(db_path.clone()).expect("original notes should remain");
+        let loaded_folders =
+            load_db_folders(db_path.clone()).expect("original folders should remain");
+        assert_eq!(loaded_notes.len(), 1);
+        assert_eq!(loaded_notes[0].id, "original");
+        assert_eq!(loaded_notes[0].content, "keep me");
+        assert_eq!(loaded_folders.len(), 1);
+        assert_eq!(loaded_folders[0].name, "Original");
+
+        std::fs::remove_file(path).expect("temporary database should be removable");
+    }
+
+    #[test]
     fn migrates_existing_databases_without_ordering_columns() {
         let path = temporary_db_path("migration");
         let db_path = path.to_string_lossy().into_owned();
@@ -523,6 +729,26 @@ mod tests {
             )
             .expect("pin migration should be queryable");
         assert!(has_is_pinned);
+        let has_folder_id: bool = connection
+            .query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM pragma_table_info('notes') WHERE name = 'folderId'
+                )",
+                [],
+                |row| row.get(0),
+            )
+            .expect("folder migration should be queryable");
+        assert!(has_folder_id);
+        let has_folders_table: bool = connection
+            .query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'folders'
+                )",
+                [],
+                |row| row.get(0),
+            )
+            .expect("folders table should be queryable");
+        assert!(has_folders_table);
         drop(connection);
 
         std::fs::remove_file(path).expect("temporary database should be removable");

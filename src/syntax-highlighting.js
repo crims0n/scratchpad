@@ -9,6 +9,13 @@ const SYNTAX_CLASSES = new Set([
   "syntax-punctuation"
 ]);
 
+const DECORATION_CLASSES = new Set([
+  "diff-line-added",
+  "diff-line-removed",
+  "diff-text-added",
+  "diff-text-removed"
+]);
+
 function escapeHTML(value) {
   return String(value)
     .replace(/&/g, "&amp;")
@@ -133,46 +140,80 @@ function normalizeMatches(matches, textLength) {
     .sort((left, right) => left.start - right.start || left.end - right.end);
 }
 
+function normalizeDecorations(decorations, textLength) {
+  return (decorations ?? [])
+    .map((item) => ({
+      start: Math.max(0, Math.min(textLength, Number(item.start))),
+      end: Math.max(0, Math.min(textLength, Number(item.end))),
+      className: item.className
+    }))
+    .filter((item) => (
+      Number.isFinite(item.start) &&
+      Number.isFinite(item.end) &&
+      item.end > item.start &&
+      DECORATION_CLASSES.has(item.className)
+    ))
+    .sort((left, right) => left.start - right.start || left.end - right.end);
+}
+
 export function renderEditorBackdrop(
   text,
-  { syntaxEnabled = true, matches = [], activeMatchIndex = -1 } = {}
+  { syntaxEnabled = true, matches = [], activeMatchIndex = -1, decorations = [] } = {}
 ) {
   const source = String(text ?? "");
   const syntaxClasses = syntaxEnabled
     ? buildSyntaxClasses(source)
     : Array.from({ length: source.length }, () => null);
   const normalizedMatches = normalizeMatches(matches, source.length);
+  const normalizedDecorations = normalizeDecorations(decorations, source.length);
+  const boundaries = new Set([0, source.length]);
+  const decorationStarts = new Map();
+  const decorationEnds = new Map();
+
+  for (let index = 1; index < syntaxClasses.length; index += 1) {
+    if (syntaxClasses[index] !== syntaxClasses[index - 1]) boundaries.add(index);
+  }
+  normalizedMatches.forEach((match) => {
+    boundaries.add(match.start);
+    boundaries.add(match.end);
+  });
+  normalizedDecorations.forEach((item) => {
+    boundaries.add(item.start);
+    boundaries.add(item.end);
+    decorationStarts.set(item.start, [...(decorationStarts.get(item.start) ?? []), item]);
+    decorationEnds.set(item.end, [...(decorationEnds.get(item.end) ?? []), item]);
+  });
+
+  const orderedBoundaries = [...boundaries].sort((left, right) => left - right);
+  const activeDecorations = new Set();
   let matchIndex = 0;
   let html = "";
-  let index = 0;
 
-  while (index < source.length) {
-    while (matchIndex < normalizedMatches.length && normalizedMatches[matchIndex].end <= index) {
+  for (let boundaryIndex = 0; boundaryIndex < orderedBoundaries.length - 1; boundaryIndex += 1) {
+    const start = orderedBoundaries[boundaryIndex];
+    const end = orderedBoundaries[boundaryIndex + 1];
+    decorationEnds.get(start)?.forEach((item) => activeDecorations.delete(item));
+    decorationStarts.get(start)?.forEach((item) => activeDecorations.add(item));
+
+    while (matchIndex < normalizedMatches.length && normalizedMatches[matchIndex].end <= start) {
       matchIndex += 1;
     }
 
     const match = normalizedMatches[matchIndex];
-    const insideMatch = match && match.start <= index && index < match.end;
-    const syntaxClass = syntaxClasses[index];
-    let end = index + 1;
+    const insideMatch = match && match.start <= start && start < match.end;
+    const syntaxClass = syntaxClasses[start];
 
-    while (
-      end < source.length &&
-      syntaxClasses[end] === syntaxClass &&
-      (!insideMatch || end < match.end) &&
-      (insideMatch || !match || end < match.start)
-    ) {
-      end += 1;
-    }
-
-    let fragment = escapeHTML(source.slice(index, end));
+    let fragment = escapeHTML(source.slice(start, end));
     if (syntaxClass) fragment = `<span class="${syntaxClass}">${fragment}</span>`;
     if (insideMatch) {
       const activeClass = match.originalIndex === activeMatchIndex ? ' class="active-match"' : "";
       fragment = `<mark${activeClass}>${fragment}</mark>`;
     }
+    if (activeDecorations.size > 0) {
+      const classNames = [...new Set([...activeDecorations].map((item) => item.className))].join(" ");
+      fragment = `<span class="${classNames}">${fragment}</span>`;
+    }
     html += fragment;
-    index = end;
   }
 
   // The extra line keeps the backdrop's final empty line aligned with a textarea.

@@ -16,6 +16,13 @@ test("a fresh install creates the current welcome guide", async () => {
   assert.match(notes[0].content, /Markdown that helps as you type/);
   assert.match(notes[0].content, /syntax highlighting/);
   assert.match(notes[0].content, /line numbers/);
+  assert.match(notes[0].content, /choose \*\*Compare\*\*/);
+  assert.match(notes[0].content, /removed text on the left and added text on the right/);
   assert.match(notes[0].content, /Right-click in the editor/);
   assert.match(notes[0].content, /Paste a URL over selected text/);
+  assert.match(notes[0].content, /folder button in the sidebar/);
+  assert.match(notes[0].content, /Folders collapse/);
+  assert.match(notes[0].content, /remain at the top level/);
+  assert.match(notes[0].content, /very top of the sidebar without placing them inside a folder/);
+  assert.match(notes[0].content, /Unpinning returns a scratchpad to its folder/);
 });

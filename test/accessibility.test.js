@@ -36,6 +36,8 @@ test("help and reference documents current Markdown editing behavior", () => {
   const markdown = document.getElementById("pane-markdown").textContent;
 
   assert.match(shortcuts, /F1/);
+  assert.match(shortcuts, /Deleting a folder returns its notes to the top level/);
+  assert.match(shortcuts, /Compare.*removed source text on the left and added source text on the right/);
   assert.match(shortcuts, /Jump to List Content \/ Line Start/);
   assert.match(shortcuts, /Continue List, Quote, Fence, or Table/);
   assert.match(shortcuts, /Pasting a URL over selected text makes a link/);

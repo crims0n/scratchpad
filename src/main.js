@@ -1,13 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import {
+  LOCAL_FOLDERS_KEY,
   LOCAL_NOTES_BACKUP_KEY,
   LOCAL_NOTES_KEY,
+  persistFoldersLocally,
   persistNotesLocally,
+  readStoredFolders,
   readStoredNotes
 } from "./storage.js";
 import { renderMarkdown, resolveLinkAction, sanitizeMarkdownHtml } from "./markdown.js";
 import { getNotePreview } from "./note-preview.js";
+import { compareNoteText, emptyNoteComparison } from "./note-compare.js";
 import { findTextMatches } from "./find.js";
 import { getCursorPosition } from "./editor-position.js";
 import { handleEditorTab } from "./editor-indent.js";
@@ -21,11 +25,25 @@ import { createEditorRenderScheduler } from "./editor-render-scheduler.js";
 import { WELCOME_NOTE_CONTENT, WELCOME_NOTE_TITLE } from "./welcome-note.js";
 import {
   canMoveNote,
+  getNoteMoveTargetIndex,
   insertNoteBelowPinned,
   isNotePinned,
+  moveNoteInGroup,
   normalizePinnedNoteOrder,
   setNotePinned
 } from "./note-order.js";
+import {
+  UNFILED_SECTION_ID,
+  isFolderNameAvailable,
+  isReservedFolderName,
+  moveFolder,
+  normalizeFolderName,
+  normalizeFolders,
+  normalizeNoteFolderAssignments,
+  noteSectionId,
+  removeFolder,
+  validFolderId
+} from "./folders.js";
 import {
   DEFAULT_EDITOR_LINE_SPACING,
   DEFAULT_EDITOR_LINE_NUMBERS,
@@ -60,6 +78,7 @@ const appContainer = document.getElementById("app");
 const sidebar = document.getElementById("sidebar");
 const toggleSidebarBtn = document.getElementById("toggle-sidebar");
 const newNoteBtn = document.getElementById("new-note-btn");
+const newFolderBtn = document.getElementById("new-folder-btn");
 const searchInput = document.getElementById("search-input");
 const noteList = document.getElementById("note-list");
 const noteTitleInput = document.getElementById("note-title");
@@ -75,6 +94,9 @@ const saveStatus = document.getElementById("save-status");
 const themeToggleBtn = document.getElementById("theme-toggle");
 const focusBtn = document.getElementById("focus-btn");
 const splitNoteBtn = document.getElementById("split-note-btn");
+const compareNotesBtn = document.getElementById("compare-notes-btn");
+const compareNotesCount = document.getElementById("compare-notes-count");
+const topbarLeft = document.getElementById("topbar-left");
 
 const modeEditBtn = document.getElementById("mode-edit");
 const modeSplitBtn = document.getElementById("mode-split");
@@ -106,6 +128,7 @@ const lineNumbersToggle = document.getElementById("line-numbers-toggle");
 
 const panesContainer = document.getElementById("panes-container");
 const primaryPaneWrapper = document.getElementById("primary-pane-wrapper");
+const primaryPaneHeader = document.getElementById("primary-pane-header");
 const secondaryPaneWrapper = document.getElementById("secondary-pane-wrapper");
 const secondaryNoteSelect = document.getElementById("secondary-note-select");
 const secondaryNoteTitle = document.getElementById("secondary-note-title");
@@ -156,6 +179,15 @@ const ctxSidebarDivider = document.getElementById("ctx-sidebar-divider");
 const ctxPinBtn = document.getElementById("ctx-pin-note");
 const ctxMoveUpBtn = document.getElementById("ctx-move-up");
 const ctxMoveDownBtn = document.getElementById("ctx-move-down");
+const ctxMoveFolderGroup = document.getElementById("ctx-move-folder-group");
+const ctxMoveFolderBtn = document.getElementById("ctx-move-folder");
+const ctxMoveFolderMenu = document.getElementById("ctx-move-folder-menu");
+const ctxFolderNewNoteBtn = document.getElementById("ctx-folder-new-note");
+const ctxFolderRenameBtn = document.getElementById("ctx-folder-rename");
+const ctxFolderMoveUpBtn = document.getElementById("ctx-folder-move-up");
+const ctxFolderMoveDownBtn = document.getElementById("ctx-folder-move-down");
+const ctxFolderDeleteBtn = document.getElementById("ctx-folder-delete");
+const ctxFolderDivider = document.getElementById("ctx-folder-divider");
 
 const helpBtn = document.getElementById("help-btn");
 const helpModalBackdrop = document.getElementById("help-modal-backdrop");
@@ -359,12 +391,17 @@ const LEGACY_THEME_IDS = {
   "macintosh-system-7": "mac-os-9-platinum"
 };
 
+const COLLAPSED_FOLDERS_KEY = "scratchpad_collapsed_folders";
+
 // State
 let notes = [];
+let folders = [];
 let activeNoteId = null;
 let secondaryNoteId = null;
 let activePane = "primary"; // "primary" or "secondary"
 let isSplitNoteMode = false;
+let isCompareMode = false;
+let noteComparison = emptyNoteComparison();
 let activeDbPath = null;
 let currentLayoutMode = "edit"; // edit, split, preview
 let isFocusMode = false;
@@ -384,6 +421,10 @@ let isFindAllNotesMode = false;
 let hasInvalidFindPattern = false;
 let contextMenuTarget = null;
 let contextMenuNoteId = null;
+let contextMenuFolderId = null;
+let editingFolderId = null;
+let isCreatingFolder = false;
+const collapsedFolderIds = new Set();
 let isMatchCaseMode = false;
 let isExactMatchMode = false;
 let isRegexMode = false;
@@ -479,6 +520,9 @@ async function init() {
 
   // 3. Always load the local-only collection first as guaranteed baseline
   loadNotesFromLocalStorage();
+  loadFoldersFromLocalStorage();
+  notes = normalizeNoteFolderAssignments(notes, folders);
+  loadCollapsedFolders();
   adoptLegacyStashedNotes();
 
   // 4. Check if a native workspace preference is configured. Existing
@@ -487,21 +531,32 @@ async function init() {
   if (rememberedWorkspace.path && window.__TAURI__) {
     activeDbPath = rememberedWorkspace.path;
     try {
+      // Load serially because both commands ensure/migrate the SQLite schema.
+      // Two first-open migrations against the same older file must not race.
       const dbNotes = await invoke("load_db_notes", { dbPath: activeDbPath });
+      if (!Array.isArray(dbNotes)) {
+        throw new Error("Workspace returned an unexpected notes response");
+      }
+      const dbFoldersResult = await invoke("load_db_folders", { dbPath: activeDbPath });
+      if (!Array.isArray(dbFoldersResult)) {
+        throw new Error("Workspace returned an unexpected folders response");
+      }
+      const dbFolders = normalizeFolders(dbFoldersResult);
       // Seeding deletes and rewrites the workspace's rows, so an unreadable
       // response must not be mistaken for an empty workspace.
-      if (!Array.isArray(dbNotes)) {
-        throw new Error("Workspace returned an unexpected response");
-      }
       if (dbNotes.length > 0) {
-        notes = normalizePinnedNoteOrder(dbNotes);
+        folders = dbFolders;
+        notes = normalizePinnedNoteOrder(normalizeNoteFolderAssignments(dbNotes, folders));
+      } else if (dbFolders.length > 0) {
+        notes = [];
+        folders = dbFolders;
       } else if (notes.length > 0) {
         // Seed empty SQLite database with existing LocalStorage notes
-        await invoke("save_notes_db", { dbPath: activeDbPath, notes });
+        await invoke("save_workspace_db", { dbPath: activeDbPath, notes, folders });
       }
       updateDbUiState(true);
     } catch (err) {
-      console.error("Failed to load notes from SQLite DB on boot", err);
+      console.error("Failed to load workspace from SQLite DB on boot", err);
       activeDbPath = null;
       // `notes` still holds the local-only collection: it is only replaced once
       // the workspace has answered. Editing it here cannot be undone by the
@@ -557,25 +612,36 @@ function setTheme(theme, pin = true) {
 // ----------------------------------------------------
 // Note Management Logic
 // ----------------------------------------------------
-function createNote(title = "Untitled Scratchpad", content = "") {
+function createNote(title = "Untitled Scratchpad", content = "", folderId = undefined) {
+  const activeNote = notes.find((note) => note.id === activeNoteId);
+  const destinationFolderId = folderId === undefined
+    ? (isNotePinned(activeNote) ? null : validFolderId(activeNote?.folderId, folders))
+    : validFolderId(folderId, folders);
   const newNote = {
     id: "note_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9),
     title: title,
     content: content,
     updatedAt: Date.now(),
     isTitleLocked: title !== "Untitled Scratchpad" && title !== WELCOME_NOTE_TITLE,
-    isPinned: false
+    isPinned: false,
+    folderId: destinationFolderId
   };
   
   notes = insertNoteBelowPinned(notes, newNote);
   activeNoteId = newNote.id;
+  const destinationSectionId = destinationFolderId || UNFILED_SECTION_ID;
+  if (collapsedFolderIds.delete(destinationSectionId)) persistCollapsedFolders();
+  searchInput.value = "";
   
   saveNotesToStorage({ syncWorkspace: true });
   renderNoteList();
   loadActiveNote();
+  syncSecondaryNoteUi(true);
   
-  // Highlight note list scroll top
-  document.querySelector(".note-list-container").scrollTop = 0;
+  const activeItem = noteList.querySelector(`[data-id="${newNote.id}"]`);
+  if (typeof activeItem?.scrollIntoView === "function") {
+    activeItem.scrollIntoView({ block: "nearest" });
+  }
   editorTextarea.focus();
 }
 
@@ -585,7 +651,7 @@ function deleteNote(id, event) {
   const index = notes.findIndex(n => n.id === id);
   if (index === -1) return;
   
-  notes.splice(index, 1);
+  const [deletedNote] = notes.splice(index, 1);
   
   // Handle active note deletion
   if (activeNoteId === id) {
@@ -593,14 +659,15 @@ function deleteNote(id, event) {
       activeNoteId = notes[0].id;
     } else {
       // Create a clean blank note if we deleted the last one
-      createNote();
+      createNote("Untitled Scratchpad", "", deletedNote.folderId);
       return;
     }
   }
   
   saveNotesToStorage({ syncWorkspace: true });
-  renderNoteList();
+  renderNoteList(searchInput.value);
   loadActiveNote();
+  syncSecondaryNoteUi(true);
 }
 
 function loadActiveNote() {
@@ -618,22 +685,16 @@ function loadActiveNote() {
   editorBackdrop.scrollTop = 0;
   editorLineNumbers.scrollTop = 0;
   markdownPreview.scrollTop = 0;
+  const compareStopped = syncCompareControl();
   if (isFindBarOpen) {
     runFind({ selectActive: false });
   } else {
     updateHighlights();
   }
+  if (compareStopped) renderSecondaryEditorBackdrop();
 }
 
-function renderNoteList(filter = "") {
-  noteList.innerHTML = "";
-  
-  const filteredNotes = notes.filter(note => {
-    const query = filter.toLowerCase();
-    return note.title.toLowerCase().includes(query) || note.content.toLowerCase().includes(query);
-  });
-  
-  filteredNotes.forEach(note => {
+function createNoteListItem(note) {
     const item = document.createElement("li");
     item.className = `note-item ${note.id === activeNoteId ? "active" : ""} ${isNotePinned(note) ? "pinned" : ""}`;
     item.setAttribute("data-id", note.id);
@@ -771,22 +832,37 @@ function renderNoteList(filter = "") {
             dragAvatar.style.display = "flex";
 
             const targetItem = elemBelow ? elemBelow.closest(".note-item:not(.drag-avatar)") : null;
+            const targetFolder = elemBelow ? elemBelow.closest(".note-folder-header[data-accept-notes='true']") : null;
 
             document.querySelectorAll(".note-item").forEach(el => {
               el.classList.remove("drag-over-top", "drag-over-bottom");
+            });
+            document.querySelectorAll(".note-folder-header").forEach(el => {
+              el.classList.remove("drag-over-folder");
             });
 
             const targetNote = targetItem
               ? notes.find(candidate => candidate.id === targetItem.getAttribute("data-id"))
               : null;
 
-            if (targetItem && targetItem !== item && isNotePinned(targetNote) === isNotePinned(note)) {
+            const isSameSection = targetNote && (
+              noteSectionId(targetNote, folders) === noteSectionId(note, folders)
+            );
+            if (
+              targetItem &&
+              targetItem !== item &&
+              (isSameSection || !isNotePinned(targetNote))
+            ) {
               dropTarget = targetItem;
               const rect = targetItem.getBoundingClientRect();
               const isTop = (moveEvent.clientY - rect.top) < (rect.height / 2);
               dropPosition = isTop ? "top" : "bottom";
               targetItem.classList.toggle("drag-over-top", isTop);
               targetItem.classList.toggle("drag-over-bottom", !isTop);
+            } else if (targetFolder) {
+              dropTarget = targetFolder;
+              dropPosition = "folder";
+              targetFolder.classList.add("drag-over-folder");
             } else {
               dropTarget = null;
             }
@@ -794,13 +870,14 @@ function renderNoteList(filter = "") {
         }
       }
 
-      function onPointerUp(upEvent) {
+      function cleanupPointerDrag() {
         try {
           item.releasePointerCapture(pointerId);
         } catch (err) {}
 
         window.removeEventListener("pointermove", onPointerMove);
         window.removeEventListener("pointerup", onPointerUp);
+        window.removeEventListener("pointercancel", onPointerCancel);
 
         if (dragAvatar) {
           dragAvatar.remove();
@@ -812,18 +889,40 @@ function renderNoteList(filter = "") {
         document.querySelectorAll(".note-item").forEach(el => {
           el.classList.remove("drag-over-top", "drag-over-bottom", "dragging");
         });
+        document.querySelectorAll(".note-folder-header").forEach(el => {
+          el.classList.remove("drag-over-folder");
+        });
+      }
+
+      function onPointerCancel() {
+        cleanupPointerDrag();
+        isItemDragged = false;
+      }
+
+      function onPointerUp() {
+        cleanupPointerDrag();
 
         if (hasDragged && isOverSplitDropZone) {
           openNoteInSecondaryPane(note.id);
           showNotification(`Opened "${note.title}" side-by-side`);
         } else if (hasDragged && dropTarget) {
-          const targetId = dropTarget.getAttribute("data-id");
-          if (targetId && targetId !== note.id) {
+          if (dropPosition === "folder") {
+            const sectionId = dropTarget.dataset.sectionId;
+            const folderId = sectionId === UNFILED_SECTION_ID ? null : sectionId;
+            moveNoteToFolder(note.id, folderId);
+          } else {
+            const targetId = dropTarget.getAttribute("data-id");
+            if (!targetId || targetId === note.id) return;
             const fromIndex = notes.findIndex(n => n.id === note.id);
             const toIndex = notes.findIndex(n => n.id === targetId);
 
             if (fromIndex !== -1 && toIndex !== -1) {
               const [draggedNote] = notes.splice(fromIndex, 1);
+              const targetNote = notes.find(n => n.id === targetId);
+              if (noteSectionId(draggedNote, folders) !== noteSectionId(targetNote, folders)) {
+                draggedNote.folderId = validFolderId(targetNote?.folderId, folders);
+                draggedNote.isPinned = false;
+              }
               let targetIndex = notes.findIndex(n => n.id === targetId);
               if (dropPosition === "bottom") {
                 targetIndex += 1;
@@ -841,6 +940,7 @@ function renderNoteList(filter = "") {
 
       window.addEventListener("pointermove", onPointerMove);
       window.addEventListener("pointerup", onPointerUp);
+      window.addEventListener("pointercancel", onPointerCancel);
     });
     
     item.querySelector(".note-item-pin").addEventListener("click", (e) => {
@@ -853,8 +953,311 @@ function renderNoteList(filter = "") {
       deleteNote(note.id, e);
     });
 
-    noteList.appendChild(item);
+    return item;
+}
+
+function folderIconMarkup() {
+  return `<svg class="note-folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+    <path stroke-linecap="round" stroke-linejoin="round" d="M3 6.75A1.75 1.75 0 014.75 5h4l2 2h8.5A1.75 1.75 0 0121 8.75v8.5A1.75 1.75 0 0119.25 19H4.75A1.75 1.75 0 013 17.25V6.75z" />
+  </svg>`;
+}
+
+function persistCollapsedFolders() {
+  localStorage.setItem(COLLAPSED_FOLDERS_KEY, JSON.stringify([...collapsedFolderIds]));
+}
+
+function toggleFolderCollapsed(sectionId) {
+  if (collapsedFolderIds.has(sectionId)) {
+    collapsedFolderIds.delete(sectionId);
+  } else {
+    collapsedFolderIds.add(sectionId);
+  }
+  persistCollapsedFolders();
+  renderNoteList(searchInput.value);
+  const matchingHeader = [...noteList.querySelectorAll(".note-folder-header")]
+    .find((header) => header.dataset.sectionId === sectionId);
+  matchingHeader?.querySelector(".note-folder-toggle")?.focus({ preventScroll: true });
+}
+
+function renderFolderEditor(folder = null) {
+  const section = document.createElement("li");
+  section.className = "note-folder-section";
+  const header = document.createElement("div");
+  header.className = "note-folder-header";
+  header.innerHTML = `${folderIconMarkup()}<input class="note-folder-input" aria-label="${folder ? "Rename folder" : "New folder name"}" maxlength="80" value="${escapeHTML(folder?.name || "")}" placeholder="Folder name">`;
+  section.appendChild(header);
+  noteList.appendChild(section);
+
+  const input = header.querySelector("input");
+  const finish = () => finishFolderEdit(input.value, folder?.id || null);
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      finish();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      editingFolderId = null;
+      isCreatingFolder = false;
+      renderNoteList(searchInput.value);
+    }
   });
+  input.addEventListener("blur", finish);
+  queueMicrotask(() => {
+    input.focus();
+    input.select();
+  });
+}
+
+function finishFolderEdit(rawName, folderId) {
+  if (!isCreatingFolder && editingFolderId === null) return;
+  const name = normalizeFolderName(rawName);
+  if (!name) {
+    if (folderId) showNotification("Folder name cannot be empty");
+    editingFolderId = null;
+    isCreatingFolder = false;
+    renderNoteList(searchInput.value);
+    return;
+  }
+  if (!isFolderNameAvailable(folders, name, folderId)) {
+    showNotification(isReservedFolderName(name)
+      ? "That folder name is reserved by the sidebar"
+      : "A folder with that name already exists");
+    queueMicrotask(() => noteList.querySelector(".note-folder-input")?.focus());
+    return;
+  }
+
+  if (folderId) {
+    folders = folders.map((folder) => folder.id === folderId ? { ...folder, name } : folder);
+    showNotification("Folder renamed");
+  } else {
+    folders = [...folders, {
+      id: "folder_" + Date.now() + "_" + Math.random().toString(36).slice(2, 9),
+      name
+    }];
+    showNotification("Folder created");
+  }
+  editingFolderId = null;
+  isCreatingFolder = false;
+  saveNotesToStorage({ syncWorkspace: true });
+  renderNoteList(searchInput.value);
+  populateSecondaryNoteSelect();
+}
+
+function startFolderCreation() {
+  editingFolderId = null;
+  isCreatingFolder = true;
+  renderNoteList(searchInput.value);
+}
+
+function startFolderRename(folderId) {
+  if (!folders.some((folder) => folder.id === folderId)) return;
+  isCreatingFolder = false;
+  editingFolderId = folderId;
+  if (collapsedFolderIds.delete(folderId)) persistCollapsedFolders();
+  renderNoteList(searchInput.value);
+}
+
+function deleteFolder(folderId) {
+  const folder = folders.find((candidate) => candidate.id === folderId);
+  if (!folder) return;
+  const movedCount = notes.filter((note) => note.folderId === folderId).length;
+  ({ folders, notes } = removeFolder(folders, notes, folderId));
+  collapsedFolderIds.delete(folderId);
+  persistCollapsedFolders();
+  saveNotesToStorage({ syncWorkspace: true });
+  renderNoteList(searchInput.value);
+  populateSecondaryNoteSelect();
+  showNotification(movedCount === 0
+    ? `Deleted folder “${folder.name}”`
+    : `Deleted folder “${folder.name}”; moved ${movedCount} note${movedCount === 1 ? "" : "s"} to the top level`);
+}
+
+function moveNoteToFolder(noteId, folderId) {
+  const noteIndex = notes.findIndex((note) => note.id === noteId);
+  if (noteIndex === -1) return;
+  const destinationId = validFolderId(folderId, folders);
+  const updatedNote = { ...notes[noteIndex], folderId: destinationId, isPinned: false };
+  const remaining = notes.filter((_, index) => index !== noteIndex);
+  const destinationNotes = remaining.filter((note) => (
+    !isNotePinned(note) && validFolderId(note.folderId, folders) === destinationId
+  ));
+  const lastDestination = destinationNotes.at(-1);
+  if (lastDestination) {
+    const insertIndex = remaining.findIndex((note) => note.id === lastDestination.id) + 1;
+    notes = [...remaining.slice(0, insertIndex), updatedNote, ...remaining.slice(insertIndex)];
+  } else {
+    notes = insertNoteBelowPinned(remaining, updatedNote);
+  }
+  if (collapsedFolderIds.delete(destinationId || UNFILED_SECTION_ID)) persistCollapsedFolders();
+  saveNotesToStorage({ syncWorkspace: true });
+  renderNoteList(searchInput.value);
+  populateSecondaryNoteSelect();
+  const folderName = folders.find((folder) => folder.id === destinationId)?.name || "the top level";
+  showNotification(`Moved note to ${folderName}`);
+}
+
+function attachFolderDrag(header, folder) {
+  header.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 || event.target.closest("input")) return;
+    const pointerId = event.pointerId;
+    const startX = event.clientX;
+    const startY = event.clientY;
+    let hasDragged = false;
+    let hasPointerCapture = false;
+    let avatar = null;
+    let targetHeader = null;
+
+    function onPointerMove(moveEvent) {
+      if (!hasDragged && Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) > 4) {
+        hasDragged = true;
+        try {
+          header.setPointerCapture(pointerId);
+          hasPointerCapture = true;
+        } catch (error) {}
+        header.dataset.justDragged = "true";
+        header.classList.add("dragging");
+        avatar = header.cloneNode(true);
+        avatar.className = "note-folder-header drag-avatar";
+        avatar.style.width = `${header.offsetWidth}px`;
+        document.body.appendChild(avatar);
+      }
+      if (!hasDragged || !avatar) return;
+      avatar.style.left = `${moveEvent.clientX - 18}px`;
+      avatar.style.top = `${moveEvent.clientY - 14}px`;
+      avatar.style.display = "none";
+      const below = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
+      avatar.style.display = "flex";
+      const candidate = below?.closest(".note-folder-header[data-user-folder='true']");
+      document.querySelectorAll(".note-folder-header").forEach((element) => element.classList.remove("drag-over-folder"));
+      targetHeader = candidate && candidate !== header ? candidate : null;
+      targetHeader?.classList.add("drag-over-folder");
+    }
+
+    function cleanupPointerDrag() {
+      if (hasPointerCapture) {
+        try { header.releasePointerCapture(pointerId); } catch (error) {}
+      }
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerCancel);
+      avatar?.remove();
+      avatar = null;
+      header.classList.remove("dragging");
+      setTimeout(() => delete header.dataset.justDragged, 0);
+      document.querySelectorAll(".note-folder-header").forEach((element) => element.classList.remove("drag-over-folder"));
+    }
+
+    function onPointerCancel() {
+      cleanupPointerDrag();
+    }
+
+    function onPointerUp() {
+      cleanupPointerDrag();
+      if (!hasDragged || !targetHeader) return;
+      const fromIndex = folders.findIndex((candidate) => candidate.id === folder.id);
+      const targetIndex = folders.findIndex((candidate) => candidate.id === targetHeader.dataset.sectionId);
+      if (fromIndex === -1 || targetIndex === -1) return;
+      const updated = [...folders];
+      const [dragged] = updated.splice(fromIndex, 1);
+      const adjustedTarget = updated.findIndex((candidate) => candidate.id === targetHeader.dataset.sectionId);
+      updated.splice(adjustedTarget + (fromIndex < targetIndex ? 1 : 0), 0, dragged);
+      folders = updated;
+      saveNotesToStorage({ syncWorkspace: true });
+      renderNoteList(searchInput.value);
+      populateSecondaryNoteSelect();
+      showNotification("Folders reordered");
+    }
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerCancel);
+  });
+}
+
+function renderNoteSection({ id, name, sectionNotes, folder = null, acceptNotes = false }, filterActive) {
+  const collapsed = !filterActive && collapsedFolderIds.has(id);
+  const section = document.createElement("li");
+  section.className = `note-folder-section${collapsed ? " collapsed" : ""}`;
+  section.dataset.sectionId = id;
+
+  const header = document.createElement("div");
+  header.className = "note-folder-header";
+  header.dataset.sectionId = id;
+  header.dataset.acceptNotes = String(acceptNotes);
+  header.dataset.userFolder = String(Boolean(folder));
+  header.innerHTML = `<button class="note-folder-toggle" type="button" aria-expanded="${String(!collapsed)}" aria-label="${collapsed ? "Expand" : "Collapse"} ${escapeHTML(name)}">
+      <span class="note-folder-chevron" aria-hidden="true">▾</span>
+      ${folderIconMarkup()}
+      <span class="note-folder-name">${escapeHTML(name)}</span>
+    </button>
+    <span class="note-folder-count" aria-label="${sectionNotes.length} ${sectionNotes.length === 1 ? "note" : "notes"}">${sectionNotes.length}</span>`;
+  header.querySelector("button").addEventListener("click", () => {
+    if (header.dataset.justDragged === "true") {
+      delete header.dataset.justDragged;
+      return;
+    }
+    toggleFolderCollapsed(id);
+  });
+  if (folder) {
+    header.addEventListener("contextmenu", (event) => {
+      event.stopPropagation();
+      showContextMenu(event, null, folder.id);
+    });
+    attachFolderDrag(header, folder);
+  }
+  section.appendChild(header);
+
+  const sectionList = document.createElement("ul");
+  sectionList.className = "note-folder-notes";
+  sectionList.setAttribute("aria-label", `${name} notes`);
+  sectionNotes.forEach((note) => sectionList.appendChild(createNoteListItem(note)));
+  section.appendChild(sectionList);
+  noteList.appendChild(section);
+}
+
+function renderNoteList(filter = "") {
+  noteList.innerHTML = "";
+  const query = filter.trim().toLocaleLowerCase();
+  const filteredNotes = notes.filter((note) => (
+    !query || note.title.toLocaleLowerCase().includes(query) || note.content.toLocaleLowerCase().includes(query)
+  ));
+
+  const pinnedNotes = filteredNotes.filter(isNotePinned);
+  pinnedNotes.forEach((note) => noteList.appendChild(createNoteListItem(note)));
+  if (pinnedNotes.length > 0) {
+    const divider = document.createElement("li");
+    divider.className = "pinned-notes-divider";
+    divider.setAttribute("aria-hidden", "true");
+    noteList.appendChild(divider);
+  }
+
+  if (isCreatingFolder) renderFolderEditor();
+
+  let renderedFolderCount = 0;
+  folders.forEach((folder) => {
+    if (editingFolderId === folder.id) {
+      renderFolderEditor(folder);
+      renderedFolderCount += 1;
+      return;
+    }
+    const sectionNotes = filteredNotes.filter((note) => (
+      !isNotePinned(note) && validFolderId(note.folderId, folders) === folder.id
+    ));
+    if (query && sectionNotes.length === 0) return;
+    renderNoteSection({ id: folder.id, name: folder.name, sectionNotes, folder, acceptNotes: true }, Boolean(query));
+    renderedFolderCount += 1;
+  });
+
+  const topLevelNotes = filteredNotes.filter((note) => (
+    !isNotePinned(note) && validFolderId(note.folderId, folders) === null
+  ));
+  if (renderedFolderCount > 0 && topLevelNotes.length > 0) {
+    const divider = document.createElement("li");
+    divider.className = "top-level-notes-divider";
+    divider.setAttribute("aria-hidden", "true");
+    noteList.appendChild(divider);
+  }
+  topLevelNotes.forEach((note) => noteList.appendChild(createNoteListItem(note)));
 }
 
 // A workspace owns its own storage. Local storage holds the local-only
@@ -863,17 +1266,21 @@ function renderNoteList(filter = "") {
 function saveNotesToStorage({ noteId = activeNoteId, syncWorkspace = false } = {}) {
   if (activeDbPath) {
     const dbPath = activeDbPath;
-    let command;
-    let payload;
+    let saveOperation;
 
     if (syncWorkspace) {
-      command = "save_notes_db";
-      payload = { dbPath, notes: notes.map(note => ({ ...note })) };
+      const notesSnapshot = notes.map(note => ({ ...note }));
+      const foldersSnapshot = folders.map(folder => ({ ...folder }));
+      saveOperation = () => invoke("save_workspace_db", {
+        dbPath,
+        notes: notesSnapshot,
+        folders: foldersSnapshot
+      }).then(() => true);
     } else {
       const sortOrder = notes.findIndex(note => note.id === noteId);
       if (sortOrder === -1) return Promise.resolve(true);
-      command = "save_note_db";
-      payload = { dbPath, note: { ...notes[sortOrder] }, sortOrder };
+      const note = { ...notes[sortOrder] };
+      saveOperation = () => invoke("save_note_db", { dbPath, note, sortOrder }).then(() => true);
     }
 
     // Serialize writes so a slower, older save cannot overwrite a newer edit
@@ -881,10 +1288,10 @@ function saveNotesToStorage({ noteId = activeNoteId, syncWorkspace = false } = {
     const workspaceSave = dbSaveQueue
       .then(() => {
         if (activeDbPath !== dbPath) return true;
-        return invoke(command, payload).then(() => true);
+        return saveOperation();
       })
       .catch(err => {
-        console.error("Failed to save notes to SQLite DB", err);
+        console.error("Failed to save workspace to SQLite DB", err);
         setSaveFailedState();
         return false;
       });
@@ -893,12 +1300,14 @@ function saveNotesToStorage({ noteId = activeNoteId, syncWorkspace = false } = {
     return workspaceSave;
   }
 
-  const localResult = persistNotesLocally(localStorage, notes);
+  const noteResult = persistNotesLocally(localStorage, notes);
+  const folderResult = persistFoldersLocally(localStorage, folders);
+  const localResult = noteResult.ok ? folderResult : noteResult;
 
   if (localResult.ok) {
     localMirrorFailureNotified = false;
   } else {
-    console.error("Failed to save the local notes", localResult.error);
+    console.error("Failed to save local workspace data", localResult.error);
     if (!localMirrorFailureNotified) {
       showNotification("Local save failed; free some disk space or connect a workspace");
       localMirrorFailureNotified = true;
@@ -948,8 +1357,9 @@ function persistLocalMirrorBeforePageExit() {
   if (activeDbPath) return;
 
   const result = persistNotesLocally(localStorage, notes);
-  if (!result.ok) {
-    console.error("Failed to flush notes during page exit", result.error);
+  const folderResult = persistFoldersLocally(localStorage, folders);
+  if (!result.ok || !folderResult.ok) {
+    console.error("Failed to flush local workspace data during page exit", result.error || folderResult.error);
   }
 }
 
@@ -1216,19 +1626,33 @@ function applyNotePreviewLines(value, { persist = true, render = true } = {}) {
 }
 
 function updateSecondaryEditorBackdrop() {
+  if (isCompareMode) {
+    redrawComparisonBackdrops();
+    return;
+  }
+
+  renderSecondaryEditorBackdrop();
+}
+
+function renderSecondaryEditorBackdrop() {
   secondaryEditorRenderScheduler.cancel();
   secondaryEditorBackdrop.innerHTML = renderEditorBackdrop(secondaryEditorTextarea.value, {
-    syntaxEnabled: syntaxHighlightingEnabled
+    syntaxEnabled: syntaxHighlightingEnabled,
+    decorations: isCompareMode ? noteComparison.rightDecorations : []
   });
   updateEditorLineNumberGutter(
     secondaryEditorTextarea,
     secondaryEditorLineNumbers,
-    secondaryEditorWrapper
+    secondaryEditorWrapper,
+    {
+      changedLines: isCompareMode ? noteComparison.rightChangedLines : [],
+      changeType: "added"
+    }
   );
 }
 
-function updateEditorLineNumberGutter(textarea, gutter, wrapper) {
-  if (!editorLineNumbersEnabled) {
+function updateEditorLineNumberGutter(textarea, gutter, wrapper, comparison = {}) {
+  if (!editorLineNumbersEnabled && !isCompareMode) {
     if (gutter.childNodes.length > 0) gutter.replaceChildren();
     return;
   }
@@ -1236,7 +1660,7 @@ function updateEditorLineNumberGutter(textarea, gutter, wrapper) {
   const lineCount = textarea.value.split("\n").length;
   const digitCount = String(lineCount).length;
   wrapper.style.setProperty("--editor-line-number-gutter", `calc(${digitCount}ch + 1.5em)`);
-  gutter.innerHTML = renderEditorLineNumbers(textarea.value);
+  gutter.innerHTML = renderEditorLineNumbers(textarea.value, comparison);
 }
 
 function applyEditorLineNumbers(value, { persist = true, render = true } = {}) {
@@ -1253,8 +1677,18 @@ function applyEditorLineNumbers(value, { persist = true, render = true } = {}) {
     updateEditorLineNumberGutter(
       secondaryEditorTextarea,
       secondaryEditorLineNumbers,
-      secondaryEditorWrapper
+      secondaryEditorWrapper,
+      {
+        changedLines: isCompareMode ? noteComparison.rightChangedLines : [],
+        changeType: "added"
+      }
     );
+    if (isCompareMode) {
+      updateEditorLineNumberGutter(editorTextarea, editorLineNumbers, editorWrapper, {
+        changedLines: noteComparison.leftChangedLines,
+        changeType: "removed"
+      });
+    }
   }
 }
 
@@ -1493,6 +1927,7 @@ function attachEventListeners() {
 
   // New note button
   newNoteBtn.addEventListener("click", () => createNote());
+  newFolderBtn.addEventListener("click", startFolderCreation);
 
   // Search filter
   searchInput.addEventListener("input", (e) => {
@@ -1539,6 +1974,7 @@ function attachEventListeners() {
 
   // Split Note toggle
   splitNoteBtn.addEventListener("click", () => toggleSplitNoteMode());
+  compareNotesBtn.addEventListener("click", () => setCompareMode());
   closeSecondaryBtn.addEventListener("click", () => toggleSplitNoteMode(false));
   secondaryNoteSelect.addEventListener("change", (e) => {
     secondaryNoteId = e.target.value;
@@ -1669,6 +2105,62 @@ function attachEventListeners() {
     if (contextMenuNoteId) {
       moveNoteDown(contextMenuNoteId);
     }
+  });
+  ctxMoveFolderBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const isOpen = ctxMoveFolderGroup.classList.toggle("open");
+    ctxMoveFolderBtn.setAttribute("aria-expanded", String(isOpen));
+    if (isOpen) ctxMoveFolderMenu.querySelector("button:not([disabled])")?.focus();
+  });
+  ctxMoveFolderMenu.addEventListener("click", (event) => {
+    const item = event.target.closest("[data-folder-id]");
+    if (!item || item.disabled || !contextMenuNoteId) return;
+    const folderId = item.dataset.folderId === UNFILED_SECTION_ID ? null : item.dataset.folderId;
+    hideContextMenu();
+    moveNoteToFolder(contextMenuNoteId, folderId);
+  });
+  ctxMoveFolderMenu.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowLeft" && event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopPropagation();
+    ctxMoveFolderGroup.classList.remove("open");
+    ctxMoveFolderBtn.setAttribute("aria-expanded", "false");
+    ctxMoveFolderBtn.focus();
+  });
+  ctxFolderNewNoteBtn.addEventListener("click", () => {
+    const folderId = contextMenuFolderId;
+    hideContextMenu();
+    if (folderId) createNote("Untitled Scratchpad", "", folderId);
+  });
+  ctxFolderRenameBtn.addEventListener("click", () => {
+    const folderId = contextMenuFolderId;
+    hideContextMenu();
+    if (folderId) startFolderRename(folderId);
+  });
+  ctxFolderMoveUpBtn.addEventListener("click", () => {
+    const folderId = contextMenuFolderId;
+    hideContextMenu();
+    if (!folderId) return;
+    folders = moveFolder(folders, folderId, -1);
+    saveNotesToStorage({ syncWorkspace: true });
+    renderNoteList(searchInput.value);
+    populateSecondaryNoteSelect();
+    showNotification("Folder moved up");
+  });
+  ctxFolderMoveDownBtn.addEventListener("click", () => {
+    const folderId = contextMenuFolderId;
+    hideContextMenu();
+    if (!folderId) return;
+    folders = moveFolder(folders, folderId, 1);
+    saveNotesToStorage({ syncWorkspace: true });
+    renderNoteList(searchInput.value);
+    populateSecondaryNoteSelect();
+    showNotification("Folder moved down");
+  });
+  ctxFolderDeleteBtn.addEventListener("click", () => {
+    const folderId = contextMenuFolderId;
+    hideContextMenu();
+    if (folderId) deleteFolder(folderId);
   });
 
   // Find & Replace Widget events
@@ -1920,6 +2412,21 @@ function loadNotesFromLocalStorage() {
   }
 }
 
+function loadFoldersFromLocalStorage() {
+  folders = normalizeFolders(readStoredFolders(localStorage.getItem(LOCAL_FOLDERS_KEY)));
+}
+
+function loadCollapsedFolders() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(COLLAPSED_FOLDERS_KEY) || "[]");
+    if (Array.isArray(saved)) {
+      saved.filter((id) => typeof id === "string").forEach((id) => collapsedFolderIds.add(id));
+    }
+  } catch (error) {
+    console.error("Failed to load collapsed folders", error);
+  }
+}
+
 // Notes set aside by an earlier build of this branch, when local storage was
 // shared between the local-only collection and the active workspace. Folded
 // back in once so nothing is stranded; can be dropped after a release carries
@@ -1982,6 +2489,12 @@ async function connectDatabase() {
     return;
   }
 
+  const localSaved = await flushPendingSaves();
+  if (!localSaved) {
+    showNotification("Could not save local notes; workspace not opened");
+    return;
+  }
+
   let path;
   try {
     path = await invoke("select_db_file");
@@ -1991,13 +2504,23 @@ async function connectDatabase() {
   }
   if (!path) return;
 
-  const localNotes = readStoredNotes(localStorage.getItem(LOCAL_NOTES_KEY));
+  const localNotes = notes.length > 0 ? notes.map((note) => ({ ...note })) : null;
+  const localFolders = folders.map((folder) => ({ ...folder }));
 
   // Load into a local until the switch is known to be safe, so a failure here
   // leaves the active collection untouched.
   let workspaceNotes;
+  let workspaceFolders;
   try {
     workspaceNotes = await invoke("load_db_notes", { dbPath: path });
+    if (!Array.isArray(workspaceNotes)) {
+      throw new Error("Workspace returned an unexpected notes response");
+    }
+    workspaceFolders = await invoke("load_db_folders", { dbPath: path });
+    if (!Array.isArray(workspaceFolders)) {
+      throw new Error("Workspace returned an unexpected folders response");
+    }
+    workspaceFolders = normalizeFolders(workspaceFolders);
   } catch (err) {
     console.error("Failed to read SQLite database", err);
     showNotification("Could not open workspace; using local notes");
@@ -2006,25 +2529,27 @@ async function connectDatabase() {
 
   // Seeding deletes and rewrites the workspace's rows, so an unreadable
   // response must not be mistaken for an empty workspace.
-  if (!Array.isArray(workspaceNotes)) {
-    console.error("Workspace returned an unexpected response", workspaceNotes);
-    showNotification("Could not open workspace; using local notes");
-    return;
-  }
-
   activeDbPath = path;
 
   // The local-only collection stays where it is. Nothing needs setting aside,
   // because a workspace session no longer writes to local storage at all.
   if (workspaceNotes.length > 0) {
-    notes = normalizePinnedNoteOrder(workspaceNotes);
+    folders = workspaceFolders;
+    notes = normalizePinnedNoteOrder(normalizeNoteFolderAssignments(workspaceNotes, folders));
+  } else if (workspaceFolders.length > 0) {
+    notes = [];
+    folders = workspaceFolders;
   } else if (localNotes) {
     // Seed an empty workspace with the notes already in the app.
-    notes = normalizePinnedNoteOrder(localNotes);
+    folders = localFolders;
+    notes = normalizePinnedNoteOrder(normalizeNoteFolderAssignments(localNotes, folders));
     try {
-      await invoke("save_notes_db", { dbPath: path, notes });
+      await invoke("save_workspace_db", { dbPath: path, notes, folders });
     } catch (err) {
-      console.error("Failed to seed notes to SQLite DB", err);
+      console.error("Failed to seed SQLite workspace", err);
+      activeDbPath = null;
+      showNotification("Could not initialize workspace; using local notes");
+      return;
     }
   }
 
@@ -2045,6 +2570,7 @@ async function connectDatabase() {
     renderNoteList();
     loadActiveNote();
   }
+  syncSecondaryNoteUi(true);
 
   showNotification(preferenceSaved
     ? "Workspace connected!"
@@ -2052,12 +2578,20 @@ async function connectDatabase() {
 }
 
 async function disconnectDatabase() {
+  const workspaceSaved = await flushPendingSaves();
+  if (!workspaceSaved) {
+    showNotification("Could not save workspace; disconnect cancelled");
+    return;
+  }
+
   activeDbPath = null;
   localStorage.removeItem("scratchpad_active_db");
 
   // The local-only collection was never written over while the workspace was
   // connected, so it is simply still there.
   loadNotesFromLocalStorage();
+  loadFoldersFromLocalStorage();
+  notes = normalizeNoteFolderAssignments(notes, folders);
 
   if (notes.length === 0) {
     createNote();
@@ -2066,6 +2600,7 @@ async function disconnectDatabase() {
     renderNoteList();
     loadActiveNote();
   }
+  syncSecondaryNoteUi(true);
   
   updateDbUiState(false);
   try {
@@ -2648,17 +3183,30 @@ function redrawFindHighlights() {
 }
 
 function updateHighlights() {
+  if (isCompareMode) {
+    redrawComparisonBackdrops();
+    return;
+  }
+
+  renderPrimaryEditorBackdrop();
+}
+
+function renderPrimaryEditorBackdrop() {
   primaryEditorRenderScheduler.cancel();
   const text = editorTextarea.value;
   const query = findInput.value;
 
-  updateEditorLineNumberGutter(editorTextarea, editorLineNumbers, editorWrapper);
+  updateEditorLineNumberGutter(editorTextarea, editorLineNumbers, editorWrapper, {
+    changedLines: isCompareMode ? noteComparison.leftChangedLines : [],
+    changeType: "removed"
+  });
 
   updatePreviewHighlights();
   
   if (!isFindBarOpen || !query || findMatches.length === 0) {
     editorBackdrop.innerHTML = renderEditorBackdrop(text, {
-      syntaxEnabled: syntaxHighlightingEnabled
+      syntaxEnabled: syntaxHighlightingEnabled,
+      decorations: isCompareMode ? noteComparison.leftDecorations : []
     });
     return;
   }
@@ -2666,16 +3214,48 @@ function updateHighlights() {
   editorBackdrop.innerHTML = renderEditorBackdrop(text, {
     syntaxEnabled: syntaxHighlightingEnabled,
     matches: findMatches,
-    activeMatchIndex
+    activeMatchIndex,
+    decorations: isCompareMode ? noteComparison.leftDecorations : []
   });
 }
 
 // ----------------------------------------------------
 // Custom Context Menu Logic
 // ----------------------------------------------------
-function showContextMenu(e, noteId = null) {
+function setFolderContextVisibility(visible) {
+  const display = visible ? "flex" : "none";
+  ctxFolderNewNoteBtn.style.display = display;
+  ctxFolderRenameBtn.style.display = display;
+  ctxFolderMoveUpBtn.style.display = display;
+  ctxFolderMoveDownBtn.style.display = display;
+  ctxFolderDeleteBtn.style.display = display;
+  ctxFolderDivider.style.display = visible ? "block" : "none";
+}
+
+function populateMoveFolderMenu(note) {
+  ctxMoveFolderMenu.innerHTML = "";
+  const destinations = [
+    { id: UNFILED_SECTION_ID, name: "Top Level" },
+    ...folders
+  ];
+  destinations.forEach((folder) => {
+    const destinationId = folder.id === UNFILED_SECTION_ID ? null : folder.id;
+    const button = document.createElement("button");
+    button.className = "context-menu-item";
+    button.type = "button";
+    button.setAttribute("role", "menuitem");
+    button.dataset.folderId = folder.id;
+    button.textContent = folder.name;
+    button.disabled = !isNotePinned(note) && validFolderId(note.folderId, folders) === destinationId;
+    ctxMoveFolderMenu.appendChild(button);
+  });
+}
+
+function showContextMenu(e, noteId = null, folderId = null) {
   e.preventDefault();
   let hasInsertMenu = false;
+  contextMenuFolderId = folderId;
+  setFolderContextVisibility(Boolean(folderId));
   
   if (noteId) {
     contextMenuNoteId = noteId;
@@ -2684,13 +3264,34 @@ function showContextMenu(e, noteId = null) {
     ctxPinBtn.style.display = "flex";
     ctxMoveUpBtn.style.display = "flex";
     ctxMoveDownBtn.style.display = "flex";
+    ctxMoveFolderGroup.style.display = folders.length > 0 ? "block" : "none";
     
     const noteIndex = notes.findIndex(n => n.id === noteId);
     const note = notes[noteIndex];
     ctxPinBtn.querySelector("span").textContent = isNotePinned(note) ? "Unpin from Top" : "Pin to Top";
     ctxMoveUpBtn.disabled = !canMoveNote(notes, noteIndex, -1);
     ctxMoveDownBtn.disabled = !canMoveNote(notes, noteIndex, 1);
+    populateMoveFolderMenu(note);
     
+    ctxCutBtn.style.display = "none";
+    ctxCopyBtn.style.display = "none";
+    ctxPasteBtn.style.display = "none";
+    ctxSelectAllBtn.style.display = "none";
+    ctxFindBtn.style.display = "none";
+    ctxInsertDivider.style.display = "none";
+    ctxInsertGroup.style.display = "none";
+  } else if (folderId) {
+    contextMenuNoteId = null;
+    const folderIndex = folders.findIndex((folder) => folder.id === folderId);
+    ctxFolderMoveUpBtn.disabled = folderIndex <= 0;
+    ctxFolderMoveDownBtn.disabled = folderIndex === -1 || folderIndex >= folders.length - 1;
+
+    ctxOpenSideBtn.style.display = "none";
+    ctxSidebarDivider.style.display = "none";
+    ctxPinBtn.style.display = "none";
+    ctxMoveUpBtn.style.display = "none";
+    ctxMoveDownBtn.style.display = "none";
+    ctxMoveFolderGroup.style.display = "none";
     ctxCutBtn.style.display = "none";
     ctxCopyBtn.style.display = "none";
     ctxPasteBtn.style.display = "none";
@@ -2700,11 +3301,14 @@ function showContextMenu(e, noteId = null) {
     ctxInsertGroup.style.display = "none";
   } else {
     contextMenuNoteId = null;
+    contextMenuFolderId = null;
+    setFolderContextVisibility(false);
     ctxOpenSideBtn.style.display = "none";
     ctxSidebarDivider.style.display = "none";
     ctxPinBtn.style.display = "none";
     ctxMoveUpBtn.style.display = "none";
     ctxMoveDownBtn.style.display = "none";
+    ctxMoveFolderGroup.style.display = "none";
     
     ctxCutBtn.style.display = "flex";
     ctxCopyBtn.style.display = "flex";
@@ -2735,7 +3339,7 @@ function showContextMenu(e, noteId = null) {
   }
   
   const menuWidth = 180;
-  const menuHeight = noteId ? 180 : (hasInsertMenu ? 285 : 220);
+  const menuHeight = noteId ? (folders.length > 0 ? 220 : 180) : (folderId ? 210 : (hasInsertMenu ? 285 : 220));
   const submenuWidth = 175;
   let x = e.clientX;
   let y = e.clientY;
@@ -2753,6 +3357,7 @@ function showContextMenu(e, noteId = null) {
     "submenu-opens-left",
     x + menuWidth + submenuWidth + 8 > window.innerWidth
   );
+  customContextMenu.classList.toggle("submenu-opens-up", e.clientY > window.innerHeight / 2);
   customContextMenu.style.display = "flex";
 }
 
@@ -2760,6 +3365,8 @@ function hideContextMenu() {
   customContextMenu.style.display = "none";
   ctxInsertGroup.classList.remove("open");
   ctxInsertBtn.setAttribute("aria-expanded", "false");
+  ctxMoveFolderGroup.classList.remove("open");
+  ctxMoveFolderBtn.setAttribute("aria-expanded", "false");
 }
 
 function handleContextInsert(templateName) {
@@ -2847,6 +3454,101 @@ function handleContextFind() {
 // ----------------------------------------------------
 // Dual-Note Split View Functions
 // ----------------------------------------------------
+function canCompareVisibleNotes() {
+  return Boolean(
+    isSplitNoteMode &&
+    activeNoteId &&
+    secondaryNoteId &&
+    activeNoteId !== secondaryNoteId &&
+    typeof window.Diff?.diffLines === "function" &&
+    typeof window.Diff?.diffWordsWithSpace === "function"
+  );
+}
+
+function comparisonSummary() {
+  if (noteComparison.changedLineCount === 0) return "No differences";
+  return `${noteComparison.changedLineCount} changed line${noteComparison.changedLineCount === 1 ? "" : "s"}`;
+}
+
+function syncCompareControl() {
+  const available = canCompareVisibleNotes();
+  const compareWasActive = isCompareMode;
+
+  if (!available && isCompareMode) {
+    isCompareMode = false;
+    noteComparison = emptyNoteComparison();
+  }
+
+  appContainer.classList.toggle("compare-mode", isCompareMode);
+  compareNotesBtn.classList.toggle("active", isCompareMode);
+  compareNotesBtn.setAttribute("aria-pressed", String(isCompareMode));
+  compareNotesBtn.disabled = !available;
+  compareNotesCount.hidden = !isCompareMode;
+
+  if (!available) {
+    const sameNote = isSplitNoteMode && activeNoteId === secondaryNoteId;
+    const reason = sameNote
+      ? "Choose a different note to compare"
+      : "Note comparison is unavailable";
+    compareNotesBtn.title = reason;
+    compareNotesBtn.setAttribute("aria-label", reason);
+    return compareWasActive && !isCompareMode;
+  }
+
+  if (isCompareMode) {
+    const summary = comparisonSummary();
+    compareNotesCount.textContent = summary;
+    compareNotesBtn.title = `Stop comparing notes (${summary.toLowerCase()})`;
+    compareNotesBtn.setAttribute("aria-label", `Stop comparing notes, ${summary.toLowerCase()}`);
+  } else {
+    compareNotesCount.textContent = "";
+    compareNotesBtn.title = "Compare note contents";
+    compareNotesBtn.setAttribute("aria-label", "Compare note contents");
+  }
+
+  return compareWasActive && !isCompareMode;
+}
+
+function redrawComparisonBackdrops() {
+  syncCompareControl();
+  if (isCompareMode) {
+    noteComparison = compareNoteText(
+      editorTextarea.value,
+      secondaryEditorTextarea.value,
+      window.Diff
+    );
+    syncCompareControl();
+  }
+
+  renderPrimaryEditorBackdrop();
+  renderSecondaryEditorBackdrop();
+}
+
+function setCompareMode(forceState, { render = true } = {}) {
+  const shouldEnable = typeof forceState === "boolean" ? forceState : !isCompareMode;
+  if (shouldEnable && !canCompareVisibleNotes()) {
+    syncCompareControl();
+    return;
+  }
+
+  isCompareMode = shouldEnable;
+  if (!isCompareMode) noteComparison = emptyNoteComparison();
+  syncCompareControl();
+
+  if (render) redrawComparisonBackdrops();
+}
+
+function setDualPaneHeaderLayout(enabled) {
+  if (enabled) {
+    primaryPaneHeader.appendChild(noteTitleInput);
+    primaryPaneHeader.style.display = "flex";
+    return;
+  }
+
+  topbarLeft.appendChild(noteTitleInput);
+  primaryPaneHeader.style.display = "none";
+}
+
 function toggleSplitNoteMode(forceState) {
   const shouldOpen = typeof forceState === "boolean" ? forceState : !isSplitNoteMode;
   if (shouldOpen && isFindResultsOpen) {
@@ -2857,10 +3559,12 @@ function toggleSplitNoteMode(forceState) {
   splitNoteBtn.setAttribute("aria-pressed", String(isSplitNoteMode));
   
   if (isSplitNoteMode) {
+    setDualPaneHeaderLayout(true);
     appContainer.classList.add("dual-note-active");
     panesContainer.classList.add("dual-split-mode");
     secondaryPaneWrapper.style.display = "flex";
     splitNoteBtn.classList.add("active");
+    compareNotesBtn.hidden = false;
     
     // Choose secondary note (different from activeNoteId if possible)
     if (!secondaryNoteId || secondaryNoteId === activeNoteId) {
@@ -2872,11 +3576,14 @@ function toggleSplitNoteMode(forceState) {
     loadSecondaryNote();
     showNotification("Dual-Note Split View enabled");
   } else {
+    setCompareMode(false);
+    setDualPaneHeaderLayout(false);
     dismissNotification("Dual-Note Split View enabled");
     appContainer.classList.remove("dual-note-active");
     panesContainer.classList.remove("dual-split-mode");
     secondaryPaneWrapper.style.display = "none";
     splitNoteBtn.classList.remove("active");
+    compareNotesBtn.hidden = true;
     activePane = "primary";
     editorTextarea.focus();
   }
@@ -2900,15 +3607,45 @@ function openNoteInSecondaryPane(noteId) {
 
 function populateSecondaryNoteSelect() {
   secondaryNoteSelect.innerHTML = "";
-  notes.forEach(note => {
+  const appendOption = (note, parent = secondaryNoteSelect) => {
     const opt = document.createElement("option");
     opt.value = note.id;
     opt.textContent = note.title || "Untitled Scratchpad";
     if (note.id === secondaryNoteId) {
       opt.selected = true;
     }
-    secondaryNoteSelect.appendChild(opt);
-  });
+    parent.appendChild(opt);
+  };
+
+  if (folders.length === 0) {
+    notes.forEach((note) => appendOption(note));
+    return;
+  }
+
+  const appendGroup = (label, groupNotes) => {
+    if (groupNotes.length === 0) return;
+    const group = document.createElement("optgroup");
+    group.label = label;
+    groupNotes.forEach((note) => appendOption(note, group));
+    secondaryNoteSelect.appendChild(group);
+  };
+  notes.filter(isNotePinned).forEach((note) => appendOption(note));
+  folders.forEach((folder) => appendGroup(
+    folder.name,
+    notes.filter((note) => !isNotePinned(note) && validFolderId(note.folderId, folders) === folder.id)
+  ));
+  notes.filter((note) => (
+    !isNotePinned(note) && validFolderId(note.folderId, folders) === null
+  )).forEach((note) => appendOption(note));
+}
+
+function syncSecondaryNoteUi(reload = false) {
+  if (!notes.some((note) => note.id === secondaryNoteId)) {
+    const alternative = notes.find((note) => note.id !== activeNoteId) || notes[0];
+    secondaryNoteId = alternative?.id || null;
+  }
+  populateSecondaryNoteSelect();
+  if (reload && isSplitNoteMode && secondaryNoteId) loadSecondaryNote();
 }
 
 function loadSecondaryNote() {
@@ -2918,7 +3655,9 @@ function loadSecondaryNote() {
   secondaryNoteTitle.value = note.title;
   secondaryEditorTextarea.value = note.content;
 
+  const compareStopped = syncCompareControl();
   updateSecondaryEditorBackdrop();
+  if (compareStopped) renderPrimaryEditorBackdrop();
   updateSecondaryMarkdownPreview();
   if (secondaryNoteSelect.value !== note.id) {
     secondaryNoteSelect.value = note.id;
@@ -3037,10 +3776,8 @@ function updateCursorPositionForText(el) {
 function moveNoteUp(noteId) {
   const targetId = noteId || activeNoteId;
   const index = notes.findIndex(n => n.id === targetId);
-  if (!canMoveNote(notes, index, -1)) return;
-  
-  const [note] = notes.splice(index, 1);
-  notes.splice(index - 1, 0, note);
+  if (getNoteMoveTargetIndex(notes, index, -1) === -1) return;
+  notes = moveNoteInGroup(notes, targetId, -1);
   
   saveNotesToStorage({ syncWorkspace: true });
   renderNoteList(searchInput.value);
@@ -3051,10 +3788,8 @@ function moveNoteUp(noteId) {
 function moveNoteDown(noteId) {
   const targetId = noteId || activeNoteId;
   const index = notes.findIndex(n => n.id === targetId);
-  if (!canMoveNote(notes, index, 1)) return;
-  
-  const [note] = notes.splice(index, 1);
-  notes.splice(index + 1, 0, note);
+  if (getNoteMoveTargetIndex(notes, index, 1) === -1) return;
+  notes = moveNoteInGroup(notes, targetId, 1);
   
   saveNotesToStorage({ syncWorkspace: true });
   renderNoteList(searchInput.value);
@@ -3068,6 +3803,10 @@ function toggleNotePinned(noteId) {
 
   const willPin = !isNotePinned(note);
   notes = setNotePinned(notes, noteId, willPin);
+  if (!willPin) {
+    const destinationSectionId = validFolderId(note.folderId, folders) || UNFILED_SECTION_ID;
+    if (collapsedFolderIds.delete(destinationSectionId)) persistCollapsedFolders();
+  }
 
   saveNotesToStorage({ syncWorkspace: true });
   renderNoteList(searchInput.value);

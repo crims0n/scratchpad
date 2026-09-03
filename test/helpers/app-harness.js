@@ -8,6 +8,7 @@
 
 import { readFile } from "node:fs/promises";
 import { JSDOM } from "jsdom";
+import * as Diff from "diff";
 
 export const settle = (ms = 50) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -23,10 +24,13 @@ export async function bootApp({ storage = {}, handlers = {}, instance = 1, windo
   async function invoke(command, args) {
     invocations.push({ command, args });
     const handler = handlers[command];
-    return typeof handler === "function" ? handler(args) : null;
+    if (typeof handler === "function") return handler(args);
+    if (command === "load_db_folders") return [];
+    return null;
   }
 
   dom.window.__TAURI__ = { core: { invoke }, window: windowApi };
+  dom.window.Diff = Diff;
   globalThis.window = dom.window;
   globalThis.document = dom.window.document;
   globalThis.localStorage = dom.window.localStorage;

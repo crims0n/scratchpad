@@ -23,7 +23,7 @@ const app = await bootApp({
 
 test("a malformed response is never seeded over", () => {
   assert.equal(
-    app.invocations.some(({ command }) => command === "save_notes_db"),
+    app.invocations.some(({ command }) => command === "save_workspace_db"),
     false,
     "the workspace's rows must not be deleted and rewritten"
   );

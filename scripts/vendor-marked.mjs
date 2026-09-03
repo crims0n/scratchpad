@@ -7,15 +7,21 @@ const packageJsonUrl = new URL("../node_modules/marked/package.json", import.met
 const sourceUrl = new URL("../node_modules/marked/lib/marked.umd.js", import.meta.url);
 const highlightPackageJsonUrl = new URL("../node_modules/@highlightjs/cdn-assets/package.json", import.meta.url);
 const highlightSourceUrl = new URL("../node_modules/@highlightjs/cdn-assets/highlight.min.js", import.meta.url);
+const diffPackageJsonUrl = new URL("../node_modules/diff/package.json", import.meta.url);
+const diffSourceUrl = new URL("../node_modules/diff/dist/diff.min.js", import.meta.url);
 const vendorDirectoryUrl = new URL("../src/vendor/", import.meta.url);
 const targetUrl = new URL("marked.umd.js", vendorDirectoryUrl);
 const highlightTargetUrl = new URL("highlight.min.js", vendorDirectoryUrl);
+const diffTargetUrl = new URL("diff.min.js", vendorDirectoryUrl);
 
 const markedPackage = JSON.parse(await readFile(packageJsonUrl, "utf8"));
 const highlightPackage = JSON.parse(await readFile(highlightPackageJsonUrl, "utf8"));
+const diffPackage = JSON.parse(await readFile(diffPackageJsonUrl, "utf8"));
 await mkdir(fileURLToPath(vendorDirectoryUrl), { recursive: true });
 await copyFile(fileURLToPath(sourceUrl), fileURLToPath(targetUrl));
 await copyFile(fileURLToPath(highlightSourceUrl), fileURLToPath(highlightTargetUrl));
+await copyFile(fileURLToPath(diffSourceUrl), fileURLToPath(diffTargetUrl));
 
 console.log(`Vendored marked ${markedPackage.version}`);
 console.log(`Vendored Highlight.js ${highlightPackage.version}`);
+console.log(`Vendored jsdiff ${diffPackage.version}`);

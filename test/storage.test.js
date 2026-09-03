@@ -3,11 +3,31 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  LOCAL_FOLDERS_KEY,
   LOCAL_NOTES_BACKUP_KEY,
   LOCAL_NOTES_KEY,
+  persistFoldersLocally,
   persistNotesLocally,
+  readStoredFolders,
   readStoredNotes
 } from "../src/storage.js";
+
+test("folder persistence preserves empty folders and their order", () => {
+  const writes = new Map();
+  const storage = { setItem: (key, value) => writes.set(key, value) };
+  const folders = [{ id: "work", name: "Work" }, { id: "empty", name: "Empty" }];
+
+  assert.equal(persistFoldersLocally(storage, folders).ok, true);
+  assert.deepEqual(readStoredFolders(writes.get(LOCAL_FOLDERS_KEY)), folders);
+  assert.deepEqual(readStoredFolders("not json"), []);
+});
+
+test("folder persistence reports storage failures without throwing", () => {
+  const storageError = new Error("Storage unavailable");
+  const result = persistFoldersLocally({ setItem: () => { throw storageError; } }, []);
+  assert.equal(result.ok, false);
+  assert.equal(result.error, storageError);
+});
 
 test("local persistence serializes the complete note collection", () => {
   const writes = new Map();

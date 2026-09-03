@@ -31,4 +31,5 @@ test("no workspace is opened or written to", () => {
 
   assert.equal(commands.includes("load_db_notes"), false);
   assert.equal(commands.includes("save_notes_db"), false);
+  assert.equal(commands.includes("save_workspace_db"), false);
 });
