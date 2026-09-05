@@ -30,7 +30,7 @@ test("editor and sidebar view settings are adjustable and persistent", async () 
   assert.deepEqual(
     [...document.querySelectorAll("#actions-dropdown-content > .dropdown-section > .dropdown-section-title")]
       .map(label => label.textContent),
-    ["Note", "Appearance", "Workspace", "Help"]
+    ["Note", "Appearance", "Workspace", "Agent access", "Help"]
   );
   assert.equal(document.getElementById("theme-picker-btn").firstElementChild.textContent, "Color theme");
   assert.equal(document.getElementById("active-theme-menu-value").textContent, "Default Dark");
@@ -39,6 +39,9 @@ test("editor and sidebar view settings are adjustable and persistent", async () 
   assert.equal(document.getElementById("import-btn").textContent, "Import text file");
   assert.equal(document.getElementById("export-btn").textContent, "Export Markdown file");
   assert.equal(document.getElementById("db-connect-btn").textContent, "Open workspace");
+  assert.equal(document.getElementById("agent-access-menu-value").textContent, "Off");
+  assert.equal(document.getElementById("agent-access-toggle-btn").textContent, "Enable read-only access");
+  assert.equal(document.getElementById("agent-access-config-btn").textContent, "MCP Configuration");
   assert.equal(document.getElementById("help-menu-btn").textContent, "Help & reference");
   assert.equal(document.getElementById("about-menu-btn").textContent, "About Scratchpad");
   assert.equal(document.getElementById("actions-btn").getAttribute("aria-label"), "Open Scratchpad menu");

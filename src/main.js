@@ -91,6 +91,7 @@ const wordCharCount = document.getElementById("word-char-count");
 const cursorPosition = document.getElementById("cursor-position");
 const selectionCount = document.getElementById("selection-count");
 const saveStatus = document.getElementById("save-status");
+const mcpStatus = document.getElementById("mcp-status");
 const themeToggleBtn = document.getElementById("theme-toggle");
 const focusBtn = document.getElementById("focus-btn");
 const splitNoteBtn = document.getElementById("split-note-btn");
@@ -111,6 +112,9 @@ const exportBtn = document.getElementById("export-btn");
 const dbConnectBtn = document.getElementById("db-connect-btn");
 const dbDisconnectBtn = document.getElementById("db-disconnect-btn");
 const workspaceMenuValue = document.getElementById("workspace-menu-value");
+const agentAccessMenuValue = document.getElementById("agent-access-menu-value");
+const agentAccessToggleBtn = document.getElementById("agent-access-toggle-btn");
+const agentAccessConfigBtn = document.getElementById("agent-access-config-btn");
 const helpMenuBtn = document.getElementById("help-menu-btn");
 const aboutMenuBtn = document.getElementById("about-menu-btn");
 const viewSettings = document.getElementById("view-settings");
@@ -195,8 +199,10 @@ const helpModal = document.getElementById("help-modal");
 const closeHelpBtn = document.getElementById("close-help-btn");
 const tabShortcutsBtn = document.getElementById("tab-shortcuts-btn");
 const tabMarkdownBtn = document.getElementById("tab-markdown-btn");
+const tabMcpBtn = document.getElementById("tab-mcp-btn");
 const paneShortcuts = document.getElementById("pane-shortcuts");
 const paneMarkdown = document.getElementById("pane-markdown");
+const paneMcp = document.getElementById("pane-mcp");
 const splitDropOverlay = document.getElementById("split-drop-overlay");
 
 const themePickerBtn = document.getElementById("theme-picker-btn");
@@ -210,6 +216,15 @@ const themeGrid = document.getElementById("theme-grid");
 const aboutModalBackdrop = document.getElementById("about-modal-backdrop");
 const aboutModal = document.getElementById("about-modal");
 const closeAboutBtn = document.getElementById("close-about-btn");
+const mcpConfigModalBackdrop = document.getElementById("mcp-config-modal-backdrop");
+const mcpConfigModal = document.getElementById("mcp-config-modal");
+const closeMcpConfigBtn = document.getElementById("close-mcp-config-btn");
+const mcpConfigCommand = document.getElementById("mcp-config-command");
+const mcpConfigArgs = document.getElementById("mcp-config-args");
+const copyMcpCommandBtn = document.getElementById("copy-mcp-command-btn");
+const copyMcpArgsBtn = document.getElementById("copy-mcp-args-btn");
+const copyMcpExampleBtn = document.getElementById("copy-mcp-example-btn");
+const mcpConfigExampleCode = document.getElementById("mcp-config-example-code");
 
 // Built-in Developer Palette Presets
 const PRESET_THEMES = [
@@ -411,6 +426,8 @@ let isThemeModalOpen = false;
 let themeModalPreviousFocus = null;
 let isAboutModalOpen = false;
 let aboutModalPreviousFocus = null;
+let isMcpConfigModalOpen = false;
+let mcpConfigModalPreviousFocus = null;
 let customThemes = [];
 let activeThemeId = "default-dark";
 let findMatches = [];
@@ -446,6 +463,10 @@ let notePreviewLines = DEFAULT_NOTE_PREVIEW_LINES;
 let syntaxHighlightingEnabled = DEFAULT_SYNTAX_HIGHLIGHTING;
 let editorLineNumbersEnabled = DEFAULT_EDITOR_LINE_NUMBERS;
 let previewHighlightsRendered = false;
+let isMcpEnabled = false;
+let mcpConnectionInfo = null;
+let mcpSnapshotTimer = null;
+const mcpNoteSnapshotTimers = new Map();
 
 const editorRenderFrameOptions = {
   requestFrame: typeof window.requestAnimationFrame === "function"
@@ -1264,6 +1285,12 @@ function renderNoteList(filter = "") {
 // collection and nothing else, so a workspace session never writes over notes
 // it does not contain.
 function saveNotesToStorage({ noteId = activeNoteId, syncWorkspace = false } = {}) {
+  if (syncWorkspace) {
+    scheduleMcpSnapshotUpdate();
+  } else {
+    scheduleMcpNoteUpdate(noteId);
+  }
+
   if (activeDbPath) {
     const dbPath = activeDbPath;
     let saveOperation;
@@ -1419,6 +1446,7 @@ function handleEditorInput() {
 
   activeNote.content = editorTextarea.value;
   activeNote.updatedAt = Date.now();
+  scheduleMcpNoteUpdate(activeNote.id);
   updateCursorPositionForText(editorTextarea);
   if (isFindBarOpen) {
     runFind({ preserveActive: true, selectActive: false });
@@ -1463,6 +1491,7 @@ function handleTitleInput() {
   activeNote.title = noteTitleInput.value.trim() || "Untitled Scratchpad";
   activeNote.isTitleLocked = true; // User edited manually, lock auto-renaming
   activeNote.updatedAt = Date.now();
+  scheduleMcpNoteUpdate(activeNote.id);
 
   if (isFindResultsOpen && isFindAllNotesMode) {
     renderFindResults();
@@ -1766,6 +1795,158 @@ function toggleActionsDropdown(show) {
   actionsBtn.setAttribute("aria-expanded", String(actionsDropdown.classList.contains("show")));
 }
 
+function currentMcpCollectionName() {
+  if (!activeDbPath) return "Local notes";
+  return activeDbPath.split(/[/\\]/).pop() || "Scratchpad workspace";
+}
+
+function mcpSnapshotArguments() {
+  return {
+    collectionName: currentMcpCollectionName(),
+    notes: notes.map(note => ({ ...note })),
+    folders: folders.map(folder => ({ ...folder }))
+  };
+}
+
+async function syncMcpSnapshot() {
+  if (!isMcpEnabled || !window.__TAURI__) return;
+  await invoke("update_mcp_snapshot", mcpSnapshotArguments());
+}
+
+async function syncMcpNote(noteId) {
+  if (!isMcpEnabled || !window.__TAURI__) return;
+  const note = notes.find(candidate => candidate.id === noteId);
+  if (!note) return;
+  await invoke("update_mcp_note", { note: { ...note } });
+}
+
+function scheduleMcpSnapshotUpdate() {
+  if (!isMcpEnabled || !window.__TAURI__) return;
+  mcpNoteSnapshotTimers.forEach(timer => clearTimeout(timer));
+  mcpNoteSnapshotTimers.clear();
+  clearTimeout(mcpSnapshotTimer);
+  mcpSnapshotTimer = setTimeout(() => {
+    mcpSnapshotTimer = null;
+    syncMcpSnapshot().catch(error => {
+      console.error("Failed to update the MCP note snapshot", error);
+    });
+  }, 50);
+}
+
+function scheduleMcpNoteUpdate(noteId) {
+  if (!isMcpEnabled || !window.__TAURI__ || !noteId) return;
+  clearTimeout(mcpNoteSnapshotTimers.get(noteId));
+  const timer = setTimeout(() => {
+    mcpNoteSnapshotTimers.delete(noteId);
+    syncMcpNote(noteId).catch(error => {
+      console.error("Failed to update a note in the MCP snapshot", error);
+    });
+  }, 50);
+  mcpNoteSnapshotTimers.set(noteId, timer);
+}
+
+function updateMcpUiState() {
+  mcpStatus.hidden = !isMcpEnabled;
+  agentAccessMenuValue.textContent = isMcpEnabled ? "Read-only" : "Off";
+  agentAccessToggleBtn.textContent = isMcpEnabled
+    ? "Disable agent access"
+    : "Enable read-only access";
+  agentAccessToggleBtn.setAttribute("aria-pressed", String(isMcpEnabled));
+  agentAccessConfigBtn.style.display = isMcpEnabled ? "block" : "none";
+}
+
+async function toggleMcpAccess() {
+  if (!window.__TAURI__) {
+    showNotification("Agent access is only available in the desktop app");
+    return;
+  }
+
+  agentAccessToggleBtn.disabled = true;
+  const disabling = isMcpEnabled;
+  try {
+    if (isMcpEnabled) {
+      if (isMcpConfigModalOpen) closeMcpConfigModal();
+      await invoke("stop_mcp_server");
+      clearTimeout(mcpSnapshotTimer);
+      mcpSnapshotTimer = null;
+      mcpNoteSnapshotTimers.forEach(timer => clearTimeout(timer));
+      mcpNoteSnapshotTimers.clear();
+      isMcpEnabled = false;
+      mcpConnectionInfo = null;
+      updateMcpUiState();
+      showNotification("Agent access disabled");
+      return;
+    }
+
+    // Seed the native server before it begins accepting connections. The
+    // editor remains the authority, so this includes changes not yet saved.
+    await invoke("update_mcp_snapshot", mcpSnapshotArguments());
+    const connection = await invoke("start_mcp_server");
+    if (!connection?.command || !Array.isArray(connection?.args) || !connection.args.length) {
+      throw new Error("Scratchpad returned incomplete MCP connection details");
+    }
+    mcpConnectionInfo = connection;
+    isMcpEnabled = true;
+    try {
+      await syncMcpSnapshot();
+    } catch (error) {
+      console.error("Failed to refresh the MCP note snapshot after startup", error);
+    }
+    updateMcpUiState();
+    showNotification("Read-only agent access enabled");
+  } catch (error) {
+    console.error("Could not change MCP agent access", error);
+    showNotification(disabling
+      ? "Could not disable agent access"
+      : `Could not enable agent access: ${error}`);
+  } finally {
+    agentAccessToggleBtn.disabled = false;
+  }
+}
+
+function openMcpConfigModal() {
+  if (!mcpConnectionInfo || !isMcpEnabled) return;
+  mcpConfigModalPreviousFocus = actionsDropdown.contains(document.activeElement)
+    ? actionsBtn
+    : document.activeElement;
+  mcpConfigCommand.value = mcpConnectionInfo.command;
+  mcpConfigArgs.value = mcpConnectionInfo.args.join(" ");
+  mcpConfigExampleCode.textContent = JSON.stringify({
+    mcpServers: {
+      scratchpad: {
+        command: mcpConnectionInfo.command,
+        args: mcpConnectionInfo.args
+      }
+    }
+  }, null, 2);
+  isMcpConfigModalOpen = true;
+  mcpConfigModalBackdrop.style.display = "flex";
+  mcpConfigModalBackdrop.setAttribute("aria-hidden", "false");
+  closeMcpConfigBtn.focus({ preventScroll: true });
+}
+
+function closeMcpConfigModal() {
+  isMcpConfigModalOpen = false;
+  mcpConfigModalBackdrop.style.display = "none";
+  mcpConfigModalBackdrop.setAttribute("aria-hidden", "true");
+  mcpConfigCommand.value = "";
+  mcpConfigArgs.value = "";
+  mcpConfigExampleCode.textContent = "";
+  if (mcpConfigModalPreviousFocus && mcpConfigModalPreviousFocus.isConnected) {
+    mcpConfigModalPreviousFocus.focus({ preventScroll: true });
+  }
+  mcpConfigModalPreviousFocus = null;
+}
+
+function copyMcpConfigValue(value, label) {
+  navigator.clipboard.writeText(value).then(() => {
+    showNotification(`${label} copied`);
+  }).catch(error => {
+    console.error(`Failed to copy MCP ${label.toLowerCase()}`, error);
+    showNotification(`Could not copy ${label.toLowerCase()}`);
+  });
+}
+
 function copyMarkdownToClipboard() {
   const text = editorTextarea.value;
   navigator.clipboard.writeText(text).then(() => {
@@ -1959,6 +2140,7 @@ function attachEventListeners() {
   });
   tabShortcutsBtn.addEventListener("click", () => switchHelpTab("shortcuts"));
   tabMarkdownBtn.addEventListener("click", () => switchHelpTab("markdown"));
+  tabMcpBtn.addEventListener("click", () => switchHelpTab("mcp"));
 
   // About Modal
   aboutMenuBtn.addEventListener("click", () => {
@@ -1971,6 +2153,26 @@ function attachEventListeners() {
     if (e.target === aboutModalBackdrop) closeAboutModal();
   });
   aboutModal.addEventListener("click", handlePreviewLinkClick);
+
+  // MCP Configuration Modal
+  agentAccessConfigBtn.addEventListener("click", () => {
+    toggleActionsDropdown(false);
+    actionsBtn.focus({ preventScroll: true });
+    openMcpConfigModal();
+  });
+  closeMcpConfigBtn.addEventListener("click", closeMcpConfigModal);
+  mcpConfigModalBackdrop.addEventListener("click", (e) => {
+    if (e.target === mcpConfigModalBackdrop) closeMcpConfigModal();
+  });
+  copyMcpCommandBtn.addEventListener("click", () => {
+    copyMcpConfigValue(mcpConfigCommand.value, "MCP command");
+  });
+  copyMcpArgsBtn.addEventListener("click", () => {
+    copyMcpConfigValue(mcpConfigArgs.value, "MCP argument");
+  });
+  copyMcpExampleBtn.addEventListener("click", () => {
+    copyMcpConfigValue(mcpConfigExampleCode.textContent, "Configuration example");
+  });
 
   // Split Note toggle
   splitNoteBtn.addEventListener("click", () => toggleSplitNoteMode());
@@ -2052,6 +2254,7 @@ function attachEventListeners() {
   exportBtn.addEventListener("click", exportAsMarkdownFile);
   dbConnectBtn.addEventListener("click", connectDatabase);
   dbDisconnectBtn.addEventListener("click", disconnectDatabase);
+  agentAccessToggleBtn.addEventListener("click", toggleMcpAccess);
 
   // Custom Context Menu Events
   document.addEventListener("contextmenu", showContextMenu);
@@ -2237,6 +2440,11 @@ function attachEventListeners() {
       return;
     }
 
+    if (isMcpConfigModalOpen && e.key === "Tab" && !isMeta && !e.altKey) {
+      trapModalFocus(e, mcpConfigModal);
+      return;
+    }
+
     if (isMeta && !e.altKey && (e.key === "+" || e.key === "=")) {
       e.preventDefault();
       applyEditorZoom(stepEditorZoom(currentEditorZoom, 1));
@@ -2312,7 +2520,10 @@ function attachEventListeners() {
       toggleFocusMode();
     }
     if (e.key === "Escape") {
-      if (isAboutModalOpen) {
+      if (isMcpConfigModalOpen) {
+        e.preventDefault();
+        closeMcpConfigModal();
+      } else if (isAboutModalOpen) {
         e.preventDefault();
         closeAboutModal();
       } else if (isThemeModalOpen) {
@@ -2571,6 +2782,7 @@ async function connectDatabase() {
     loadActiveNote();
   }
   syncSecondaryNoteUi(true);
+  scheduleMcpSnapshotUpdate();
 
   showNotification(preferenceSaved
     ? "Workspace connected!"
@@ -2601,6 +2813,7 @@ async function disconnectDatabase() {
     loadActiveNote();
   }
   syncSecondaryNoteUi(true);
+  scheduleMcpSnapshotUpdate();
   
   updateDbUiState(false);
   try {
@@ -3670,6 +3883,7 @@ function handleSecondaryEditorInput() {
 
   note.content = secondaryEditorTextarea.value;
   note.updatedAt = Date.now();
+  scheduleMcpNoteUpdate(note.id);
   updateCursorPositionForText(secondaryEditorTextarea);
   secondaryEditorRenderScheduler.schedule();
 
@@ -3708,6 +3922,7 @@ function handleSecondaryTitleInput() {
   note.title = secondaryNoteTitle.value.trim() || "Untitled Scratchpad";
   note.isTitleLocked = true;
   note.updatedAt = Date.now();
+  scheduleMcpNoteUpdate(note.id);
 
   triggerSavingState();
 
@@ -3846,28 +4061,32 @@ function toggleHelpModal() {
 }
 
 function switchHelpTab(tabName, focusTab = false) {
-  const isMarkdown = tabName === "markdown";
+  const helpTopics = {
+    shortcuts: { button: tabShortcutsBtn, pane: paneShortcuts },
+    markdown: { button: tabMarkdownBtn, pane: paneMarkdown },
+    mcp: { button: tabMcpBtn, pane: paneMcp }
+  };
+  const activeTopic = helpTopics[tabName] || helpTopics.shortcuts;
 
-  tabMarkdownBtn.classList.toggle("active", isMarkdown);
-  tabShortcutsBtn.classList.toggle("active", !isMarkdown);
-  paneMarkdown.classList.toggle("active", isMarkdown);
-  paneShortcuts.classList.toggle("active", !isMarkdown);
-
-  tabMarkdownBtn.setAttribute("aria-selected", String(isMarkdown));
-  tabShortcutsBtn.setAttribute("aria-selected", String(!isMarkdown));
-  tabMarkdownBtn.tabIndex = isMarkdown ? 0 : -1;
-  tabShortcutsBtn.tabIndex = isMarkdown ? -1 : 0;
-  paneMarkdown.setAttribute("aria-hidden", String(!isMarkdown));
-  paneShortcuts.setAttribute("aria-hidden", String(isMarkdown));
+  Object.values(helpTopics).forEach(({ button, pane }) => {
+    const isActive = button === activeTopic.button;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-selected", String(isActive));
+    button.tabIndex = isActive ? 0 : -1;
+    pane.classList.toggle("active", isActive);
+    pane.setAttribute("aria-hidden", String(!isActive));
+  });
 
   if (focusTab) {
-    (isMarkdown ? tabMarkdownBtn : tabShortcutsBtn).focus({ preventScroll: true });
+    activeTopic.button.focus({ preventScroll: true });
   }
 }
 
 function cycleHelpTab(backwards = false) {
-  const tabs = ["shortcuts", "markdown"];
-  const currentTab = tabMarkdownBtn.classList.contains("active") ? "markdown" : "shortcuts";
+  const tabs = ["shortcuts", "markdown", "mcp"];
+  const currentTab = tabs.find(tabName =>
+    document.getElementById(`tab-${tabName}-btn`).classList.contains("active")
+  ) || "shortcuts";
   const currentIndex = tabs.indexOf(currentTab);
   const direction = backwards ? -1 : 1;
   const nextIndex = (currentIndex + direction + tabs.length) % tabs.length;

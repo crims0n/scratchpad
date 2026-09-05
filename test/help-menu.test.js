@@ -20,6 +20,15 @@ test("the Scratchpad menu opens Help and About dialogs and returns focus", async
   assert.equal(helpBackdrop.style.display, "flex");
   assert.equal(document.getElementById("help-btn").getAttribute("aria-expanded"), "true");
 
+  const mcpTab = document.getElementById("tab-mcp-btn");
+  mcpTab.click();
+  assert.equal(mcpTab.getAttribute("aria-selected"), "true");
+  assert.equal(document.getElementById("pane-mcp").classList.contains("active"), true);
+  assert.equal(document.getElementById("pane-markdown").getAttribute("aria-hidden"), "true");
+
+  document.dispatchEvent(new app.dom.window.KeyboardEvent("keydown", { key: "Tab" }));
+  assert.equal(document.getElementById("tab-shortcuts-btn").getAttribute("aria-selected"), "true");
+
   document.getElementById("close-help-btn").click();
   assert.equal(helpBackdrop.style.display, "none");
   assert.equal(document.activeElement, actionsButton);

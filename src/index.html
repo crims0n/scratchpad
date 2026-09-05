@@ -183,6 +183,16 @@
                 <button class="dropdown-item" id="db-disconnect-btn" style="display: none;">Return to local notes</button>
               </div>
               <div class="dropdown-divider"></div>
+              <div class="dropdown-section" id="agent-access-menu-section">
+                <div class="dropdown-section-title">Agent access</div>
+                <div class="dropdown-status-row" aria-label="Current agent access">
+                  <span>Current</span>
+                  <span class="dropdown-item-value" id="agent-access-menu-value">Off</span>
+                </div>
+                <button class="dropdown-item" id="agent-access-toggle-btn">Enable read-only access</button>
+                <button class="dropdown-item" id="agent-access-config-btn" style="display: none;" aria-haspopup="dialog">MCP Configuration</button>
+              </div>
+              <div class="dropdown-divider"></div>
               <div class="dropdown-section" id="help-menu-section">
                 <div class="dropdown-section-title">Help</div>
                 <button class="dropdown-item" id="help-menu-btn" aria-haspopup="dialog">Help &amp; reference</button>
@@ -331,6 +341,7 @@
         </div>
         <div class="statusbar-right">
           <span id="selection-count" class="selection-count-text"></span>
+          <span id="mcp-status" role="status" aria-live="polite" title="Read-only MCP agent access is enabled and listening for connections" hidden>MCP listening</span>
           <span id="save-status" role="status" aria-live="polite">Saved</span>
         </div>
       </footer>
@@ -415,6 +426,70 @@
     </button>
   </div>
 
+  <!-- MCP Configuration Modal -->
+  <div class="help-modal-backdrop" id="mcp-config-modal-backdrop" style="display: none;" aria-hidden="true">
+    <div class="help-modal mcp-config-modal" id="mcp-config-modal" role="dialog" aria-modal="true" aria-labelledby="mcp-config-modal-heading">
+      <div class="help-modal-header">
+        <div class="mcp-config-modal-title">
+          <svg class="mcp-config-modal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="12" cy="12" r="3" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v6m0 6v6M3 12h6m6 0h6" />
+          </svg>
+          <h3 id="mcp-config-modal-heading">MCP Configuration</h3>
+        </div>
+        <button class="close-help-btn" id="close-mcp-config-btn" title="Close (Escape)" aria-label="Close MCP configuration">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="help-modal-body mcp-config-modal-body">
+        <p class="mcp-config-description">Use these values in an MCP client that supports local stdio servers. Scratchpad must remain open with read-only agent access enabled.</p>
+
+        <div class="mcp-config-fields" aria-label="MCP connection values">
+          <div class="mcp-config-field">
+            <span class="mcp-config-label">Transport</span>
+            <code class="mcp-config-value">stdio</code>
+          </div>
+          <div class="mcp-config-field">
+            <label class="mcp-config-label" for="mcp-config-command">Command</label>
+            <div class="mcp-config-value-row">
+              <input class="mcp-config-input" id="mcp-config-command" type="text" readonly spellcheck="false" aria-label="Scratchpad executable path" />
+              <button class="mcp-config-copy-btn" id="copy-mcp-command-btn" type="button">Copy command</button>
+            </div>
+          </div>
+          <div class="mcp-config-field">
+            <label class="mcp-config-label" for="mcp-config-args">Argument</label>
+            <div class="mcp-config-value-row">
+              <input class="mcp-config-input" id="mcp-config-args" type="text" readonly spellcheck="false" aria-label="MCP command argument" />
+              <button class="mcp-config-copy-btn" id="copy-mcp-args-btn" type="button">Copy argument</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="mcp-config-example">
+          <div class="mcp-config-example-header">
+            <div>
+              <h4>Generic configuration example</h4>
+              <p>Property names can vary by client, but this shows the connection values and their intended structure.</p>
+            </div>
+            <button class="mcp-config-copy-btn" id="copy-mcp-example-btn" type="button">Copy example</button>
+          </div>
+          <pre class="mcp-config-example-code" id="mcp-config-example-code" aria-label="Generic MCP configuration example"></pre>
+        </div>
+
+        <div class="mcp-config-guidance">
+          <h4>Which fields should I use?</h4>
+          <p>Choose a local or stdio server, enter the executable path as the command, and add <code>--mcp-stdio</code> as one argument. No URL, headers, bearer token, or environment variables are needed.</p>
+          <p>The client launches Scratchpad in a mode with no window. Enable access before connecting. If you disable access or close Scratchpad, reconnect the client after enabling access again. If you move the app, copy the updated command.</p>
+        </div>
+
+        <p class="mcp-config-security-note">Connected agents can read the current collection, including unsaved edits, and may send note contents to their model provider.</p>
+      </div>
+    </div>
+  </div>
+
   <!-- Help & Reference Modal -->
   <div class="help-modal-backdrop" id="help-modal-backdrop" style="display: none;" aria-hidden="true">
     <div class="help-modal" id="help-modal" role="dialog" aria-modal="true" aria-label="Help and reference">
@@ -422,6 +497,7 @@
         <div class="help-tabs" role="tablist" aria-label="Help topics">
           <button class="help-tab-btn active" id="tab-shortcuts-btn" role="tab" aria-selected="true" aria-controls="pane-shortcuts">⌨️ Keyboard Shortcuts</button>
           <button class="help-tab-btn" id="tab-markdown-btn" role="tab" aria-selected="false" aria-controls="pane-markdown" tabindex="-1">📝 Markdown Cheatsheet</button>
+          <button class="help-tab-btn" id="tab-mcp-btn" role="tab" aria-selected="false" aria-controls="pane-mcp" tabindex="-1">🔌 MCP Functions</button>
         </div>
         <button class="close-help-btn" id="close-help-btn" title="Close (Escape)" aria-label="Close help">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
@@ -621,6 +697,37 @@ function hello() {
               <div class="cheatsheet-card-title">Editor Assistance</div>
               <p class="cheatsheet-note">Right-click in the editor and choose <strong>Insert</strong> for starter tables, task lists, code blocks, and links. Select text and type <span class="code-mono">*</span>, <span class="code-mono">_</span>, a backtick, or <span class="code-mono">~</span> to wrap it. Escape a Markdown trigger with a backslash when you want it to remain literal. Syntax highlighting and line numbers can be toggled under <strong>Scratchpad menu → Appearance</strong>.</p>
             </div>
+          </div>
+        </div>
+
+        <!-- MCP Functions Pane -->
+        <div class="help-pane" id="pane-mcp" role="tabpanel" aria-labelledby="tab-mcp-btn" aria-hidden="true">
+          <div class="shortcuts-section">
+            <h4 class="shortcuts-heading">Read-only agent tools</h4>
+            <p class="shortcuts-note">These functions expose the collection currently open in Scratchpad, including unsaved edits. They cannot create, change, move, or delete notes.</p>
+            <div class="cheatsheet-grid mcp-functions-grid">
+              <div class="cheatsheet-card">
+                <div class="cheatsheet-card-title"><code>list_folders</code></div>
+                <p class="mcp-function-description">Lists folders in sidebar order with their IDs and assigned-note counts.</p>
+                <p class="mcp-function-parameters"><strong>Optional:</strong> <code>limit</code> (1–200), <code>offset</code></p>
+              </div>
+              <div class="cheatsheet-card">
+                <div class="cheatsheet-card-title"><code>list_notes</code></div>
+                <p class="mcp-function-description">Lists note metadata and short previews in sidebar order. Use <code>get_note</code> for full content.</p>
+                <p class="mcp-function-parameters"><strong>Optional:</strong> <code>folderId</code>, <code>limit</code> (1–200), <code>offset</code></p>
+              </div>
+              <div class="cheatsheet-card">
+                <div class="cheatsheet-card-title"><code>search_notes</code></div>
+                <p class="mcp-function-description">Searches note titles and Markdown content for literal, case-insensitive text.</p>
+                <p class="mcp-function-parameters"><strong>Required:</strong> <code>query</code><br><strong>Optional:</strong> <code>folderId</code>, <code>limit</code> (1–200), <code>offset</code></p>
+              </div>
+              <div class="cheatsheet-card">
+                <div class="cheatsheet-card-title"><code>get_note</code></div>
+                <p class="mcp-function-description">Reads one note by ID and returns a character-addressed chunk of its Markdown content.</p>
+                <p class="mcp-function-parameters"><strong>Required:</strong> <code>id</code><br><strong>Optional:</strong> <code>offset</code>, <code>limit</code> (1–100,000)</p>
+              </div>
+            </div>
+            <p class="shortcuts-note">List and search results include <code>nextOffset</code> when another page is available. Continue from that offset until it is absent. Content offsets count Unicode characters, not bytes.</p>
           </div>
         </div>
       </div>

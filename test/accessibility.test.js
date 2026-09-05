@@ -21,10 +21,10 @@ test("interactive controls have an accessible name", () => {
   assert.deepEqual(unnamed, []);
 });
 
-test("help, theme, and about overlays expose modal dialog semantics", () => {
+test("help, theme, about, and MCP overlays expose modal dialog semantics", () => {
   const dialogs = [...document.querySelectorAll("[role='dialog']")];
 
-  assert.equal(dialogs.length, 3);
+  assert.equal(dialogs.length, 4);
   dialogs.forEach((dialog) => {
     assert.equal(dialog.getAttribute("aria-modal"), "true");
     assert.ok(dialog.getAttribute("aria-label") || dialog.getAttribute("aria-labelledby"));
@@ -34,6 +34,7 @@ test("help, theme, and about overlays expose modal dialog semantics", () => {
 test("help and reference documents current Markdown editing behavior", () => {
   const shortcuts = document.getElementById("pane-shortcuts").textContent;
   const markdown = document.getElementById("pane-markdown").textContent;
+  const mcp = document.getElementById("pane-mcp").textContent;
 
   assert.match(shortcuts, /F1/);
   assert.match(shortcuts, /Deleting a folder returns its notes to the top level/);
@@ -47,4 +48,10 @@ test("help and reference documents current Markdown editing behavior", () => {
   assert.match(markdown, /empty generated row to exit the table/);
   assert.match(markdown, /Blockquotes/);
   assert.doesNotMatch(markdown, /Callouts|\[!NOTE\]/);
+  assert.match(mcp, /list_folders/);
+  assert.match(mcp, /list_notes/);
+  assert.match(mcp, /search_notes/);
+  assert.match(mcp, /get_note/);
+  assert.match(mcp, /cannot create, change, move, or delete notes/);
+  assert.match(mcp, /Unicode characters, not bytes/);
 });

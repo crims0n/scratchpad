@@ -5,6 +5,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use tauri::Manager;
 
+mod mcp;
+pub use mcp::run_mcp_stdio;
+
 const PREFERENCES_FILE_NAME: &str = "scratchpad-preferences.json";
 
 #[derive(serde::Serialize, serde::Deserialize, Default)]
@@ -80,7 +83,7 @@ fn set_last_workspace(app: tauri::AppHandle, db_path: Option<String>) -> Result<
 // Note struct representation matching frontend note
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
-struct Note {
+pub(crate) struct Note {
     id: String,
     title: String,
     content: String,
@@ -93,7 +96,7 @@ struct Note {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
-struct Folder {
+pub(crate) struct Folder {
     id: String,
     name: String,
 }
@@ -513,6 +516,7 @@ fn show_alert_dialog(title: String, message: String) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(mcp::McpState::default())
         // Markdown links have no default handling in the webview; the opener
         // plugin sends them to the user's browser instead. Its capability scope
         // limits it to the same schemes the Markdown sanitizer allows.
@@ -529,7 +533,11 @@ pub fn run() {
             save_notes_db,
             save_folders_db,
             save_workspace_db,
-            show_alert_dialog
+            show_alert_dialog,
+            mcp::update_mcp_snapshot,
+            mcp::update_mcp_note,
+            mcp::start_mcp_server,
+            mcp::stop_mcp_server
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

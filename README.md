@@ -39,6 +39,7 @@ See [release notes](RELEASE_NOTES.md) for highlights, compatibility details, and
 - Native text-file import and Markdown export
 - Copy as Markdown or sanitized rendered HTML
 - Optional portable workspace files that reopen automatically
+- Optional read-only MCP access to the live note collection for compatible agents
 - Built-in and importable color themes
 - Persistent editor zoom and adjustable editor line spacing
 - A sectioned Scratchpad menu, About panel, keyboard shortcut reference, and Markdown cheatsheet
@@ -52,6 +53,11 @@ Local notes and workspace notes are two separate collections. While a workspace 
 Pending workspace changes are flushed before the desktop window closes; if that save fails, Scratchpad cancels the close and reports the error. If a workspace cannot be opened at start-up, Scratchpad reports it and falls back to your local notes, leaving the workspace file untouched.
 
 Scratchpad has no analytics, advertising, accounts, or sync service. Markdown is parsed on-device, preview HTML is sanitized, and remote images are blocked so merely previewing a note does not contact an image host. Links in the preview open in your default browser rather than inside the app; following one is an explicit network action and may contact that destination.
+
+The optional [MCP agent access](docs/mcp.md) uses a stdio mode built into the
+desktop executable and is off by default. While enabled, it can read the collection open
+in Scratchpad, including edits that have not been saved yet. A connected agent
+may send returned note contents to its model provider.
 
 Back up important workspace files like any other local document. Local-only notes remain tied to the app data stored by the operating system and may be lost if that data is cleared.
 
@@ -175,6 +181,7 @@ Production distribution will also require platform signing and, on macOS, notari
 | External links | `tauri-plugin-opener`, scoped to `http`, `https`, and `mailto` |
 | Local persistence | Desktop webview local storage |
 | Workspace persistence | Bundled SQLite through `rusqlite` |
+| Agent integration | Toggleable stdio MCP access in the desktop binary through the official Rust MCP SDK |
 | Native preferences | JSON in the platform app configuration directory |
 | Themes | CSS custom properties with JSON and TOML/key-value import |
 

@@ -84,6 +84,13 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+## Rust SDK for the Model Context Protocol
+
+Scratchpad's optional agent access uses
+[rmcp](https://github.com/modelcontextprotocol/rust-sdk), the official Rust SDK
+for the Model Context Protocol, under the Apache License 2.0. The license text
+is available at <https://www.apache.org/licenses/LICENSE-2.0>.
+
 ## jsdiff
 
 Scratchpad includes [jsdiff](https://github.com/kpdecker/jsdiff), a text
