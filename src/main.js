@@ -428,6 +428,9 @@ let activePane = "primary"; // "primary" or "secondary"
 let isSplitNoteMode = false;
 let isCompareMode = false;
 let noteComparison = emptyNoteComparison();
+let noteComparisonSource = null;
+let noteComparisonRefreshTimer = null;
+let isNoteComparisonPending = false;
 let activeDbPath = null;
 let currentLayoutMode = "edit"; // edit, split, preview
 let isFocusMode = false;
@@ -943,6 +946,8 @@ function deleteNote(id, event) {
 function loadActiveNote() {
   const activeNote = notes.find(n => n.id === activeNoteId);
   if (!activeNote) return;
+
+  cancelScheduledNoteComparison();
 
   noteTitleInput.value = activeNote.title;
   editorTextarea.value = activeNote.content;
@@ -1690,6 +1695,7 @@ function handleEditorInput() {
   activeNote.updatedAt = Date.now();
   scheduleMcpNoteUpdate(activeNote.id);
   updateCursorPositionForText(editorTextarea);
+  scheduleNoteComparisonRefresh();
   if (isFindBarOpen) {
     runFind({ preserveActive: true, selectActive: false });
   } else {
@@ -1907,16 +1913,17 @@ function updateSecondaryEditorBackdrop() {
 
 function renderSecondaryEditorBackdrop() {
   secondaryEditorRenderScheduler.cancel();
+  const comparison = visibleNoteComparison();
   secondaryEditorBackdrop.innerHTML = renderEditorBackdrop(secondaryEditorTextarea.value, {
     syntaxEnabled: syntaxHighlightingEnabled,
-    decorations: isCompareMode ? noteComparison.rightDecorations : []
+    decorations: isCompareMode ? comparison.rightDecorations : []
   });
   updateEditorLineNumberGutter(
     secondaryEditorTextarea,
     secondaryEditorLineNumbers,
     secondaryEditorWrapper,
     {
-      changedLines: isCompareMode ? noteComparison.rightChangedLines : [],
+      changedLines: isCompareMode ? comparison.rightChangedLines : [],
       changeType: "added"
     }
   );
@@ -1944,19 +1951,20 @@ function applyEditorLineNumbers(value, { persist = true, render = true } = {}) {
     localStorage.setItem("scratchpad_editor_line_numbers", String(editorLineNumbersEnabled));
   }
   if (render) {
+    const comparison = visibleNoteComparison();
     updateEditorLineNumberGutter(editorTextarea, editorLineNumbers, editorWrapper);
     updateEditorLineNumberGutter(
       secondaryEditorTextarea,
       secondaryEditorLineNumbers,
       secondaryEditorWrapper,
       {
-        changedLines: isCompareMode ? noteComparison.rightChangedLines : [],
+        changedLines: isCompareMode ? comparison.rightChangedLines : [],
         changeType: "added"
       }
     );
     if (isCompareMode) {
       updateEditorLineNumberGutter(editorTextarea, editorLineNumbers, editorWrapper, {
-        changedLines: noteComparison.leftChangedLines,
+        changedLines: comparison.leftChangedLines,
         changeType: "removed"
       });
     }
@@ -3784,9 +3792,10 @@ function renderPrimaryEditorBackdrop() {
   primaryEditorRenderScheduler.cancel();
   const text = editorTextarea.value;
   const query = findInput.value;
+  const comparison = visibleNoteComparison();
 
   updateEditorLineNumberGutter(editorTextarea, editorLineNumbers, editorWrapper, {
-    changedLines: isCompareMode ? noteComparison.leftChangedLines : [],
+    changedLines: isCompareMode ? comparison.leftChangedLines : [],
     changeType: "removed"
   });
 
@@ -3795,7 +3804,7 @@ function renderPrimaryEditorBackdrop() {
   if (!isFindBarOpen || !query || findMatches.length === 0) {
     editorBackdrop.innerHTML = renderEditorBackdrop(text, {
       syntaxEnabled: syntaxHighlightingEnabled,
-      decorations: isCompareMode ? noteComparison.leftDecorations : []
+      decorations: isCompareMode ? comparison.leftDecorations : []
     });
     return;
   }
@@ -3804,7 +3813,7 @@ function renderPrimaryEditorBackdrop() {
     syntaxEnabled: syntaxHighlightingEnabled,
     matches: findMatches,
     activeMatchIndex,
-    decorations: isCompareMode ? noteComparison.leftDecorations : []
+    decorations: isCompareMode ? comparison.leftDecorations : []
   });
 }
 
@@ -4057,6 +4066,7 @@ function canCompareVisibleNotes() {
 }
 
 function comparisonSummary() {
+  if (isNoteComparisonPending) return "Updating comparison…";
   if (noteComparison.changedLineCount === 0) return "No differences";
   return `${noteComparison.changedLineCount} changed line${noteComparison.changedLineCount === 1 ? "" : "s"}`;
 }
@@ -4067,7 +4077,7 @@ function syncCompareControl() {
 
   if (!available && isCompareMode) {
     isCompareMode = false;
-    noteComparison = emptyNoteComparison();
+    resetNoteComparison();
   }
 
   appContainer.classList.toggle("compare-mode", isCompareMode);
@@ -4100,14 +4110,66 @@ function syncCompareControl() {
   return compareWasActive && !isCompareMode;
 }
 
-function redrawComparisonBackdrops() {
+const NOTE_COMPARISON_DEBOUNCE_MS = 150;
+
+function visibleNoteComparison() {
+  return isNoteComparisonPending ? emptyNoteComparison() : noteComparison;
+}
+
+function noteComparisonMatches(leftText, rightText) {
+  return noteComparisonSource?.leftText === leftText &&
+    noteComparisonSource?.rightText === rightText;
+}
+
+function cancelScheduledNoteComparison() {
+  if (noteComparisonRefreshTimer !== null) {
+    clearTimeout(noteComparisonRefreshTimer);
+    noteComparisonRefreshTimer = null;
+  }
+  isNoteComparisonPending = false;
+}
+
+function resetNoteComparison() {
+  cancelScheduledNoteComparison();
+  noteComparison = emptyNoteComparison();
+  noteComparisonSource = null;
+}
+
+function scheduleNoteComparisonRefresh() {
+  if (!isCompareMode) return;
+
+  const leftText = editorTextarea.value;
+  const rightText = secondaryEditorTextarea.value;
+  if (noteComparisonMatches(leftText, rightText)) {
+    cancelScheduledNoteComparison();
+    syncCompareControl();
+    return;
+  }
+
+  if (noteComparisonRefreshTimer !== null) {
+    clearTimeout(noteComparisonRefreshTimer);
+  }
+  isNoteComparisonPending = true;
+  syncCompareControl();
+  noteComparisonRefreshTimer = setTimeout(() => {
+    noteComparisonRefreshTimer = null;
+    isNoteComparisonPending = false;
+    if (isCompareMode) redrawComparisonBackdrops({ forceComparison: true });
+  }, NOTE_COMPARISON_DEBOUNCE_MS);
+}
+
+function redrawComparisonBackdrops({ forceComparison = false } = {}) {
   syncCompareControl();
   if (isCompareMode) {
-    noteComparison = compareNoteText(
-      editorTextarea.value,
-      secondaryEditorTextarea.value,
-      window.Diff
-    );
+    const leftText = editorTextarea.value;
+    const rightText = secondaryEditorTextarea.value;
+    if (noteComparisonMatches(leftText, rightText)) {
+      cancelScheduledNoteComparison();
+    } else if (forceComparison || !isNoteComparisonPending) {
+      cancelScheduledNoteComparison();
+      noteComparison = compareNoteText(leftText, rightText, window.Diff);
+      noteComparisonSource = { leftText, rightText };
+    }
     syncCompareControl();
   }
 
@@ -4123,7 +4185,7 @@ function setCompareMode(forceState, { render = true } = {}) {
   }
 
   isCompareMode = shouldEnable;
-  if (!isCompareMode) noteComparison = emptyNoteComparison();
+  if (!isCompareMode) resetNoteComparison();
   syncCompareControl();
 
   if (render) redrawComparisonBackdrops();
@@ -4243,6 +4305,8 @@ function loadSecondaryNote() {
   const note = notes.find(n => n.id === secondaryNoteId);
   if (!note) return;
 
+  cancelScheduledNoteComparison();
+
   secondaryNoteTitle.value = note.title;
   secondaryEditorTextarea.value = note.content;
 
@@ -4263,6 +4327,7 @@ function handleSecondaryEditorInput() {
   note.updatedAt = Date.now();
   scheduleMcpNoteUpdate(note.id);
   updateCursorPositionForText(secondaryEditorTextarea);
+  scheduleNoteComparisonRefresh();
   secondaryEditorRenderScheduler.schedule();
 
   // Auto-rename if not locked
