@@ -16,7 +16,10 @@ test("About exposes release notes before downloading, skip, later, offline retry
   assert.equal(el("update-automatic").checked, false);
   assert.match(el("update-privacy").textContent, /sends no notes or workspace data/);
   app.click("actions-btn");
-  app.click("update-menu-btn");
+  app.click("about-menu-btn");
+  assert.equal(el("update-menu-btn"), null);
+  assert.equal(app.invocations.some(({ command }) => command === "check_for_updates"), false);
+  app.click("update-check-btn");
   await app.settle();
   assert.equal(el("about-modal-backdrop").style.display, "flex");
   assert.equal(el("update-channel").textContent, "Beta");
@@ -34,6 +37,7 @@ test("About exposes release notes before downloading, skip, later, offline retry
   assert.equal(el("about-modal-backdrop").style.display, "none");
   assert.equal(document.activeElement, el("actions-btn"));
   assert.equal(el("update-menu-indicator").hidden, false);
+  assert.equal(el("update-menu-indicator").closest("button"), el("about-menu-btn"));
   app.click("about-menu-btn");
   app.click("update-skip-btn");
   assert.equal(el("update-available").hidden, true);

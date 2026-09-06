@@ -772,11 +772,6 @@ async function init() {
   attachEventListeners();
   const updateChecker = createUpdateUi({
     document, invoke, storage: localStorage,
-    openAbout: () => {
-      toggleActionsDropdown(false);
-      actionsBtn.focus({ preventScroll: true });
-      openAboutModal();
-    },
     closeAbout: closeAboutModal
   });
   window.addEventListener("pagehide", () => updateChecker.dispose(), { once: true });

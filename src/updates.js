@@ -130,7 +130,7 @@ export function createUpdateChecker({ invoke, storage, onChange = () => {}, now 
   };
 }
 
-export function createUpdateUi({ document, invoke, storage, openAbout, closeAbout }) {
+export function createUpdateUi({ document, invoke, storage, closeAbout }) {
   const byId = (id) => document.getElementById(id);
   let displayedVersion = null;
   const checker = createUpdateChecker({ invoke, storage,
@@ -163,7 +163,6 @@ export function createUpdateUi({ document, invoke, storage, openAbout, closeAbou
       byId("update-notes-content").textContent = state.release?.notes || "No release notes were provided for this version.";
     }
   });
-  byId("update-menu-btn").addEventListener("click", () => { openAbout(); void checker.check(); });
   byId("update-check-btn").addEventListener("click", () => { void checker.check(); });
   byId("update-automatic").addEventListener("change", (event) => checker.setAutomatic(event.target.checked));
   byId("update-download-btn").addEventListener("click", () => { void checker.openRelease(); });
