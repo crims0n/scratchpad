@@ -101,7 +101,21 @@ pub(crate) struct Folder {
     name: String,
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TrashEntry {
+    id: String,
+    note: Note,
+    deleted_at: i64,
+    folder_name: Option<String>,
+}
+
 fn ensure_workspace_schema(conn: &rusqlite::Connection) -> Result<(), String> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS trash (id TEXT PRIMARY KEY, entry TEXT NOT NULL)",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
     conn.execute(
         "CREATE TABLE IF NOT EXISTS notes (
             id TEXT PRIMARY KEY,
@@ -424,6 +438,22 @@ fn load_db_folders(db_path: String) -> Result<Vec<Folder>, String> {
 }
 
 #[tauri::command]
+fn load_db_trash(db_path: String) -> Result<Vec<TrashEntry>, String> {
+    let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
+    ensure_workspace_schema(&conn)?;
+    let mut stmt = conn
+        .prepare("SELECT entry FROM trash ORDER BY rowid")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|e| e.to_string())?;
+    rows.map(|row| {
+        serde_json::from_str(&row.map_err(|e| e.to_string())?).map_err(|e| e.to_string())
+    })
+    .collect()
+}
+
+#[tauri::command]
 fn save_folders_db(db_path: String, folders: Vec<Folder>) -> Result<(), String> {
     let mut conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
     ensure_workspace_schema(&conn)?;
@@ -453,7 +483,22 @@ fn save_workspace_db(
     db_path: String,
     notes: Vec<Note>,
     folders: Vec<Folder>,
+    trash: Option<Vec<TrashEntry>>,
 ) -> Result<(), String> {
+    // Validate the complete replacement before opening a transaction. A note
+    // must never be committed pointing at a folder absent from this workspace.
+    let folder_ids: std::collections::HashSet<&str> =
+        folders.iter().map(|folder| folder.id.as_str()).collect();
+    for note in &notes {
+        if let Some(folder_id) = note.folder_id.as_deref() {
+            if !folder_ids.contains(folder_id) {
+                return Err(format!(
+                    "Note {} references missing folder {}",
+                    note.id, folder_id
+                ));
+            }
+        }
+    }
     let mut conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
     ensure_workspace_schema(&conn)?;
 
@@ -500,6 +545,20 @@ fn save_workspace_db(
         }
     }
 
+    if let Some(entries) = trash {
+        transaction
+            .execute("DELETE FROM trash", [])
+            .map_err(|e| e.to_string())?;
+        let mut stmt = transaction
+            .prepare("INSERT INTO trash (id, entry) VALUES (?1, ?2)")
+            .map_err(|e| e.to_string())?;
+        for entry in entries {
+            let json = serde_json::to_string(&entry).map_err(|e| e.to_string())?;
+            stmt.execute(rusqlite::params![entry.id, json])
+                .map_err(|e| e.to_string())?;
+        }
+    }
+
     transaction.commit().map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -529,6 +588,7 @@ pub fn run() {
             select_db_file,
             load_db_notes,
             load_db_folders,
+            load_db_trash,
             save_note_db,
             save_notes_db,
             save_folders_db,
@@ -536,7 +596,10 @@ pub fn run() {
             show_alert_dialog,
             mcp::update_mcp_snapshot,
             mcp::update_mcp_note,
+            mcp::get_mcp_connection_info,
             mcp::start_mcp_server,
+            mcp::set_mcp_permissions,
+            mcp::complete_mcp_write,
             mcp::stop_mcp_server
         ])
         .run(tauri::generate_context!())
@@ -663,6 +726,69 @@ mod tests {
     }
 
     #[test]
+    fn trash_deletion_and_restore_are_atomic_and_survive_other_saves() {
+        let path = temporary_db_path("trash-workspace");
+        let db_path = path.to_string_lossy().into_owned();
+        let original = note("original", "recover the full body", 1);
+        let entry = TrashEntry {
+            id: "trash-one".into(),
+            note: original.clone(),
+            deleted_at: 2,
+            folder_name: None,
+        };
+        save_workspace_db(
+            db_path.clone(),
+            vec![original.clone()],
+            vec![],
+            Some(vec![]),
+        )
+        .unwrap();
+        // A duplicate recovery ID fails after the active rows have been replaced;
+        // the entire transaction must roll back, retaining the live note.
+        assert!(save_workspace_db(
+            db_path.clone(),
+            vec![],
+            vec![],
+            Some(vec![entry.clone(), entry.clone()])
+        )
+        .is_err());
+        assert_eq!(
+            load_db_notes(db_path.clone()).unwrap()[0].content,
+            original.content
+        );
+        assert!(load_db_trash(db_path.clone()).unwrap().is_empty());
+        save_workspace_db(db_path.clone(), vec![], vec![], Some(vec![entry.clone()])).unwrap();
+        assert!(load_db_notes(db_path.clone()).unwrap().is_empty());
+        assert_eq!(
+            load_db_trash(db_path.clone()).unwrap()[0].note.content,
+            original.content
+        );
+        save_workspace_db(
+            db_path.clone(),
+            vec![note("other", "typed", 3)],
+            vec![],
+            None,
+        )
+        .unwrap();
+        assert_eq!(load_db_trash(db_path.clone()).unwrap().len(), 1);
+        // An invalid restored folder cannot remove the recovery entry.
+        let mut invalid = original.clone();
+        invalid.folder_id = Some("missing".into());
+        assert!(save_workspace_db(db_path.clone(), vec![invalid], vec![], Some(vec![])).is_err());
+        assert_eq!(load_db_trash(db_path.clone()).unwrap().len(), 1);
+        save_workspace_db(
+            db_path.clone(),
+            vec![original.clone()],
+            vec![],
+            Some(vec![]),
+        )
+        .unwrap();
+        assert_eq!(load_db_notes(db_path.clone()).unwrap()[0].id, original.id);
+        assert!(load_db_trash(db_path.clone()).unwrap().is_empty());
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
     fn workspace_structure_save_is_atomic() {
         let path = temporary_db_path("atomic-workspace");
         let db_path = path.to_string_lossy().into_owned();
@@ -672,6 +798,7 @@ mod tests {
             db_path.clone(),
             vec![original_note],
             vec![folder("original-folder", "Original")],
+            None,
         )
         .expect("initial workspace should save");
 
@@ -679,8 +806,13 @@ mod tests {
             db_path.clone(),
             vec![note("replacement", "must roll back", 2)],
             vec![folder("duplicate", "One"), folder("duplicate", "Two")],
+            None,
         );
         assert!(failed.is_err());
+
+        let mut orphan = note("orphan", "must not save", 3);
+        orphan.folder_id = Some("missing".into());
+        assert!(save_workspace_db(db_path.clone(), vec![orphan], vec![], None).is_err());
 
         let loaded_notes = load_db_notes(db_path.clone()).expect("original notes should remain");
         let loaded_folders =

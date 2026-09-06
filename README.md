@@ -26,6 +26,8 @@ See [release notes](RELEASE_NOTES.md) for highlights, compatibility details, and
 
 ## Features
 
+- Optional local MCP agent access with five read tools, eight individually enabled write tools, and a live listening indicator
+
 - Multiple scratchpads with automatic saving and titles derived from the first line
 - Edit, synchronized edit/preview, and full Markdown preview layouts
 - Optional Markdown editor coloring and language-aware fenced-code highlighting in previews
@@ -39,16 +41,16 @@ See [release notes](RELEASE_NOTES.md) for highlights, compatibility details, and
 - Native text-file import and Markdown export
 - Copy as Markdown or sanitized rendered HTML
 - Optional portable workspace files that reopen automatically
-- Optional read-only MCP access to the live note collection for compatible agents
+- Recoverable note deletion with persistent trash, Restore actions, and user-confirmed Empty Trash
 - Built-in and importable color themes
 - Persistent editor zoom and adjustable editor line spacing
 - A sectioned Scratchpad menu, About panel, keyboard shortcut reference, and Markdown cheatsheet
 
 ## Storage and privacy
 
-By default, notes and folders stay in the desktop webview's local storage. Scratchpad also supports optional portable workspace files for a durable collection of notes, folders, pinned state, and sidebar order. Workspace files use SQLite internally and may have a `.db` or `.sqlite` extension. Notes without a folder remain at the top level of the sidebar; deleting a folder returns its notes there rather than deleting them.
+By default, notes, folders, and trash stay in the desktop webview's local storage. Scratchpad also supports optional portable workspace files for a durable collection of notes, folders, trash, pinned state, and sidebar order. Workspace files use SQLite internally and may have a `.db` or `.sqlite` extension. Notes without a folder remain at the top level of the sidebar; deleting a folder from the sidebar returns its notes there rather than deleting them. Agent folder deletion requires an empty folder.
 
-Local notes and workspace notes are two separate collections. While a workspace is connected, changes are written to that workspace and the local collection is left exactly as it was, so disconnecting always returns the notes you had before. Connecting an empty workspace seeds it with the notes already available in the app; connecting a workspace that already has notes switches to those without touching your local ones.
+Local notes and workspace notes are two separate collections, each with its own trash. While a workspace is connected, changes are written to that workspace and the local collection is left exactly as it was, so disconnecting returns the notes and trash you had before. Connecting an empty workspace seeds it with the active notes and folders already available in the app; local trash stays local. A workspace with existing notes, folders, or trash opens its own collection.
 
 Pending workspace changes are flushed before the desktop window closes; if that save fails, Scratchpad cancels the close and reports the error. If a workspace cannot be opened at start-up, Scratchpad reports it and falls back to your local notes, leaving the workspace file untouched.
 
@@ -56,10 +58,36 @@ Scratchpad has no analytics, advertising, accounts, or sync service. Markdown is
 
 The optional [MCP agent access](docs/mcp.md) uses a stdio mode built into the
 desktop executable and is off by default. While enabled, it can read the collection open
-in Scratchpad, including edits that have not been saved yet. A connected agent
+in Scratchpad, including edits that have not been saved yet. Individually enabled
+write functions can create notes and folders, append text, rename notes and
+folders, move notes between folders, move notes to recoverable trash, and delete
+empty folders. Agents can list trash metadata; restoring and permanently
+emptying trash are available only in the UI. Existing-item edits require revision
+checks and support safe retries. A connected agent
 may send returned note contents to its model provider.
 
 Back up important workspace files like any other local document. Local-only notes remain tied to the app data stored by the operating system and may be lost if that data is cleared.
+
+## Agent access (MCP)
+
+Open **Scratchpad menu → Agent access** and turn access **On**. Choose **MCP Configuration** to copy the executable path, `--mcp-stdio` argument, or generic JSON example into a client that supports local stdio MCP servers. Configuration stays available while access is off. Scratchpad must remain open; the accent-colored **MCP listening** indicator appears beside the save status while access is enabled.
+
+Each time access starts, all five read permissions are on and all eight write permissions are off. Use the **Read** and **Write** checkboxes to choose individual functions or select all in a section. Changes apply to connected clients immediately and reset when access is restarted.
+
+| Permission group | Functions |
+| --- | --- |
+| Read | List folders, list notes, search notes, read note content, list trash metadata |
+| Write | Create note, create folder, append to note, rename note, move note, rename folder, delete note to trash, delete empty folder |
+
+Writes to existing items check the current revision before changing anything. Request IDs make retries safe after a timeout or failed save. Agents cannot replace an entire note, read trashed note bodies, restore notes, or empty trash. Access applies to all connected local clients and to the collection currently open in Scratchpad, including unsaved edits.
+
+See the [MCP reference](docs/mcp.md) for client setup, tool arguments, limits, retry behavior, and the privacy boundary.
+
+## Delete and recover notes
+
+Use a note's sidebar delete button or right-click it and choose **Delete Note** to move it to trash. Click the **trash icon at the bottom right** to see deleted notes and choose **Restore**. Restoring preserves the note's content, title, and pin state, returning it to its original folder or the top level if that folder no longer exists.
+
+Right-click the trash icon and choose **Empty Trash…**, then confirm to permanently remove the listed recovery copies. Keyboard users can focus the icon and press `Shift+F10` to open its menu. Trash survives restarts and has no automatic expiry. Only the user can restore notes or empty trash; MCP agents can list its metadata. See [storage and recovery details](docs/mcp.md#deleting-and-recovering-notes) for save-failure behavior.
 
 ## Keyboard shortcuts
 
@@ -165,7 +193,7 @@ Bundles and installers are written beneath `src-tauri/target/release/bundle/`.
 
 The **CI** workflow validates every push to `main` and every pull request. The manually triggered **Beta Release** workflow validates the project, builds macOS, Windows, and Linux packages, and attaches them to a draft prerelease.
 
-Before triggering a beta release, update the version in `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, and the About panel in `src/index.html`. The validation command checks that all four match, and the workflow refuses to overwrite an existing release tag. Review the generated draft and its assets before publishing it.
+Before triggering a beta release, update the version in `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, both lockfiles, and the About panel in `src/index.html`. Update `RELEASE_NOTES.md`, the README, MCP reference, welcome note, and in-app Help for the final feature set. The validation command checks version consistency, and the workflow refuses to overwrite an existing release tag. Review the generated draft and its assets before publishing it. The website's download manifest is generated from published GitHub releases; do not point it at unbuilt packages.
 
 Production distribution will also require platform signing and, on macOS, notarization credentials configured as repository secrets.
 

@@ -123,6 +123,16 @@
               </svg>
             </button>
             <div class="dropdown-content" id="actions-dropdown-content" aria-label="Scratchpad menu">
+              <div class="dropdown-section" id="workspace-menu-section">
+                <div class="dropdown-section-title">Workspace</div>
+                <div class="dropdown-status-row" aria-label="Current workspace">
+                  <span>Current</span>
+                  <span class="dropdown-item-value" id="workspace-menu-value">Local notes</span>
+                </div>
+                <button class="dropdown-item" id="db-connect-btn">Open workspace</button>
+                <button class="dropdown-item" id="db-disconnect-btn" style="display: none;">Return to local notes</button>
+              </div>
+              <div class="dropdown-divider"></div>
               <div class="dropdown-section" id="note-menu-section">
                 <div class="dropdown-section-title">Note</div>
                 <button class="dropdown-item" id="copy-markdown">Copy Markdown</button>
@@ -173,24 +183,13 @@
                 </div>
               </div>
               <div class="dropdown-divider"></div>
-              <div class="dropdown-section" id="workspace-menu-section">
-                <div class="dropdown-section-title">Workspace</div>
-                <div class="dropdown-status-row" aria-label="Current workspace">
-                  <span>Current</span>
-                  <span class="dropdown-item-value" id="workspace-menu-value">Local notes</span>
-                </div>
-                <button class="dropdown-item" id="db-connect-btn">Open workspace</button>
-                <button class="dropdown-item" id="db-disconnect-btn" style="display: none;">Return to local notes</button>
-              </div>
-              <div class="dropdown-divider"></div>
               <div class="dropdown-section" id="agent-access-menu-section">
                 <div class="dropdown-section-title">Agent access</div>
-                <div class="dropdown-status-row" aria-label="Current agent access">
-                  <span>Current</span>
-                  <span class="dropdown-item-value" id="agent-access-menu-value">Off</span>
+                <div class="view-setting-row">
+                  <span class="view-setting-label">Agent access</span>
+                  <button class="view-setting-toggle" id="agent-access-toggle-btn" type="button" aria-label="Toggle agent access" aria-pressed="false">Off</button>
                 </div>
-                <button class="dropdown-item" id="agent-access-toggle-btn">Enable read-only access</button>
-                <button class="dropdown-item" id="agent-access-config-btn" style="display: none;" aria-haspopup="dialog">MCP Configuration</button>
+                <button class="dropdown-item" id="agent-access-config-btn" aria-haspopup="dialog">MCP Configuration</button>
               </div>
               <div class="dropdown-divider"></div>
               <div class="dropdown-section" id="help-menu-section">
@@ -341,11 +340,37 @@
         </div>
         <div class="statusbar-right">
           <span id="selection-count" class="selection-count-text"></span>
-          <span id="mcp-status" role="status" aria-live="polite" title="Read-only MCP agent access is enabled and listening for connections" hidden>MCP listening</span>
+          <span id="mcp-status" role="status" aria-live="polite" title="MCP agent access is enabled and listening for connections" hidden>MCP listening</span>
           <span id="save-status" role="status" aria-live="polite">Saved</span>
+          <button id="trash-btn" class="trash-status-btn" type="button" aria-label="Trash" title="Trash — click to restore, right-click to empty" aria-haspopup="dialog">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" width="16" height="16" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </button>
         </div>
       </footer>
     </main>
+  </div>
+
+  <div id="trash-context-menu" class="custom-context-menu" role="menu" aria-label="Trash actions" style="display: none;">
+    <button id="trash-menu-empty" class="context-menu-item danger" type="button" role="menuitem">Empty Trash…</button>
+  </div>
+  <div id="trash-modal-backdrop" class="help-modal-backdrop" style="display: none;" aria-hidden="true">
+    <div id="trash-modal" class="help-modal trash-modal" role="dialog" aria-modal="true" aria-labelledby="trash-heading" aria-describedby="trash-status" tabindex="-1">
+      <div class="help-modal-header">
+        <h3 id="trash-heading">Trash</h3>
+        <button id="close-trash-btn" class="close-help-btn" type="button" aria-label="Close trash" title="Close (Escape)">×</button>
+      </div>
+      <div class="help-modal-body trash-modal-body">
+        <p id="trash-status" role="status" aria-live="polite"></p>
+        <ul id="trash-list" class="trash-list"></ul>
+        <div id="trash-empty-confirmation" hidden>
+          <p>Empty the trash for this collection?</p>
+          <div class="trash-confirm-actions">
+            <button id="cancel-empty-trash-btn" type="button" class="mcp-config-copy-btn">Cancel</button>
+            <button id="confirm-empty-trash-btn" type="button" class="mcp-config-copy-btn trash-empty-btn">Empty Trash</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Custom Context Menu for Text Editing -->
@@ -408,6 +433,10 @@
       </button>
       <div class="context-menu-submenu-content" id="ctx-move-folder-menu" role="menu" aria-label="Move note to folder"></div>
     </div>
+    <div class="context-menu-divider" id="ctx-delete-note-divider" style="display: none;"></div>
+    <button class="context-menu-item danger" id="ctx-delete-note" role="menuitem" style="display: none;">
+      <span>Delete Note</span>
+    </button>
     <button class="context-menu-item" id="ctx-folder-new-note" role="menuitem" style="display: none;">
       <span>New Note in Folder</span>
     </button>
@@ -445,7 +474,7 @@
       </div>
 
       <div class="help-modal-body mcp-config-modal-body">
-        <p class="mcp-config-description">Use these values in an MCP client that supports local stdio servers. Scratchpad must remain open with read-only agent access enabled.</p>
+        <p class="mcp-config-description">Use these values in an MCP client that supports local stdio servers. Scratchpad must remain open with agent access enabled. Choose which functions agents can use below.</p>
 
         <div class="mcp-config-fields" aria-label="MCP connection values">
           <div class="mcp-config-field">
@@ -468,6 +497,75 @@
           </div>
         </div>
 
+        <section class="mcp-permissions" aria-labelledby="mcp-permissions-heading">
+          <h4 id="mcp-permissions-heading">Function permissions</h4>
+          <p class="mcp-permissions-description">Changes apply immediately. Each time agent access starts, all read functions are enabled and all write functions are off.</p>
+          <p class="mcp-permissions-summary" id="agent-access-menu-value" role="status">Off</p>
+          <div class="mcp-permission-groups">
+            <fieldset class="mcp-permission-group">
+              <legend>Read</legend>
+              <label class="mcp-permission-all"><input type="checkbox" id="mcp-select-all-read" data-mcp-select-all="read" /> Select all read functions</label>
+              <label class="mcp-permission-option" for="mcp-permission-list_folders">
+                <input type="checkbox" id="mcp-permission-list_folders" data-mcp-tool="list_folders" checked />
+                <span><strong>List folders</strong><code>list_folders</code><small>Folder names, IDs, and note counts.</small></span>
+              </label>
+              <label class="mcp-permission-option" for="mcp-permission-list_notes">
+                <input type="checkbox" id="mcp-permission-list_notes" data-mcp-tool="list_notes" checked />
+                <span><strong>List notes</strong><code>list_notes</code><small>Note metadata and short previews.</small></span>
+              </label>
+              <label class="mcp-permission-option" for="mcp-permission-search_notes">
+                <input type="checkbox" id="mcp-permission-search_notes" data-mcp-tool="search_notes" checked />
+                <span><strong>Search notes</strong><code>search_notes</code><small>Search titles and note content.</small></span>
+              </label>
+              <label class="mcp-permission-option" for="mcp-permission-get_note">
+                <input type="checkbox" id="mcp-permission-get_note" data-mcp-tool="get_note" checked />
+                <span><strong>Get note</strong><code>get_note</code><small>Read content and its current revision.</small></span>
+              </label>
+              <label class="mcp-permission-option" for="mcp-permission-list_trash">
+                <input type="checkbox" id="mcp-permission-list_trash" data-mcp-tool="list_trash" checked />
+                <span><strong>List trash</strong><code>list_trash</code><small>Deleted-note titles, original folders, and deletion times.</small></span>
+              </label>
+            </fieldset>
+            <fieldset class="mcp-permission-group">
+              <legend>Write</legend>
+              <label class="mcp-permission-all"><input type="checkbox" id="mcp-select-all-write" data-mcp-select-all="write" /> Select all write functions</label>
+              <label class="mcp-permission-option" for="mcp-permission-create_note">
+                <input type="checkbox" id="mcp-permission-create_note" data-mcp-tool="create_note" />
+                <span><strong>Create note</strong><code>create_note</code><small>Add a note to the current collection.</small></span>
+              </label>
+              <label class="mcp-permission-option" for="mcp-permission-create_folder">
+                <input type="checkbox" id="mcp-permission-create_folder" data-mcp-tool="create_folder" />
+                <span><strong>Create folder</strong><code>create_folder</code><small>Add a folder to the current collection.</small></span>
+              </label>
+              <label class="mcp-permission-option" for="mcp-permission-append_to_note">
+                <input type="checkbox" id="mcp-permission-append_to_note" data-mcp-tool="append_to_note" />
+                <span><strong>Append to note</strong><code>append_to_note</code><small>Add text to an existing note with revision checking.</small></span>
+              </label>
+              <label class="mcp-permission-option" for="mcp-permission-rename_note">
+                <input type="checkbox" id="mcp-permission-rename_note" data-mcp-tool="rename_note" />
+                <span><strong>Rename note</strong><code>rename_note</code><small>Set and lock a note title with revision checking.</small></span>
+              </label>
+              <label class="mcp-permission-option" for="mcp-permission-move_note">
+                <input type="checkbox" id="mcp-permission-move_note" data-mcp-tool="move_note" />
+                <span><strong>Move note</strong><code>move_note</code><small>Move a note to a folder or the top level.</small></span>
+              </label>
+              <label class="mcp-permission-option" for="mcp-permission-rename_folder">
+                <input type="checkbox" id="mcp-permission-rename_folder" data-mcp-tool="rename_folder" />
+                <span><strong>Rename folder</strong><code>rename_folder</code><small>Rename a folder with revision checking.</small></span>
+              </label>
+              <label class="mcp-permission-option" for="mcp-permission-delete_note">
+                <input type="checkbox" id="mcp-permission-delete_note" data-mcp-tool="delete_note" />
+                <span><strong>Delete note</strong><code>delete_note</code><small>Move a note into recoverable trash.</small></span>
+              </label>
+              <label class="mcp-permission-option" for="mcp-permission-delete_folder">
+                <input type="checkbox" id="mcp-permission-delete_folder" data-mcp-tool="delete_folder" />
+                <span><strong>Delete empty folder</strong><code>delete_folder</code><small>Delete a folder only when it has no notes.</small></span>
+              </label>
+            </fieldset>
+          </div>
+          <p id="mcp-permission-status" class="mcp-permission-status" role="status" aria-live="polite"></p>
+        </section>
+
         <div class="mcp-config-example">
           <div class="mcp-config-example-header">
             <div>
@@ -477,12 +575,6 @@
             <button class="mcp-config-copy-btn" id="copy-mcp-example-btn" type="button">Copy example</button>
           </div>
           <pre class="mcp-config-example-code" id="mcp-config-example-code" aria-label="Generic MCP configuration example"></pre>
-        </div>
-
-        <div class="mcp-config-guidance">
-          <h4>Which fields should I use?</h4>
-          <p>Choose a local or stdio server, enter the executable path as the command, and add <code>--mcp-stdio</code> as one argument. No URL, headers, bearer token, or environment variables are needed.</p>
-          <p>The client launches Scratchpad in a mode with no window. Enable access before connecting. If you disable access or close Scratchpad, reconnect the client after enabling access again. If you move the app, copy the updated command.</p>
         </div>
 
         <p class="mcp-config-security-note">Connected agents can read the current collection, including unsaved edits, and may send note contents to their model provider.</p>
@@ -511,7 +603,8 @@
         <div class="help-pane active" id="pane-shortcuts" role="tabpanel" aria-labelledby="tab-shortcuts-btn">
           <div class="shortcuts-section">
             <h4 class="shortcuts-heading">Workspace & Notes</h4>
-            <p class="shortcuts-note">Use the folder button in the sidebar to create collapsible folders. Pinned notes stay at the very top as ordinary notes, while unpinned notes without a folder remain below the folders. Drag notes onto folders to move them, or right-click a folder to add a note, rename, reorder, or safely remove it. Deleting a folder returns its notes to the top level.</p>
+            <p class="shortcuts-note">Use the folder button in the sidebar to create collapsible folders. Pinned notes stay at the very top as ordinary notes, while unpinned notes without a folder remain below the folders. Drag notes onto folders to move them, or right-click a folder to add a note, rename, reorder, or safely remove it. Deleting a folder from the sidebar returns its notes to the top level.</p>
+            <p class="shortcuts-note">Right-click a note and choose <strong>Delete Note</strong> to move it to trash. Click the <strong>trash icon at the bottom right</strong> and choose <strong>Restore</strong> to recover it. Restored notes return to their original folder, or the top level if it no longer exists. Right-click the trash icon (or focus it and press Shift+F10), choose <strong>Empty Trash…</strong>, and confirm to permanently remove recovery copies. Each local collection or workspace has its own trash, which survives restarts and never expires automatically.</p>
             <div class="shortcut-row">
               <span class="shortcut-desc">New Scratchpad</span>
               <div class="shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>N</kbd></div>
@@ -703,12 +796,15 @@ function hello() {
         <!-- MCP Functions Pane -->
         <div class="help-pane" id="pane-mcp" role="tabpanel" aria-labelledby="tab-mcp-btn" aria-hidden="true">
           <div class="shortcuts-section">
-            <h4 class="shortcuts-heading">Read-only agent tools</h4>
-            <p class="shortcuts-note">These functions expose the collection currently open in Scratchpad, including unsaved edits. They cannot create, change, move, or delete notes.</p>
+            <h4 class="shortcuts-heading">Connect an agent</h4>
+            <p class="shortcuts-note">Turn <strong>Scratchpad menu → Agent access</strong> On, then open <strong>MCP Configuration</strong> to copy the command, argument, or generic JSON example into a local stdio MCP client. Configuration remains available while access is off. Keep Scratchpad open; <strong>MCP listening</strong> appears beside the save status while the server is enabled, even if no client is connected.</p>
+            <p class="shortcuts-note">Every time access starts, all five Read functions are enabled and all eight Write functions are disabled. Select individual permissions or <strong>Select all</strong> within a section. Changes apply immediately to all connected clients. Disabling access disconnects clients and resets permissions; reconnect your client after enabling access again.</p>
+            <p class="shortcuts-note">Agents see the collection currently open, including unsaved edits, and may send returned content to their model provider. Only you can restore notes or empty trash. Agents cannot read trashed note bodies or replace an entire note.</p>
+            <h4 class="shortcuts-heading">Read functions</h4>
             <div class="cheatsheet-grid mcp-functions-grid">
               <div class="cheatsheet-card">
                 <div class="cheatsheet-card-title"><code>list_folders</code></div>
-                <p class="mcp-function-description">Lists folders in sidebar order with their IDs and assigned-note counts.</p>
+                <p class="mcp-function-description">Lists folders in sidebar order with their IDs, revisions, and assigned-note counts.</p>
                 <p class="mcp-function-parameters"><strong>Optional:</strong> <code>limit</code> (1–200), <code>offset</code></p>
               </div>
               <div class="cheatsheet-card">
@@ -723,11 +819,60 @@ function hello() {
               </div>
               <div class="cheatsheet-card">
                 <div class="cheatsheet-card-title"><code>get_note</code></div>
-                <p class="mcp-function-description">Reads one note by ID and returns a character-addressed chunk of its Markdown content.</p>
+                <p class="mcp-function-description">Reads one note by ID and returns a character-addressed chunk of its Markdown content plus its current revision.</p>
                 <p class="mcp-function-parameters"><strong>Required:</strong> <code>id</code><br><strong>Optional:</strong> <code>offset</code>, <code>limit</code> (1–100,000)</p>
               </div>
+              <div class="cheatsheet-card">
+                <div class="cheatsheet-card-title"><code>list_trash</code></div>
+                <p class="mcp-function-description">Lists deleted-note metadata. Agents cannot restore notes, read trashed content, or empty trash.</p>
+                <p class="mcp-function-parameters"><strong>Optional:</strong> <code>limit</code> (1–200), <code>offset</code></p>
+              </div>
             </div>
-            <p class="shortcuts-note">List and search results include <code>nextOffset</code> when another page is available. Continue from that offset until it is absent. Content offsets count Unicode characters, not bytes.</p>
+            <p class="shortcuts-note">List and search results include <code>nextOffset</code> when another page is available. Continue from that offset until it is absent. Content offsets count Unicode characters, not bytes. When reading a note in chunks, restart if its revision changes.</p>
+            <h4 class="shortcuts-heading">Write functions</h4>
+            <p class="shortcuts-note">Read the current <code>collectionId</code> before writing. Edits and deletions also require the current revision from <code>get_note</code> or <code>list_folders</code>. After a timeout or failed save, retry the <strong>same request ID and identical arguments</strong>. Accepted edits that fail to save remain in the editor with <strong>Save failed</strong>; retrying saves the current state without applying the change again. Switching collections or restarting invalidates old collection IDs.</p>
+            <div class="cheatsheet-grid mcp-functions-grid">
+              <div class="cheatsheet-card">
+                <div class="cheatsheet-card-title"><code>create_note</code></div>
+                <p class="mcp-function-description">Creates and saves a note without changing your selection. Requires write access.</p>
+                <p class="mcp-function-parameters"><strong>Required:</strong> <code>collectionId</code>, <code>requestId</code>, <code>title</code><br><strong>Optional:</strong> <code>content</code>, <code>folderId</code></p>
+              </div>
+              <div class="cheatsheet-card">
+                <div class="cheatsheet-card-title"><code>create_folder</code></div>
+                <p class="mcp-function-description">Creates and saves a folder. Duplicate and reserved names are rejected. Requires write access.</p>
+                <p class="mcp-function-parameters"><strong>Required:</strong> <code>collectionId</code>, <code>requestId</code>, <code>name</code>. Read the collection ID first; reuse the same request ID and arguments when retrying.</p>
+              </div>
+              <div class="cheatsheet-card">
+                <div class="cheatsheet-card-title"><code>append_to_note</code></div>
+                <p class="mcp-function-description">Appends exact text, including your supplied newlines. Requires separate permission and the current revision from <code>get_note</code>. Conflicts require rereading. Failed saves remain visibly unsaved; retry the same request to save without appending again.</p>
+                <p class="mcp-function-parameters"><strong>Required:</strong> <code>collectionId</code>, <code>requestId</code>, <code>noteId</code>, <code>expectedRevision</code>, <code>content</code></p>
+              </div>
+              <div class="cheatsheet-card">
+                <div class="cheatsheet-card-title"><code>rename_note</code></div>
+                <p class="mcp-function-description">Sets and locks a title without changing note content. Requires the current revision from <code>get_note</code>. Retry identical arguments after a save failure.</p>
+                <p class="mcp-function-parameters"><strong>Required:</strong> <code>collectionId</code>, <code>requestId</code>, <code>noteId</code>, <code>expectedRevision</code>, <code>title</code></p>
+              </div>
+              <div class="cheatsheet-card">
+                <div class="cheatsheet-card-title"><code>move_note</code></div>
+                <p class="mcp-function-description">Moves a note to an existing folder or the top level, preserving content and pin state. Requires the current revision from <code>get_note</code>. Retry identical arguments after a save failure.</p>
+                <p class="mcp-function-parameters"><strong>Required:</strong> <code>collectionId</code>, <code>requestId</code>, <code>noteId</code>, <code>expectedRevision</code>, <code>folderId</code> (null for top level)</p>
+              </div>
+              <div class="cheatsheet-card">
+                <div class="cheatsheet-card-title"><code>rename_folder</code></div>
+                <p class="mcp-function-description">Renames a folder while preserving its ID and note assignments. Requires the current revision from <code>list_folders</code>. Duplicate and reserved names are rejected. Retry identical arguments after a save failure.</p>
+                <p class="mcp-function-parameters"><strong>Required:</strong> <code>collectionId</code>, <code>requestId</code>, <code>folderId</code>, <code>expectedRevision</code>, <code>name</code></p>
+              </div>
+              <div class="cheatsheet-card">
+                <div class="cheatsheet-card-title"><code>delete_note</code></div>
+                <p class="mcp-function-description">Moves a note to persistent trash with revision checking. Retry identical arguments after a save failure. You can restore the note from the trash icon.</p>
+                <p class="mcp-function-parameters"><strong>Required:</strong> <code>collectionId</code>, <code>requestId</code>, <code>noteId</code>, <code>expectedRevision</code> from get_note</p>
+              </div>
+              <div class="cheatsheet-card">
+                <div class="cheatsheet-card-title"><code>delete_folder</code></div>
+                <p class="mcp-function-description">Deletes an empty folder with revision checking. Move all assigned notes first, including pinned notes.</p>
+                <p class="mcp-function-parameters"><strong>Required:</strong> <code>collectionId</code>, <code>requestId</code>, <code>folderId</code>, <code>expectedRevision</code> from list_folders</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -790,10 +935,10 @@ function hello() {
 
       <div class="help-modal-body about-modal-body">
         <p class="about-description">Scratchpad is an open-source, local-first Markdown editor for notes, drafts, and code snippets. It pairs a focused desktop writing experience with live preview, flexible organization, and Markdown-aware editing tools.</p>
-        <p class="about-description">Built for macOS, Windows, and Linux, Scratchpad works without an account, cloud service, analytics, or telemetry. Your notes remain on your device unless you choose to move or share them.</p>
+        <p class="about-description">Built for macOS, Windows, and Linux, Scratchpad works without an account, cloud service, analytics, or telemetry. Notes and recoverable trash stay on your device. Optional MCP access lets connected agents read and, with your selected permissions, change the current collection; your agent may send returned content to its model provider.</p>
         <div class="about-version-row">
           <span>Program version</span>
-          <strong id="about-version">0.6.0</strong>
+          <strong id="about-version">0.7.0</strong>
         </div>
         <nav class="about-links" aria-label="Scratchpad project links">
           <a href="https://github.com/crims0n/scratchpad" target="_blank" rel="noopener noreferrer">Repository <span aria-hidden="true">↗</span></a>

@@ -28,12 +28,15 @@ test("agent access shares the live collection and can be turned off", async () =
     }
   });
 
+  app.click("actions-btn");
   app.click("agent-access-toggle-btn");
   await settle(30);
 
-  assert.equal(document.getElementById("agent-access-menu-value").textContent, "Read-only");
-  assert.equal(document.getElementById("agent-access-toggle-btn").textContent, "Disable agent access");
-  assert.equal(document.getElementById("agent-access-config-btn").style.display, "block");
+  assert.equal(document.getElementById("agent-access-menu-value").textContent, "5 read · 0 write functions enabled");
+  assert.equal(document.getElementById("agent-access-toggle-btn").textContent, "On");
+  assert.equal(document.getElementById("actions-dropdown-content").classList.contains("show"), true);
+  assert.equal(document.getElementById("actions-btn").getAttribute("aria-expanded"), "true");
+  assert.notEqual(document.getElementById("agent-access-config-btn").style.display, "none");
   assert.deepEqual(
     app.invocations.slice(-3).map(({ command }) => command),
     ["update_mcp_snapshot", "start_mcp_server", "update_mcp_snapshot"]
@@ -59,7 +62,8 @@ test("agent access shares the live collection and can be turned off", async () =
   assert.equal(document.getElementById("mcp-config-command").value, command);
   assert.equal(document.getElementById("mcp-config-args").value, "--mcp-stdio");
   assert.deepEqual(JSON.parse(document.getElementById("mcp-config-example-code").textContent), example);
-  assert.match(configBackdrop.textContent, /No URL, headers, bearer token, or environment variables are needed/);
+  assert.match(configBackdrop.textContent, /Function permissions/);
+  assert.doesNotMatch(configBackdrop.textContent, /Which fields should I use/);
 
   app.click("copy-mcp-command-btn");
   app.click("copy-mcp-args-btn");
@@ -84,9 +88,13 @@ test("agent access shares the live collection and can be turned off", async () =
   assert.equal(noteUpdate.args.note.content, "Unsaved agent-visible body");
   assert.equal(JSON.parse(app.storage.getItem("scratchpad_notes"))[0].content, "Saved body");
 
+  app.click("actions-btn");
   app.click("agent-access-toggle-btn");
   await settle(30);
   assert.equal(app.invocations.at(-1).command, "stop_mcp_server");
   assert.equal(document.getElementById("agent-access-menu-value").textContent, "Off");
-  assert.equal(document.getElementById("agent-access-config-btn").style.display, "none");
+  assert.equal(document.getElementById("actions-dropdown-content").classList.contains("show"), true);
+  document.body.click();
+  assert.equal(document.getElementById("actions-dropdown-content").classList.contains("show"), false);
+  assert.notEqual(document.getElementById("agent-access-config-btn").style.display, "none");
 });

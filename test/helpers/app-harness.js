@@ -25,11 +25,18 @@ export async function bootApp({ storage = {}, handlers = {}, instance = 1, windo
     invocations.push({ command, args });
     const handler = handlers[command];
     if (typeof handler === "function") return handler(args);
-    if (command === "load_db_folders") return [];
+    if (command === "load_db_folders" || command === "load_db_trash") return [];
     return null;
   }
 
-  dom.window.__TAURI__ = { core: { invoke }, window: windowApi };
+  const eventListeners = new Map();
+  dom.window.__TAURI__ = {
+    core: { invoke }, window: windowApi,
+    event: { listen: async (name, handler) => {
+      eventListeners.set(name, handler);
+      return () => eventListeners.delete(name);
+    } }
+  };
   dom.window.Diff = Diff;
   globalThis.window = dom.window;
   globalThis.document = dom.window.document;
@@ -51,6 +58,7 @@ export async function bootApp({ storage = {}, handlers = {}, instance = 1, windo
 
   return {
     dom,
+    emit: (name, payload) => eventListeners.get(name)?.({ payload }),
     invocations,
     settle,
     storage: dom.window.localStorage,

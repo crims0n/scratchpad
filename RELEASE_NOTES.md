@@ -1,42 +1,59 @@
-# Scratchpad Beta v0.6.0
+# Scratchpad Beta v0.7.0
 
 ## Highlights
 
-- Organize scratchpads into collapsible folders from the sidebar. Drag notes onto folders, reorder folders, or use each folder's context menu to add notes, rename, move, and delete it.
-- Compare two notes live in Dual-Note Split View. Scratchpad highlights removed source on the left and added source on the right without changing either note.
-- Pinned notes now stay at the very top of the sidebar as top-level notes. Notes without a folder remain below folders instead of appearing in a synthetic “Unfiled” section.
-- Folder structure and note assignments persist in both local storage and portable SQLite workspaces.
+- Connect a local MCP agent to the collection open in Scratchpad, with five read functions and eight individually enabled write functions.
+- Choose exactly which functions agents can use in **MCP Configuration**. Access starts off; every time you enable it, reads start on and writes start off.
+- Recover deleted notes from persistent trash. Click the bottom-right trash icon to restore a note, or right-click it to empty trash after confirmation.
+- See **MCP listening** beside the save status whenever agent access is enabled.
 
-## Folder organization
+## MCP agent access
 
-- Create folders with the new sidebar folder button, collapse them to reduce clutter, and drag them into the preferred order.
-- Drag a note onto a folder or choose **Move to Folder** from its context menu. Deleting a folder safely returns its notes to the top level rather than deleting them.
-- Sidebar search temporarily expands matching folders while preserving their collapsed state for later.
-- Pinned notes retain their previous folder assignment so unpinning returns them to the right place. Creating or importing from a pinned note correctly creates at the top level.
-- The secondary-note selector groups ordinary notes by folder while leaving pinned and folderless notes at the top level.
+Open **Scratchpad menu → Agent access** and turn access **On**. **MCP Configuration** provides the executable path, the `--mcp-stdio` argument, copy buttons, and a generic JSON example for clients that launch local stdio MCP servers. Scratchpad must remain open. No separate server or runtime is required.
 
-## Note comparison
+| Read functions — enabled by default when access starts | Write functions — individually opt in |
+| --- | --- |
+| `list_folders` — folder IDs, names, revisions, and note counts | `create_note` — create a titled note, optionally in a folder |
+| `list_notes` — note metadata and previews | `create_folder` — create a folder |
+| `search_notes` — search titles and Markdown | `append_to_note` — append exact text to an existing note |
+| `get_note` — read note content and its revision | `rename_note` — set and lock a note title |
+| `list_trash` — deleted-note metadata | `move_note` — move to a folder or the top level |
+| | `rename_folder` — rename without changing note assignments |
+| | `delete_note` — move a note to recoverable trash |
+| | `delete_folder` — remove an empty folder |
 
-- Choose **Compare** while two different notes are open side by side to enable line-level and contiguous substring highlighting.
-- The comparison count reports changed lines, updates as either note is edited, and uses a change rail so blank-line and whitespace-only differences remain visible even when line numbers are off.
-- Comparison composes with Markdown syntax coloring and Find highlights, and turns off automatically when split view closes or both panes show the same note.
-- Split-view headers now align both notes side by side, with each title positioned consistently and the secondary-note selector beside its title.
+- Select individual permissions or all functions within the **Read** or **Write** section. Changes apply immediately to connected clients. Permissions reset when access is restarted.
+- Agents read the current collection, including unsaved edits. Opening or disconnecting a workspace changes the collection they see.
+- Writes require the current collection ID and a request ID. Existing-item changes also check a revision, preventing a stale request from overwriting intervening edits.
+- Retry the same request ID with identical arguments after a timeout or save failure. Accepted changes that fail to save remain visible with **Save failed**; a retry saves without applying them twice.
+- `move_note` accepts an explicit JSON `null` destination for the top level. Omission and the string `"null"` are not substitutes.
+- MCP folder deletion requires an empty folder, including any pinned notes assigned to it. There is no cascading deletion or whole-note replacement.
+- Access uses an authenticated local channel. Scratchpad itself sends no notes to a service; the connected agent may send returned content to its model provider.
+
+See the [MCP reference](https://github.com/crims0n/scratchpad/blob/scratchpad-beta-v0.7.0/docs/mcp.md) for setup, parameters, pagination, limits, and recovery behavior. If you tested an earlier HTTP configuration, replace its URL and authorization header with the local stdio command and argument.
+
+## Trash and recovery
+
+- **Delete Note** is available in the note's right-click menu. Both it and the sidebar delete button use the same recovery path as MCP deletion.
+- Trash retains full Markdown, titles, pin state, title-lock state, and original folder information. It is separate for local notes and each workspace, survives restarts, and has no automatic expiry.
+- Click the trash icon and choose **Restore**. Notes return to their original folder, or the top level if that folder no longer exists. Restoration cannot overwrite an active note with the same ID.
+- Right-click the icon, or focus it and press **Shift+F10**, then choose **Empty Trash…**. Confirmation defaults to Cancel. Notes deleted after the confirmation opens are retained.
+- Agents can list trash metadata, but cannot read trashed note bodies, restore notes, or empty trash. Permanent removal is available only through the user interface.
+- Deleting the last active note leaves a new blank note. Deleting a folder from the sidebar continues to return its notes to the top level.
 
 ## Interface and reliability
 
-- Subtle dividers distinguish pinned notes, folders, and top-level notes without adding empty sidebar sections.
-- The About dialog now gives a fuller description of Scratchpad's local-first, cross-platform design and privacy model.
-- Closing Dual-Note Split View immediately clears its temporary enabled notification.
-- Workspace structural updates save folders and notes in one SQLite transaction. Failed workspace loads or first-time seeds leave the local collection intact.
-- jsdiff 9.0.0 is bundled with the application for offline note comparison under its BSD 3-Clause License.
+- **Workspace** is now the first section in the Scratchpad menu. The Agent access On/Off toggle matches the appearance controls and keeps the menu open when changed.
+- **MCP Configuration** remains available while access is off. Function permissions appear above the generic configuration example, which wraps without an internal scrollbar.
+- Menu labels, spacing, and alignment are consistent. The listening dot uses the interface accent color alongside the existing save or workspace-file status.
+- SQLite structural changes commit notes, folders, and trash together, with folder-reference validation. Save queues coordinate agent changes, typing, workspace switching, and window close.
+- Local deletion writes recovery data before removing active notes. Interrupted local saves may retain duplicate recovery copies rather than lose a note. Confirmed Empty Trash can free local storage after a quota failure.
+- The README, welcome note, About text, and Help reference now cover agent access and note recovery.
 
-## Compatibility
+## Compatibility and beta notice
 
-- Existing local notes, pinned state, sidebar order, preferences, and Markdown editing settings remain intact.
-- Existing SQLite workspace files are upgraded automatically with optional folder assignments and a folders table; no manual migration is required.
-- Local notes and workspace notes remain separate collections when connecting or disconnecting a workspace.
-- Scratchpad remains fully offline; jsdiff is bundled locally and no note content is sent to an external service.
-
-## Beta notice
-
-Back up important workspace files before testing. These builds are not yet production-signed, so macOS and Windows may display a security warning.
+- Existing local notes, folders, preferences, and workspace files continue to work. SQLite workspaces gain an additive trash table automatically; no manual migration is required.
+- Local notes and workspace notes remain separate. An empty workspace is seeded with active notes and folders; local trash stays local. A workspace containing only trash opens its own collection.
+- Agent access is off on launch. Reconnect your client after restarting Scratchpad or re-enabling access. Old collection IDs and retry receipts do not survive a collection session change.
+- Trash protects deletions made with this version; it cannot recover notes permanently deleted by earlier versions. Keep backups of important workspace files.
+- v0.7.0 retains the existing beta application identity and packaging. Builds are not yet production-signed; macOS and Windows may display a security warning.

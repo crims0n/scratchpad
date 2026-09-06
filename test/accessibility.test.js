@@ -12,7 +12,8 @@ test("interactive controls have an accessible name", () => {
   const unnamed = [...document.querySelectorAll("button, input, select, textarea")]
     .filter((element) => {
       const visibleText = element.textContent.trim();
-      return !visibleText &&
+      const hasLabel = [...(element.labels || [])].some(label => label.textContent.trim());
+      return !visibleText && !hasLabel &&
         !element.getAttribute("aria-label")?.trim() &&
         !element.getAttribute("title")?.trim();
     })
@@ -21,10 +22,10 @@ test("interactive controls have an accessible name", () => {
   assert.deepEqual(unnamed, []);
 });
 
-test("help, theme, about, and MCP overlays expose modal dialog semantics", () => {
+test("help, theme, about, MCP, and trash overlays expose modal dialog semantics", () => {
   const dialogs = [...document.querySelectorAll("[role='dialog']")];
 
-  assert.equal(dialogs.length, 4);
+  assert.equal(dialogs.length, 5);
   dialogs.forEach((dialog) => {
     assert.equal(dialog.getAttribute("aria-modal"), "true");
     assert.ok(dialog.getAttribute("aria-label") || dialog.getAttribute("aria-labelledby"));
@@ -37,7 +38,7 @@ test("help and reference documents current Markdown editing behavior", () => {
   const mcp = document.getElementById("pane-mcp").textContent;
 
   assert.match(shortcuts, /F1/);
-  assert.match(shortcuts, /Deleting a folder returns its notes to the top level/);
+  assert.match(shortcuts, /Deleting a folder from the sidebar returns its notes to the top level/);
   assert.match(shortcuts, /Compare.*removed source text on the left and added source text on the right/);
   assert.match(shortcuts, /Jump to List Content \/ Line Start/);
   assert.match(shortcuts, /Continue List, Quote, Fence, or Table/);
@@ -52,6 +53,12 @@ test("help and reference documents current Markdown editing behavior", () => {
   assert.match(mcp, /list_notes/);
   assert.match(mcp, /search_notes/);
   assert.match(mcp, /get_note/);
-  assert.match(mcp, /cannot create, change, move, or delete notes/);
+  assert.match(mcp, /create_note/);
+  assert.match(mcp, /create_folder/);
+  assert.match(mcp, /append_to_note/);
+  assert.match(mcp, /rename_note/);
+  assert.match(mcp, /move_note/);
+  assert.match(mcp, /rename_folder/);
+  assert.match(mcp, /Only you can restore notes or empty trash/);
   assert.match(mcp, /Unicode characters, not bytes/);
 });

@@ -9,6 +9,9 @@ import {
   readStoredFolders,
   readStoredNotes
 } from "./storage.js";
+import { LOCAL_TRASH_KEY, readTrash, trashSummary, restoredNote, persistNotesAndTrashLocally, emptyTrashLocally } from "./trash.js";
+import { createTrashUi } from "./trash-ui.js";
+import { createMcpWriter, createNoteRevisionTracker, createFolderRevisionTracker } from "./mcp-writes.js";
 import { renderMarkdown, resolveLinkAction, sanitizeMarkdownHtml } from "./markdown.js";
 import { getNotePreview } from "./note-preview.js";
 import { compareNoteText, emptyNoteComparison } from "./note-compare.js";
@@ -114,6 +117,9 @@ const dbDisconnectBtn = document.getElementById("db-disconnect-btn");
 const workspaceMenuValue = document.getElementById("workspace-menu-value");
 const agentAccessMenuValue = document.getElementById("agent-access-menu-value");
 const agentAccessToggleBtn = document.getElementById("agent-access-toggle-btn");
+const mcpPermissionInputs = [...document.querySelectorAll("[data-mcp-tool]")];
+const mcpSelectAllInputs = [...document.querySelectorAll("[data-mcp-select-all]")];
+const mcpPermissionStatus = document.getElementById("mcp-permission-status");
 const agentAccessConfigBtn = document.getElementById("agent-access-config-btn");
 const helpMenuBtn = document.getElementById("help-menu-btn");
 const aboutMenuBtn = document.getElementById("about-menu-btn");
@@ -186,6 +192,8 @@ const ctxMoveDownBtn = document.getElementById("ctx-move-down");
 const ctxMoveFolderGroup = document.getElementById("ctx-move-folder-group");
 const ctxMoveFolderBtn = document.getElementById("ctx-move-folder");
 const ctxMoveFolderMenu = document.getElementById("ctx-move-folder-menu");
+const ctxDeleteNoteBtn = document.getElementById("ctx-delete-note");
+const ctxDeleteNoteDivider = document.getElementById("ctx-delete-note-divider");
 const ctxFolderNewNoteBtn = document.getElementById("ctx-folder-new-note");
 const ctxFolderRenameBtn = document.getElementById("ctx-folder-rename");
 const ctxFolderMoveUpBtn = document.getElementById("ctx-folder-move-up");
@@ -411,6 +419,9 @@ const COLLAPSED_FOLDERS_KEY = "scratchpad_collapsed_folders";
 // State
 let notes = [];
 let folders = [];
+let trash = [];
+let trashLoadError = null;
+let trashNeedsSave = false;
 let activeNoteId = null;
 let secondaryNoteId = null;
 let activePane = "primary"; // "primary" or "secondary"
@@ -464,6 +475,233 @@ let syntaxHighlightingEnabled = DEFAULT_SYNTAX_HIGHLIGHTING;
 let editorLineNumbersEnabled = DEFAULT_EDITOR_LINE_NUMBERS;
 let previewHighlightsRendered = false;
 let isMcpEnabled = false;
+const MCP_READ_TOOLS = ["list_folders", "list_notes", "search_notes", "get_note", "list_trash"];
+const MCP_WRITE_TOOLS = ["create_note", "create_folder", "append_to_note", "rename_note", "move_note", "rename_folder", "delete_note", "delete_folder"];
+const defaultMcpPermissions = () => Object.fromEntries([...MCP_READ_TOOLS.map(tool => [tool, true]), ...MCP_WRITE_TOOLS.map(tool => [tool, false])]);
+let mcpPermissions = defaultMcpPermissions();
+let isMcpPermissionSaving = false;
+const noteRevision = createNoteRevisionTracker(() => window.crypto.randomUUID());
+const currentNoteRevision = note => noteRevision(note, mcpCollectionId);
+const folderRevision = createFolderRevisionTracker(() => window.crypto.randomUUID());
+const currentFolderRevision = folder => folderRevision(folder, mcpCollectionId);
+let mcpWriteListener = null;
+let mcpCollectionId = window.crypto.randomUUID();
+let isWorkspaceSwitching = false;
+let isClosePending = false;
+
+function enqueueWorkspaceOperation(operation) {
+  const result = dbSaveQueue.then(operation);
+  dbSaveQueue = result.catch(() => undefined);
+  return result;
+}
+
+const mcpWriter = createMcpWriter({
+  state: () => ({
+    permissions: Object.fromEntries(Object.entries(mcpPermissions).map(([tool, allowed]) => [tool, isMcpEnabled && allowed])),
+    switching: isWorkspaceSwitching || isClosePending,
+    collectionId: mcpCollectionId, dbPath: activeDbPath, notes, folders, trash, editingFolderId
+  }),
+  uuid: () => window.crypto.randomUUID(),
+  revision: currentNoteRevision,
+  folderRevision: currentFolderRevision,
+  applyNoteDeletion,
+  applyFolderDeletion,
+  deletionSaved: () => { if (noteSaveDebounceTimers.size === 0) setSavedState(); },
+  applyNoteChange: (note, operation) => {
+    notes = notes.map(existing => existing.id === note.id ? note : existing);
+    triggerSavingState();
+    scheduleMcpNoteUpdate(note.id);
+    try {
+      for (const [id, textarea] of [[activeNoteId, editorTextarea], [secondaryNoteId, secondaryEditorTextarea]]) {
+        if (id !== note.id || operation !== "append_to_note") continue;
+        const { selectionStart, selectionEnd, selectionDirection, scrollTop, scrollLeft } = textarea;
+        textarea.value = note.content;
+        textarea.setSelectionRange(selectionStart, selectionEnd, selectionDirection);
+        textarea.scrollTop = scrollTop;
+        textarea.scrollLeft = scrollLeft;
+      }
+      if (activeNoteId === note.id) {
+        if (operation === "rename_note") noteTitleInput.value = note.title;
+        updateMarkdownPreview();
+        updateWordCharCount();
+        primaryEditorRenderScheduler.schedule();
+      }
+      if (secondaryNoteId === note.id) {
+        updateSecondaryMarkdownPreview();
+        secondaryEditorRenderScheduler.schedule();
+      }
+      populateSecondaryNoteSelect();
+      if (isFindResultsOpen && isFindAllNotesMode) renderFindResults();
+      if (isFindBarOpen) runFind({ preserveActive: true, selectActive: false });
+      if (!isCreatingFolder && editingFolderId === null) renderNoteList(searchInput.value);
+    } catch (error) {
+      console.error("Could not render MCP note change", error);
+    }
+  },
+  applyFolderChange: folder => {
+    folders = folders.map(existing => existing.id === folder.id ? folder : existing);
+    triggerSavingState();
+    scheduleMcpSnapshotUpdate();
+    try {
+      if (!isCreatingFolder && editingFolderId === null) renderNoteList(searchInput.value);
+      populateSecondaryNoteSelect();
+    } catch (error) {
+      console.error("Could not render MCP folder rename", error);
+    }
+  },
+  mutationSaveFailed: setSaveFailedState,
+  mutationSaved: (id, revision, operation) => {
+    const changingFolder = operation === "rename_folder";
+    const item = (changingFolder ? folders : notes).find(item => item.id === id);
+    if (item && (changingFolder ? currentFolderRevision(item) : currentNoteRevision(item)) === revision
+      && noteSaveDebounceTimers.size === 0) setSavedState();
+  },
+  enqueue: enqueueWorkspaceOperation,
+  persist: async (candidate, operation) => {
+    if (candidate.dbPath) {
+      await persistWorkspace(candidate);
+    } else {
+      const result = ["create_folder", "rename_folder", "delete_folder"].includes(operation) && !trashNeedsSave
+        ? persistFoldersLocally(localStorage, candidate.folders)
+        : persistNotesAndTrashLocally(localStorage, candidate.notes, candidate.trash);
+      if (!result.ok) throw new Error("Could not save MCP write to local storage");
+      if (trashNeedsSave) {
+        const folderResult = persistFoldersLocally(localStorage, candidate.folders);
+        if (!folderResult.ok) throw new Error("Could not save folders to local storage");
+      }
+      trashNeedsSave = false;
+    }
+  },
+  publish: ({ note, folder }) => {
+    if (note) {
+      // A user may remove its destination folder while persistence is in flight.
+      note.folderId = validFolderId(note.folderId, folders);
+      notes = insertNoteBelowPinned(notes, note);
+    }
+    if (folder) folders = [...folders, folder];
+    try {
+      // Let an in-progress sidebar rename/create finish without replacing its
+      // input. That action's normal render will reveal the new items.
+      if (!isCreatingFolder && editingFolderId === null) renderNoteList(searchInput.value);
+      populateSecondaryNoteSelect();
+    } catch (error) {
+      // Persistence succeeded; a rendering failure must not make retries create
+      // another item. Keep the saved result and live state authoritative.
+      console.error("Could not render MCP creation", error);
+    }
+  },
+  refresh: () => syncMcpSnapshot()
+});
+async function persistWorkspace(candidate) {
+  await invoke("save_workspace_db", {
+    dbPath: candidate.dbPath, notes: candidate.notes.map(note => ({ ...note })),
+    folders: candidate.folders.map(folder => ({ ...folder })), trash: structuredClone(candidate.trash)
+  });
+  trashNeedsSave = false;
+}
+
+const trashUi = createTrashUi({
+  state: () => ({ entries: trash, collectionId: mcpCollectionId, error: trashLoadError }),
+  restore: (id, collectionId) => enqueueWorkspaceOperation(async () => {
+    checkTrashCollection(collectionId);
+    const entry = trash.find(entry => entry.id === id);
+    if (!entry) throw new Error("This note is no longer in the trash");
+    const note = restoredNote(entry, notes, folders);
+    const nextTrash = trash.filter(entry => entry.id !== id);
+    await persistTrashState(insertNoteBelowPinned(notes, note), nextTrash);
+    // Preserve edits made to other notes while persistence was in flight.
+    note.folderId = validFolderId(note.folderId, folders);
+    notes = insertNoteBelowPinned(notes, note);
+    trash = nextTrash;
+    if (noteSaveDebounceTimers.size === 0) setSavedState();
+    refreshTrashUi();
+    renderNoteList(searchInput.value);
+    populateSecondaryNoteSelect();
+    scheduleMcpSnapshotUpdate();
+  }),
+  empty: (ids, collectionId) => enqueueWorkspaceOperation(async () => {
+    checkTrashCollection(collectionId);
+    const selected = new Set(ids);
+    const nextTrash = trash.filter(entry => !selected.has(entry.id));
+    if (activeDbPath) await persistTrashState(notes, nextTrash);
+    else {
+      const result = emptyTrashLocally(localStorage, notes, nextTrash);
+      if (!result.ok) { setSaveFailedState(); throw result.error; }
+      trashNeedsSave = false;
+    }
+    trash = nextTrash;
+    if (noteSaveDebounceTimers.size === 0) setSavedState();
+    refreshTrashUi();
+    scheduleMcpSnapshotUpdate();
+  })
+});
+
+function checkTrashCollection(collectionId) {
+  if (trashLoadError) throw new Error(trashLoadError);
+  if (collectionId !== mcpCollectionId || isWorkspaceSwitching || isClosePending) {
+    throw new Error("Collection changed or is switching; reopen Trash before continuing");
+  }
+}
+
+async function persistTrashState(nextNotes, nextTrash) {
+  try {
+    if (activeDbPath) await persistWorkspace({ dbPath: activeDbPath, notes: nextNotes, folders, trash: nextTrash });
+    else {
+      const result = persistNotesAndTrashLocally(localStorage, nextNotes, nextTrash);
+      if (!result.ok) throw result.error;
+    }
+    trashNeedsSave = false;
+  } catch (error) {
+    setSaveFailedState();
+    throw error;
+  }
+}
+
+function refreshTrashUi() { trashUi.refresh(); }
+
+function applyNoteDeletion(note) {
+  if (trashLoadError) throw new Error(trashLoadError);
+  const entry = { id: window.crypto.randomUUID(), note: structuredClone(note), deletedAt: Date.now(),
+    folderName: folders.find(folder => folder.id === note.folderId)?.name ?? null };
+  trash = [...trash, entry];
+  trashNeedsSave = true;
+  notes = notes.filter(existing => existing.id !== note.id);
+  clearTimeout(noteSaveDebounceTimers.get(note.id));
+  noteSaveDebounceTimers.delete(note.id);
+  if (notes.length === 0) {
+    notes = [{ id: `note_${window.crypto.randomUUID()}`, title: "Untitled Scratchpad", content: "",
+      updatedAt: Date.now(), isTitleLocked: false, isPinned: false, folderId: null }];
+  }
+  if (activeNoteId === note.id) activeNoteId = notes[0].id;
+  triggerSavingState();
+  try {
+    refreshTrashUi();
+    renderNoteList(searchInput.value);
+    loadActiveNote();
+    syncSecondaryNoteUi(true);
+  } catch (error) {
+    console.error("Could not render note deletion", error);
+  }
+  scheduleMcpSnapshotUpdate();
+  return trashSummary(entry);
+}
+
+function applyFolderDeletion(folder) {
+  if (editingFolderId === folder.id) throw new Error("Folder is being edited; try again when the edit finishes");
+  if (notes.some(note => note.folderId === folder.id)) throw new Error("Folder is not empty; move its notes before deleting it");
+  folders = folders.filter(existing => existing.id !== folder.id);
+  collapsedFolderIds.delete(folder.id);
+  triggerSavingState();
+  try {
+    persistCollapsedFolders();
+    renderNoteList(searchInput.value);
+    populateSecondaryNoteSelect();
+  } catch (error) {
+    console.error("Could not render folder deletion", error);
+  }
+  scheduleMcpSnapshotUpdate();
+}
+
 let mcpConnectionInfo = null;
 let mcpSnapshotTimer = null;
 const mcpNoteSnapshotTimers = new Map();
@@ -542,6 +780,7 @@ async function init() {
   // 3. Always load the local-only collection first as guaranteed baseline
   loadNotesFromLocalStorage();
   loadFoldersFromLocalStorage();
+  loadTrashFromLocalStorage();
   notes = normalizeNoteFolderAssignments(notes, folders);
   loadCollapsedFolders();
   adoptLegacyStashedNotes();
@@ -563,18 +802,23 @@ async function init() {
         throw new Error("Workspace returned an unexpected folders response");
       }
       const dbFolders = normalizeFolders(dbFoldersResult);
+      const dbTrash = await loadWorkspaceTrash(activeDbPath);
       // Seeding deletes and rewrites the workspace's rows, so an unreadable
       // response must not be mistaken for an empty workspace.
       if (dbNotes.length > 0) {
         folders = dbFolders;
         notes = normalizePinnedNoteOrder(normalizeNoteFolderAssignments(dbNotes, folders));
-      } else if (dbFolders.length > 0) {
+      } else if (dbFolders.length > 0 || dbTrash.length > 0) {
         notes = [];
         folders = dbFolders;
       } else if (notes.length > 0) {
         // Seed empty SQLite database with existing LocalStorage notes
         await invoke("save_workspace_db", { dbPath: activeDbPath, notes, folders });
       }
+      trash = dbTrash;
+      trashLoadError = null;
+      trashNeedsSave = false;
+      refreshTrashUi();
       updateDbUiState(true);
     } catch (err) {
       console.error("Failed to load workspace from SQLite DB on boot", err);
@@ -668,27 +912,18 @@ function createNote(title = "Untitled Scratchpad", content = "", folderId = unde
 
 function deleteNote(id, event) {
   if (event) event.stopPropagation();
-  
-  const index = notes.findIndex(n => n.id === id);
-  if (index === -1) return;
-  
-  const [deletedNote] = notes.splice(index, 1);
-  
-  // Handle active note deletion
-  if (activeNoteId === id) {
-    if (notes.length > 0) {
-      activeNoteId = notes[0].id;
-    } else {
-      // Create a clean blank note if we deleted the last one
-      createNote("Untitled Scratchpad", "", deletedNote.folderId);
-      return;
-    }
-  }
-  
-  saveNotesToStorage({ syncWorkspace: true });
-  renderNoteList(searchInput.value);
-  loadActiveNote();
-  syncSecondaryNoteUi(true);
+  const collectionId = mcpCollectionId;
+  return enqueueWorkspaceOperation(async () => {
+    checkTrashCollection(collectionId);
+    const note = notes.find(note => note.id === id);
+    if (!note) return;
+    applyNoteDeletion(note);
+    await persistTrashState(notes, trash);
+    if (noteSaveDebounceTimers.size === 0) setSavedState();
+  }).catch(error => {
+    setSaveFailedState();
+    showNotification(`Could not save deletion; your note remains recoverable: ${error.message || error}`);
+  });
 }
 
 function loadActiveNote() {
@@ -1039,7 +1274,7 @@ function finishFolderEdit(rawName, folderId) {
     renderNoteList(searchInput.value);
     return;
   }
-  if (!isFolderNameAvailable(folders, name, folderId)) {
+  if (!isFolderNameAvailable([...folders, ...mcpWriter.reservedFolders()], name, folderId)) {
     showNotification(isReservedFolderName(name)
       ? "That folder name is reserved by the sidebar"
       : "A folder with that name already exists");
@@ -1293,45 +1528,33 @@ function saveNotesToStorage({ noteId = activeNoteId, syncWorkspace = false } = {
 
   if (activeDbPath) {
     const dbPath = activeDbPath;
-    let saveOperation;
+    const workspaceSave = enqueueWorkspaceOperation(async () => {
+      if (activeDbPath !== dbPath) return true;
+      // Capture at execution time: a preceding MCP creation may have committed
+      // since this save was queued. Stale full snapshots could erase it.
+      if (syncWorkspace || trashNeedsSave) {
+        await persistWorkspace({ dbPath, notes, folders, trash });
+      } else {
+        const sortOrder = notes.findIndex(note => note.id === noteId);
+        if (sortOrder === -1) return true;
+        await invoke("save_note_db", { dbPath, note: { ...notes[sortOrder] }, sortOrder });
+      }
+      return true;
+    }).catch(err => {
+      console.error("Failed to save workspace to SQLite DB", err);
+      setSaveFailedState();
+      return false;
+    });
 
-    if (syncWorkspace) {
-      const notesSnapshot = notes.map(note => ({ ...note }));
-      const foldersSnapshot = folders.map(folder => ({ ...folder }));
-      saveOperation = () => invoke("save_workspace_db", {
-        dbPath,
-        notes: notesSnapshot,
-        folders: foldersSnapshot
-      }).then(() => true);
-    } else {
-      const sortOrder = notes.findIndex(note => note.id === noteId);
-      if (sortOrder === -1) return Promise.resolve(true);
-      const note = { ...notes[sortOrder] };
-      saveOperation = () => invoke("save_note_db", { dbPath, note, sortOrder }).then(() => true);
-    }
-
-    // Serialize writes so a slower, older save cannot overwrite a newer edit
-    // or structural workspace change.
-    const workspaceSave = dbSaveQueue
-      .then(() => {
-        if (activeDbPath !== dbPath) return true;
-        return saveOperation();
-      })
-      .catch(err => {
-        console.error("Failed to save workspace to SQLite DB", err);
-        setSaveFailedState();
-        return false;
-      });
-
-    dbSaveQueue = workspaceSave.then(() => undefined);
     return workspaceSave;
   }
 
-  const noteResult = persistNotesLocally(localStorage, notes);
+  const noteResult = persistNotesAndTrashLocally(localStorage, notes, trash);
   const folderResult = persistFoldersLocally(localStorage, folders);
   const localResult = noteResult.ok ? folderResult : noteResult;
 
   if (localResult.ok) {
+    trashNeedsSave = false;
     localMirrorFailureNotified = false;
   } else {
     console.error("Failed to save local workspace data", localResult.error);
@@ -1383,7 +1606,7 @@ function persistLocalMirrorBeforePageExit() {
   // the local-only collection with the workspace's notes.
   if (activeDbPath) return;
 
-  const result = persistNotesLocally(localStorage, notes);
+  const result = persistNotesAndTrashLocally(localStorage, notes, trash);
   const folderResult = persistFoldersLocally(localStorage, folders);
   if (!result.ok || !folderResult.ok) {
     console.error("Failed to flush local workspace data during page exit", result.error || folderResult.error);
@@ -1400,9 +1623,13 @@ async function registerCloseHandler() {
       if (isClosing) return;
 
       event.preventDefault();
+      if (isClosePending) return;
+      isClosePending = true;
+      await dbSaveQueue;
       const saved = await flushPendingSaves();
       if (!saved) {
         setSaveFailedState();
+        isClosePending = false;
         showNotification("Could not save the latest changes; close cancelled");
         return;
       }
@@ -1412,6 +1639,7 @@ async function registerCloseHandler() {
         await appWindow.destroy();
       } catch (error) {
         isClosing = false;
+        isClosePending = false;
         console.error("Failed to close Scratchpad after saving", error);
         showNotification("Could not close Scratchpad");
       }
@@ -1803,6 +2031,10 @@ function currentMcpCollectionName() {
 function mcpSnapshotArguments() {
   return {
     collectionName: currentMcpCollectionName(),
+    collectionId: mcpCollectionId,
+    noteRevisions: Object.fromEntries(notes.map(note => [note.id, currentNoteRevision(note)])),
+    folderRevisions: Object.fromEntries(folders.map(folder => [folder.id, currentFolderRevision(folder)])),
+    trash: trash.map(trashSummary),
     notes: notes.map(note => ({ ...note })),
     folders: folders.map(folder => ({ ...folder }))
   };
@@ -1817,7 +2049,7 @@ async function syncMcpNote(noteId) {
   if (!isMcpEnabled || !window.__TAURI__) return;
   const note = notes.find(candidate => candidate.id === noteId);
   if (!note) return;
-  await invoke("update_mcp_note", { note: { ...note } });
+  await invoke("update_mcp_note", { note: { ...note }, revision: currentNoteRevision(note), collectionId: mcpCollectionId });
 }
 
 function scheduleMcpSnapshotUpdate() {
@@ -1847,12 +2079,65 @@ function scheduleMcpNoteUpdate(noteId) {
 
 function updateMcpUiState() {
   mcpStatus.hidden = !isMcpEnabled;
-  agentAccessMenuValue.textContent = isMcpEnabled ? "Read-only" : "Off";
-  agentAccessToggleBtn.textContent = isMcpEnabled
-    ? "Disable agent access"
-    : "Enable read-only access";
+  const readCount = MCP_READ_TOOLS.filter(tool => mcpPermissions[tool]).length;
+  const writeCount = MCP_WRITE_TOOLS.filter(tool => mcpPermissions[tool]).length;
+  agentAccessMenuValue.textContent = isMcpEnabled ? `${readCount} read · ${writeCount} write functions enabled` : "Off";
+  mcpStatus.title = `MCP listening: ${agentAccessMenuValue.textContent.toLowerCase()}`;
+  agentAccessToggleBtn.textContent = isMcpEnabled ? "On" : "Off";
   agentAccessToggleBtn.setAttribute("aria-pressed", String(isMcpEnabled));
-  agentAccessConfigBtn.style.display = isMcpEnabled ? "block" : "none";
+  for (const input of mcpPermissionInputs) {
+    input.checked = mcpPermissions[input.dataset.mcpTool];
+    input.disabled = !isMcpEnabled || isMcpPermissionSaving;
+  }
+  for (const input of mcpSelectAllInputs) {
+    const tools = input.dataset.mcpSelectAll === "read" ? MCP_READ_TOOLS : MCP_WRITE_TOOLS;
+    const count = tools.filter(tool => mcpPermissions[tool]).length;
+    input.checked = count === tools.length;
+    input.indeterminate = count > 0 && count < tools.length;
+    input.disabled = !isMcpEnabled || isMcpPermissionSaving;
+  }
+}
+
+async function changeMcpPermissions(next) {
+  if (!isMcpEnabled || isMcpPermissionSaving) { updateMcpUiState(); return; }
+  const previous = mcpPermissions;
+  isMcpPermissionSaving = true;
+  agentAccessToggleBtn.disabled = true;
+  // Revoke immediately so queued writes cannot begin during the native update.
+  // New grants take effect only after the backend confirms them.
+  mcpPermissions = Object.fromEntries(Object.keys(previous).map(tool => [tool, previous[tool] && next[tool]]));
+  updateMcpUiState();
+  mcpPermissionStatus.textContent = "Saving permissions…";
+  try {
+    if (MCP_WRITE_TOOLS.some(tool => next[tool])) await ensureMcpWriteListener();
+    await invoke("set_mcp_permissions", { tools: Object.keys(next).filter(tool => next[tool]) });
+    mcpPermissions = next;
+    mcpPermissionStatus.textContent = "Permissions saved";
+  } catch (error) {
+    mcpPermissions = previous;
+    mcpPermissionStatus.textContent = `Could not save permissions: ${error.message || error}`;
+  } finally {
+    isMcpPermissionSaving = false;
+    agentAccessToggleBtn.disabled = false;
+    updateMcpUiState();
+  }
+}
+
+async function ensureMcpWriteListener() {
+  if (mcpWriteListener) return;
+  mcpWriteListener = await window.__TAURI__.event.listen("mcp-write-request", async ({ payload }) => {
+    let result;
+    try {
+      result = await mcpWriter.request(payload.operation, payload.arguments);
+    } catch (error) {
+      result = { ok: false, error: String(error.message || error) };
+    }
+    try {
+      await invoke("complete_mcp_write", { ticket: payload.ticket, result });
+    } catch (error) {
+      console.error("Could not deliver MCP write result; client can retry its requestId", error);
+    }
+  });
 }
 
 async function toggleMcpAccess() {
@@ -1862,10 +2147,14 @@ async function toggleMcpAccess() {
   }
 
   agentAccessToggleBtn.disabled = true;
+  agentAccessConfigBtn.disabled = true;
+  const previousPermissions = mcpPermissions;
   const disabling = isMcpEnabled;
   try {
     if (isMcpEnabled) {
       if (isMcpConfigModalOpen) closeMcpConfigModal();
+      mcpPermissions = Object.fromEntries(Object.keys(mcpPermissions).map(tool => [tool, false]));
+      await dbSaveQueue;
       await invoke("stop_mcp_server");
       clearTimeout(mcpSnapshotTimer);
       mcpSnapshotTimer = null;
@@ -1886,6 +2175,7 @@ async function toggleMcpAccess() {
       throw new Error("Scratchpad returned incomplete MCP connection details");
     }
     mcpConnectionInfo = connection;
+    mcpPermissions = defaultMcpPermissions();
     isMcpEnabled = true;
     try {
       await syncMcpSnapshot();
@@ -1895,34 +2185,45 @@ async function toggleMcpAccess() {
     updateMcpUiState();
     showNotification("Read-only agent access enabled");
   } catch (error) {
+    if (disabling) mcpPermissions = previousPermissions;
+    updateMcpUiState();
     console.error("Could not change MCP agent access", error);
     showNotification(disabling
       ? "Could not disable agent access"
       : `Could not enable agent access: ${error}`);
   } finally {
     agentAccessToggleBtn.disabled = false;
+    agentAccessConfigBtn.disabled = false;
   }
 }
 
-function openMcpConfigModal() {
-  if (!mcpConnectionInfo || !isMcpEnabled) return;
+async function openMcpConfigModal() {
+  mcpPermissionStatus.textContent = isMcpEnabled ? "" : "Agent access is off. Enable it from the actions menu to change function permissions.";
+  updateMcpUiState();
   mcpConfigModalPreviousFocus = actionsDropdown.contains(document.activeElement)
     ? actionsBtn
     : document.activeElement;
-  mcpConfigCommand.value = mcpConnectionInfo.command;
-  mcpConfigArgs.value = mcpConnectionInfo.args.join(" ");
-  mcpConfigExampleCode.textContent = JSON.stringify({
-    mcpServers: {
-      scratchpad: {
-        command: mcpConnectionInfo.command,
-        args: mcpConnectionInfo.args
-      }
-    }
-  }, null, 2);
   isMcpConfigModalOpen = true;
   mcpConfigModalBackdrop.style.display = "flex";
   mcpConfigModalBackdrop.setAttribute("aria-hidden", "false");
   closeMcpConfigBtn.focus({ preventScroll: true });
+  const copyButtons = [copyMcpCommandBtn, copyMcpArgsBtn, copyMcpExampleBtn];
+  copyButtons.forEach(button => { button.disabled = true; });
+  try {
+    if (!mcpConnectionInfo) mcpConnectionInfo = await invoke("get_mcp_connection_info");
+    if (!isMcpConfigModalOpen) return;
+    if (!mcpConnectionInfo?.command || !Array.isArray(mcpConnectionInfo.args) || !mcpConnectionInfo.args.length) {
+      throw new Error("Connection details are unavailable");
+    }
+    mcpConfigCommand.value = mcpConnectionInfo.command;
+    mcpConfigArgs.value = mcpConnectionInfo.args.join(" ");
+    mcpConfigExampleCode.textContent = JSON.stringify({
+      mcpServers: { scratchpad: { command: mcpConnectionInfo.command, args: mcpConnectionInfo.args } }
+    }, null, 2);
+    copyButtons.forEach(button => { button.disabled = false; });
+  } catch (error) {
+    if (isMcpConfigModalOpen) mcpPermissionStatus.textContent = `Could not load MCP configuration: ${error.message || error}`;
+  }
 }
 
 function closeMcpConfigModal() {
@@ -2155,6 +2456,15 @@ function attachEventListeners() {
   aboutModal.addEventListener("click", handlePreviewLinkClick);
 
   // MCP Configuration Modal
+  for (const input of mcpPermissionInputs) {
+    input.addEventListener("change", () => changeMcpPermissions({ ...mcpPermissions, [input.dataset.mcpTool]: input.checked }));
+  }
+  for (const input of mcpSelectAllInputs) {
+    input.addEventListener("change", () => {
+      const tools = input.dataset.mcpSelectAll === "read" ? MCP_READ_TOOLS : MCP_WRITE_TOOLS;
+      changeMcpPermissions({ ...mcpPermissions, ...Object.fromEntries(tools.map(tool => [tool, input.checked])) });
+    });
+  }
   agentAccessConfigBtn.addEventListener("click", () => {
     toggleActionsDropdown(false);
     actionsBtn.focus({ preventScroll: true });
@@ -2254,7 +2564,10 @@ function attachEventListeners() {
   exportBtn.addEventListener("click", exportAsMarkdownFile);
   dbConnectBtn.addEventListener("click", connectDatabase);
   dbDisconnectBtn.addEventListener("click", disconnectDatabase);
-  agentAccessToggleBtn.addEventListener("click", toggleMcpAccess);
+  agentAccessToggleBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleMcpAccess();
+  });
 
   // Custom Context Menu Events
   document.addEventListener("contextmenu", showContextMenu);
@@ -2296,6 +2609,11 @@ function attachEventListeners() {
     if (contextMenuNoteId) {
       toggleNotePinned(contextMenuNoteId);
     }
+  });
+  ctxDeleteNoteBtn.addEventListener("click", () => {
+    const noteId = contextMenuNoteId;
+    hideContextMenu();
+    if (noteId) deleteNote(noteId);
   });
   ctxMoveUpBtn.addEventListener("click", () => {
     hideContextMenu();
@@ -2627,6 +2945,25 @@ function loadFoldersFromLocalStorage() {
   folders = normalizeFolders(readStoredFolders(localStorage.getItem(LOCAL_FOLDERS_KEY)));
 }
 
+function loadTrashFromLocalStorage() {
+  try {
+    trash = readTrash(localStorage.getItem(LOCAL_TRASH_KEY));
+    trashLoadError = null;
+  } catch (error) {
+    trash = [];
+    trashLoadError = String(error.message || error);
+    showNotification("Trash could not be read; recovery data has been preserved");
+  }
+  trashNeedsSave = false;
+  refreshTrashUi();
+}
+
+async function loadWorkspaceTrash(dbPath) {
+  const result = await invoke("load_db_trash", { dbPath });
+  if (!Array.isArray(result)) throw new Error("Workspace returned an unexpected trash response");
+  return readTrash(JSON.stringify(result));
+}
+
 function loadCollapsedFolders() {
   try {
     const saved = JSON.parse(localStorage.getItem(COLLAPSED_FOLDERS_KEY) || "[]");
@@ -2694,7 +3031,24 @@ function updateDbUiState(isConnected) {
   }
 }
 
-async function connectDatabase() {
+async function switchMcpCollection(operation) {
+  if (isWorkspaceSwitching) return;
+  isWorkspaceSwitching = true;
+  trashUi.close();
+  try {
+    await dbSaveQueue;
+    await operation();
+  } finally {
+    mcpCollectionId = window.crypto.randomUUID();
+    isWorkspaceSwitching = false;
+    scheduleMcpSnapshotUpdate();
+  }
+}
+
+function connectDatabase() { return switchMcpCollection(connectDatabaseImpl); }
+function disconnectDatabase() { return switchMcpCollection(disconnectDatabaseImpl); }
+
+async function connectDatabaseImpl() {
   if (!window.__TAURI__) {
     showNotification("Workspaces are only available in the desktop app");
     return;
@@ -2722,6 +3076,7 @@ async function connectDatabase() {
   // leaves the active collection untouched.
   let workspaceNotes;
   let workspaceFolders;
+  let workspaceTrash;
   try {
     workspaceNotes = await invoke("load_db_notes", { dbPath: path });
     if (!Array.isArray(workspaceNotes)) {
@@ -2732,6 +3087,7 @@ async function connectDatabase() {
       throw new Error("Workspace returned an unexpected folders response");
     }
     workspaceFolders = normalizeFolders(workspaceFolders);
+    workspaceTrash = await loadWorkspaceTrash(path);
   } catch (err) {
     console.error("Failed to read SQLite database", err);
     showNotification("Could not open workspace; using local notes");
@@ -2747,7 +3103,7 @@ async function connectDatabase() {
   if (workspaceNotes.length > 0) {
     folders = workspaceFolders;
     notes = normalizePinnedNoteOrder(normalizeNoteFolderAssignments(workspaceNotes, folders));
-  } else if (workspaceFolders.length > 0) {
+  } else if (workspaceFolders.length > 0 || workspaceTrash.length > 0) {
     notes = [];
     folders = workspaceFolders;
   } else if (localNotes) {
@@ -2763,6 +3119,11 @@ async function connectDatabase() {
       return;
     }
   }
+
+  trash = workspaceTrash;
+  trashLoadError = null;
+  trashNeedsSave = false;
+  refreshTrashUi();
 
   let preferenceSaved = true;
   try {
@@ -2789,7 +3150,7 @@ async function connectDatabase() {
     : "Workspace connected, but could not be remembered");
 }
 
-async function disconnectDatabase() {
+async function disconnectDatabaseImpl() {
   const workspaceSaved = await flushPendingSaves();
   if (!workspaceSaved) {
     showNotification("Could not save workspace; disconnect cancelled");
@@ -2803,6 +3164,7 @@ async function disconnectDatabase() {
   // connected, so it is simply still there.
   loadNotesFromLocalStorage();
   loadFoldersFromLocalStorage();
+  loadTrashFromLocalStorage();
   notes = normalizeNoteFolderAssignments(notes, folders);
 
   if (notes.length === 0) {
@@ -3469,6 +3831,8 @@ function showContextMenu(e, noteId = null, folderId = null) {
   let hasInsertMenu = false;
   contextMenuFolderId = folderId;
   setFolderContextVisibility(Boolean(folderId));
+  ctxDeleteNoteBtn.style.display = noteId ? "flex" : "none";
+  ctxDeleteNoteDivider.style.display = noteId ? "block" : "none";
   
   if (noteId) {
     contextMenuNoteId = noteId;
@@ -3552,7 +3916,7 @@ function showContextMenu(e, noteId = null, folderId = null) {
   }
   
   const menuWidth = 180;
-  const menuHeight = noteId ? (folders.length > 0 ? 220 : 180) : (folderId ? 210 : (hasInsertMenu ? 285 : 220));
+  const menuHeight = noteId ? (folders.length > 0 ? 260 : 220) : (folderId ? 210 : (hasInsertMenu ? 285 : 220));
   const submenuWidth = 175;
   let x = e.clientX;
   let y = e.clientY;
