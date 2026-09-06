@@ -1,7 +1,8 @@
-# Scratchpad Beta v0.7.0
+# Scratchpad Beta v0.7.1
 
 ## Highlights
 
+- Fix MCP stdio authentication for beta builds by resolving the token from the merged beta application configuration.
 - Connect a local MCP agent to the collection open in Scratchpad, with five read functions and eight individually enabled write functions.
 - Choose exactly which functions agents can use in **MCP Configuration**. Access starts off; every time you enable it, reads start on and writes start off.
 - Recover deleted notes from persistent trash. Click the bottom-right trash icon to restore a note, or right-click it to empty trash after confirmation.
@@ -30,7 +31,7 @@ Open **Scratchpad menu → Agent access** and turn access **On**. **MCP Configur
 - MCP folder deletion requires an empty folder, including any pinned notes assigned to it. There is no cascading deletion or whole-note replacement.
 - Access uses an authenticated local channel. Scratchpad itself sends no notes to a service; the connected agent may send returned content to its model provider.
 
-See the [MCP reference](https://github.com/crims0n/scratchpad/blob/scratchpad-beta-v0.7.0/docs/mcp.md) for setup, parameters, pagination, limits, and recovery behavior. If you tested an earlier HTTP configuration, replace its URL and authorization header with the local stdio command and argument.
+See the [MCP reference](https://github.com/crims0n/scratchpad/blob/scratchpad-beta-v0.7.1/docs/mcp.md) for setup, parameters, pagination, limits, and recovery behavior. If you tested an earlier HTTP configuration, replace its URL and authorization header with the local stdio command and argument.
 
 ## Trash and recovery
 
@@ -56,4 +57,4 @@ See the [MCP reference](https://github.com/crims0n/scratchpad/blob/scratchpad-be
 - Local notes and workspace notes remain separate. An empty workspace is seeded with active notes and folders; local trash stays local. A workspace containing only trash opens its own collection.
 - Agent access is off on launch. Reconnect your client after restarting Scratchpad or re-enabling access. Old collection IDs and retry receipts do not survive a collection session change.
 - Trash protects deletions made with this version; it cannot recover notes permanently deleted by earlier versions. Keep backups of important workspace files.
-- v0.7.0 retains the existing beta application identity and packaging. Builds are not yet production-signed; macOS and Windows may display a security warning.
+- v0.7.1 retains the existing beta application identity and packaging. Builds are not yet production-signed; macOS and Windows may display a security warning.

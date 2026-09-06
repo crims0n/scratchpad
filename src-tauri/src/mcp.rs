@@ -540,17 +540,8 @@ impl<R: AsyncRead + Unpin> AsyncRead for BoundedMessageReader<R> {
 }
 
 /// Run the installed executable as an MCP stdio subprocess, without Tauri UI.
-pub fn run_mcp_stdio() -> Result<(), String> {
-    // Match Tauri's app_config_dir without building a GUI runtime.
-    let config: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json"))
-        .map_err(|_| "Could not read the bundled app configuration".to_string())?;
-    let identifier = config["identifier"]
-        .as_str()
-        .ok_or_else(|| "The bundled app identifier is missing".to_string())?;
-    let token_path = dirs::config_dir()
-        .ok_or_else(|| "Could not resolve the app configuration directory".to_string())?
-        .join(identifier)
-        .join(MCP_TOKEN_FILE_NAME);
+pub fn run_mcp_stdio(identifier: &str) -> Result<(), String> {
+    let token_path = mcp_token_path(identifier)?;
     let token = fs::read_to_string(token_path)
         .map_err(|_| "Open Scratchpad and enable agent access before connecting".to_string())?;
     let token = validate_token(token.trim())?;
@@ -570,6 +561,13 @@ pub fn run_mcp_stdio() -> Result<(), String> {
     // that blocking thread when the editor closes or disables agent access.
     runtime.shutdown_background();
     result
+}
+
+fn mcp_token_path(identifier: &str) -> Result<std::path::PathBuf, String> {
+    Ok(dirs::config_dir()
+        .ok_or_else(|| "Could not resolve the app configuration directory".to_string())?
+        .join(identifier)
+        .join(MCP_TOKEN_FILE_NAME))
 }
 
 async fn connect_to_editor(
@@ -2238,6 +2236,18 @@ mod tests {
             .unwrap()
             .unwrap();
         serde_json::from_str(&line).unwrap()
+    }
+
+    #[test]
+    fn mcp_token_path_uses_the_supplied_identifier() {
+        let identifier = "io.github.crims0n.scratchpad.beta";
+        assert_eq!(
+            mcp_token_path(identifier).unwrap(),
+            dirs::config_dir()
+                .unwrap()
+                .join(identifier)
+                .join(MCP_TOKEN_FILE_NAME)
+        );
     }
 
     #[test]

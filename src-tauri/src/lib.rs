@@ -573,7 +573,7 @@ fn show_alert_dialog(title: String, message: String) {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
+pub fn run(context: tauri::Context<tauri::Wry>) {
     tauri::Builder::default()
         .manage(mcp::McpState::default())
         // Markdown links have no default handling in the webview; the opener
@@ -602,7 +602,7 @@ pub fn run() {
             mcp::complete_mcp_write,
             mcp::stop_mcp_server
         ])
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running tauri application");
 }
 

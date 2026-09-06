@@ -4,6 +4,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
+    let context = tauri::generate_context!();
+
     // Dispatch before Tauri creates a webview or touches editor persistence.
     // The MCP host supplies stdin/stdout pipes, including for the Windows GUI
     // subsystem build; diagnostics must only go to stderr in this mode.
@@ -12,11 +14,11 @@ fn main() {
             eprintln!("Usage: scratchpad --mcp-stdio");
             std::process::exit(2);
         }
-        if let Err(error) = scratchpad_lib::run_mcp_stdio() {
+        if let Err(error) = scratchpad_lib::run_mcp_stdio(&context.config().identifier) {
             eprintln!("Scratchpad MCP: {error}");
             std::process::exit(1);
         }
         return;
     }
-    scratchpad_lib::run()
+    scratchpad_lib::run(context)
 }
