@@ -43,7 +43,8 @@ test("editor and sidebar view settings are adjustable and persistent", async () 
   assert.equal(document.getElementById("agent-access-toggle-btn").textContent, "Off");
   assert.equal(document.getElementById("agent-access-config-btn").textContent, "MCP Configuration");
   assert.equal(document.getElementById("help-menu-btn").textContent, "Help & reference");
-  assert.equal(document.getElementById("about-menu-btn").textContent, "About Scratchpad");
+  assert.equal(document.getElementById("about-menu-btn").firstChild.textContent.trim(), "About Scratchpad");
+  assert.equal(document.getElementById("update-menu-indicator").hidden, true);
   assert.equal(document.getElementById("actions-btn").getAttribute("aria-label"), "Open Scratchpad menu");
   [...document.querySelectorAll("#actions-dropdown-content button")].forEach((button) => {
     assert.doesNotMatch(button.textContent.trim(), /\.\.\.$/);
