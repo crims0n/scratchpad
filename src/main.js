@@ -811,9 +811,19 @@ async function init() {
       } else if (dbFolders.length > 0 || dbTrash.length > 0) {
         notes = [];
         folders = dbFolders;
-      } else if (notes.length > 0) {
-        // Seed empty SQLite database with existing LocalStorage notes
-        await invoke("save_workspace_db", { dbPath: activeDbPath, notes, folders });
+      } else {
+        // Seed a completely empty workspace with the active local collection.
+        // Include the welcome note in the awaited transaction so a failed first
+        // write falls back to local mode instead of exposing an unsaved workspace.
+        const seedNotes = notes.length > 0
+          ? notes
+          : [createNoteRecord(WELCOME_NOTE_TITLE, WELCOME_NOTE_CONTENT, null)];
+        await invoke("save_workspace_db", {
+          dbPath: activeDbPath,
+          notes: seedNotes,
+          folders
+        });
+        notes = seedNotes;
       }
       trash = dbTrash;
       trashLoadError = null;
@@ -877,20 +887,24 @@ function setTheme(theme, pin = true) {
 // ----------------------------------------------------
 // Note Management Logic
 // ----------------------------------------------------
+function createNoteRecord(title, content, folderId) {
+  return {
+    id: "note_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9),
+    title,
+    content,
+    updatedAt: Date.now(),
+    isTitleLocked: title !== "Untitled Scratchpad" && title !== WELCOME_NOTE_TITLE,
+    isPinned: false,
+    folderId
+  };
+}
+
 function createNote(title = "Untitled Scratchpad", content = "", folderId = undefined) {
   const activeNote = notes.find((note) => note.id === activeNoteId);
   const destinationFolderId = folderId === undefined
     ? (isNotePinned(activeNote) ? null : validFolderId(activeNote?.folderId, folders))
     : validFolderId(folderId, folders);
-  const newNote = {
-    id: "note_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9),
-    title: title,
-    content: content,
-    updatedAt: Date.now(),
-    isTitleLocked: title !== "Untitled Scratchpad" && title !== WELCOME_NOTE_TITLE,
-    isPinned: false,
-    folderId: destinationFolderId
-  };
+  const newNote = createNoteRecord(title, content, destinationFolderId);
   
   notes = insertNoteBelowPinned(notes, newNote);
   activeNoteId = newNote.id;
