@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
+import * as Diff from "diff";
 import { bootApp, settle } from "./helpers/app-harness.js";
 
 const NOTES = [
@@ -92,14 +93,14 @@ test("compare mode highlights live note differences and clears with split view",
   const secondaryEditor = document.getElementById("secondary-editor-textarea");
   secondaryEditor.value = document.getElementById("editor-textarea").value;
   secondaryEditor.dispatchEvent(new app.dom.window.Event("input", { bubbles: true }));
-  await settle(30);
+  await settle(180);
   assert.equal(compareCount.textContent, "No differences");
   assert.equal(primaryBackdrop.querySelector(".diff-line-removed"), null);
   assert.equal(secondaryBackdrop.querySelector(".diff-line-added"), null);
 
   secondaryEditor.value = "Different again";
   secondaryEditor.dispatchEvent(new app.dom.window.Event("input", { bubbles: true }));
-  await settle(30);
+  await settle(180);
   assert.ok(primaryBackdrop.querySelector(".diff-line-removed"));
 
   document.getElementById("close-secondary-btn").click();
@@ -170,4 +171,93 @@ test("compare is unavailable when both panes show the same note", async () => {
   assert.equal(compareButton.disabled, true);
   assert.equal(compareButton.title, "Choose a different note to compare");
   assert.equal(compareButton.getAttribute("aria-pressed"), "false");
+});
+
+test("compare debounces changed text and reuses cached results for redraws", async () => {
+  const app = await bootApp({
+    instance: 6,
+    storage: {
+      scratchpad_notes: [
+        { ...NOTES[0], content: "Shared\nLeft wording" },
+        { ...NOTES[1], content: "Shared\nRight wording" }
+      ]
+    },
+    handlers: { load_workspace_preference: () => null }
+  });
+  const { document } = app.dom.window;
+  let diffCalls = 0;
+  app.dom.window.Diff = {
+    ...Diff,
+    diffLines(...args) {
+      diffCalls += 1;
+      return Diff.diffLines(...args);
+    }
+  };
+
+  document.getElementById("split-note-btn").click();
+  document.getElementById("compare-notes-btn").click();
+  assert.equal(diffCalls, 1);
+
+  const primaryEditor = document.getElementById("editor-textarea");
+  for (const value of ["Shared\nFirst edit", "Shared\nSecond edit", "Shared\nFinal edit"]) {
+    primaryEditor.value = value;
+    primaryEditor.dispatchEvent(new app.dom.window.Event("input", { bubbles: true }));
+  }
+
+  assert.equal(diffCalls, 1);
+  assert.equal(document.getElementById("compare-notes-count").textContent, "Updating comparison…");
+  await settle(30);
+  assert.equal(diffCalls, 1);
+  assert.equal(document.getElementById("editor-backdrop").textContent, "Shared\nFinal edit\n");
+  assert.equal(document.querySelector(".diff-line-removed, .diff-line-added"), null);
+
+  await settle(180);
+  assert.equal(diffCalls, 2);
+  assert.notEqual(document.getElementById("compare-notes-count").textContent, "Updating comparison…");
+  assert.ok(document.getElementById("editor-backdrop").querySelector(".diff-line-removed"));
+
+  const findInput = document.getElementById("find-input");
+  findInput.value = "Shared";
+  findInput.dispatchEvent(new app.dom.window.Event("input", { bubbles: true }));
+  assert.equal(diffCalls, 2);
+
+  const secondaryEditor = document.getElementById("secondary-editor-textarea");
+  for (const value of ["Shared\nAnother edit", "Shared\nFinal secondary edit"]) {
+    secondaryEditor.value = value;
+    secondaryEditor.dispatchEvent(new app.dom.window.Event("input", { bubbles: true }));
+  }
+  assert.equal(diffCalls, 2);
+  await settle(180);
+  assert.equal(diffCalls, 3);
+});
+
+test("closing compare cancels a pending comparison", async () => {
+  const app = await bootApp({
+    instance: 7,
+    storage: { scratchpad_notes: NOTES },
+    handlers: { load_workspace_preference: () => null }
+  });
+  const { document } = app.dom.window;
+  let diffCalls = 0;
+  app.dom.window.Diff = {
+    ...Diff,
+    diffLines(...args) {
+      diffCalls += 1;
+      return Diff.diffLines(...args);
+    }
+  };
+
+  document.getElementById("split-note-btn").click();
+  document.getElementById("compare-notes-btn").click();
+  assert.equal(diffCalls, 1);
+
+  const primaryEditor = document.getElementById("editor-textarea");
+  primaryEditor.value = "Pending edit";
+  primaryEditor.dispatchEvent(new app.dom.window.Event("input", { bubbles: true }));
+  document.getElementById("close-secondary-btn").click();
+
+  await settle(180);
+  assert.equal(diffCalls, 1);
+  assert.equal(document.getElementById("compare-notes-btn").getAttribute("aria-pressed"), "false");
+  assert.equal(document.querySelector(".diff-line-removed, .diff-line-added"), null);
 });
