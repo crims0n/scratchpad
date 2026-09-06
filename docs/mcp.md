@@ -345,3 +345,10 @@ a group; there are no separate permissions per client.
 Scratchpad itself does not send notes anywhere. The agent or MCP client you
 connect can send tool results—including note contents—to its model provider.
 Enable access only when needed and under a client's privacy terms you accept.
+
+The optional update checker is separate from MCP and is controlled in
+**Scratchpad menu → About Scratchpad**. Automatic checks are off by default;
+manual or enabled automatic checks contact GitHub Pages for public release
+information without sending notes or workspace data. MCP does not expose
+update-check or installation tools. See [Storage and privacy](../README.md#storage-and-privacy)
+for the update preference and network behavior.

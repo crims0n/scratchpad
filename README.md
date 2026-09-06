@@ -27,6 +27,7 @@ See [release notes](RELEASE_NOTES.md) for highlights, compatibility details, and
 ## Features
 
 - Optional local MCP agent access with five read tools, eight individually enabled write tools, and a live listening indicator
+- Optional update checks with in-app release notes, separate Beta and Stable channels, and automatic checks off by default
 
 - Multiple scratchpads with automatic saving and titles derived from the first line
 - Edit, synchronized edit/preview, and full Markdown preview layouts
@@ -135,7 +136,7 @@ Syntax highlighting is enabled by default. Open **Scratchpad menu → Appearance
 
 Source line numbers are off by default. Open **Scratchpad menu → Appearance → Line numbers** to show a subtle, theme-aware gutter in both editor panes; the preference is remembered between launches.
 
-Open two notes side by side, then choose **Compare** in the toolbar to highlight source differences without changing either note. Removed text is marked on the left, added text on the right, and related words receive contiguous substring detail. The toolbar reports the total number of changed lines across both notes. Comparison updates as either note changes and turns off when split view closes.
+Open two notes side by side, then choose **Compare** in the toolbar to highlight source differences without changing either note. Removed text is marked on the left, added text on the right, and related words receive contiguous substring detail. The toolbar reports the total number of changed lines across both notes. Comparison refreshes after a brief pause in typing, showing **Updating comparison…** while pending, and turns off when split view closes.
 
 ## Themes
 

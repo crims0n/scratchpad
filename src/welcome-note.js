@@ -46,6 +46,12 @@ Scratchpad is a fast, local-first place for notes, snippets, and Markdown. Every
 - Open the Scratchpad menu to adjust sidebar previews, editor zoom, line spacing, syntax highlighting, and optional line numbers.
 - The Scratchpad menu also imports and exports files, copies Markdown or rendered HTML, and opens portable workspace files.
 
+## Check for updates (optional)
+- Open **Scratchpad menu → About Scratchpad**, then **Check for Updates…**, to look for a newer version on your release channel.
+- Choose **Read release notes** to see what changed before downloading. **Download Update** opens the release page in your browser; nothing is installed automatically.
+- **Automatically check for updates** is off by default. When enabled, it checks shortly after launch and at most once every 24 hours. Checks contact GitHub Pages without sending notes or workspace data.
+- **Later** closes the panel. **Skip This Version** hides background notices for that release; a manual check can still show it again.
+
 ## Need a reference?
 Press \`Cmd/Ctrl+/\` (or \`F1\`) to open keyboard shortcuts, the Markdown cheatsheet, and the MCP function reference. Use \`Tab\` and \`Shift+Tab\` to switch between them.
 
