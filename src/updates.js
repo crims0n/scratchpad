@@ -68,6 +68,7 @@ export function createUpdateChecker({ invoke, storage, onChange = () => {}, now 
     // Throttle attempts, including offline failures, across application launches.
     const timestamp = now();
     save({ ...preferences, lastCheck: timestamp });
+    preferences = { ...preferences, lastCheck: timestamp };
     state.lastCheck = timestamp;
     emit();
     pending = (async () => {

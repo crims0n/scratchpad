@@ -160,3 +160,17 @@ test("opting out during local initialization prevents the network request from s
   assert.equal(checks, 0);
   checker.dispose();
 });
+
+test("a failed timestamp write still throttles the session after storage recovers", async () => {
+  const app = await setup({ preferences: { automatic: true } });
+  const save = app.storage.setItem;
+  app.storage.setItem = () => { throw new Error("storage unavailable"); };
+  await app.advance(UPDATE_LAUNCH_DELAY_MS);
+  assert.equal(app.count(), 1);
+  app.storage.setItem = save;
+  app.checker.setAutomatic(false);
+  app.checker.setAutomatic(true);
+  await app.advance(UPDATE_LAUNCH_DELAY_MS);
+  assert.equal(app.count(), 1);
+  app.checker.dispose();
+});
