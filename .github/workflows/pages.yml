@@ -46,6 +46,9 @@ jobs:
       - name: Configure GitHub Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
 
+      - name: Install manifest generator dependencies
+        run: npm ci --ignore-scripts
+
       - name: Build website
         env:
           GH_TOKEN: ${{ github.token }}
@@ -53,7 +56,7 @@ jobs:
           mkdir -p .pages-staging/assets
           cp -R site/. .pages-staging/
           cp images/logo.png images/preview.png .pages-staging/assets/
-          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" > "$RUNNER_TEMP/releases.json"
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" > "$RUNNER_TEMP/releases.json"
           node scripts/generate-release-manifest.mjs --input "$RUNNER_TEMP/releases.json" --output .pages-staging/release.json
           touch .pages-staging/.nojekyll
 

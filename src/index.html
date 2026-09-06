@@ -195,6 +195,7 @@
               <div class="dropdown-section" id="help-menu-section">
                 <div class="dropdown-section-title">Help</div>
                 <button class="dropdown-item" id="help-menu-btn" aria-haspopup="dialog">Help &amp; reference</button>
+                <button class="dropdown-item" id="update-menu-btn" aria-haspopup="dialog">Check for Updates… <span class="dropdown-item-value" id="update-menu-indicator" hidden>Update available</span></button>
                 <button class="dropdown-item" id="about-menu-btn" aria-haspopup="dialog">About Scratchpad</button>
               </div>
             </div>
@@ -944,6 +945,30 @@ function hello() {
           <a href="https://github.com/crims0n/scratchpad" target="_blank" rel="noopener noreferrer">Repository <span aria-hidden="true">↗</span></a>
           <a href="https://github.com/crims0n/scratchpad/blob/main/RELEASE_NOTES.md" target="_blank" rel="noopener noreferrer">Release notes <span aria-hidden="true">↗</span></a>
         </nav>
+        <section class="update-section" aria-labelledby="update-heading">
+          <h4 id="update-heading">Updates</h4>
+          <dl class="update-metadata">
+            <div><dt>Release channel</dt><dd id="update-channel">Loading…</dd></div>
+            <div><dt>Last checked</dt><dd id="update-last-check">Never</dd></div>
+          </dl>
+          <label class="update-preference"><input type="checkbox" id="update-automatic" aria-describedby="update-privacy"> Automatically check for updates</label>
+          <p class="update-hint" id="update-privacy">Off by default. Checking contacts GitHub Pages for release information and sends no notes or workspace data. When enabled, checks run shortly after launch and at most once every 24 hours.</p>
+          <p id="update-status" role="status">Check when you’re ready.</p>
+          <div id="update-available" hidden>
+            <details id="update-release-notes">
+              <summary>Read release notes</summary>
+              <pre id="update-notes-content" tabindex="0" aria-label="Release notes"></pre>
+            </details>
+            <div class="update-actions">
+              <button type="button" id="update-download-btn">Download Update ↗</button>
+              <button type="button" id="update-later-btn">Later</button>
+              <button type="button" id="update-skip-btn">Skip This Version</button>
+            </div>
+            <p class="update-hint">Download opens this version’s GitHub release page in your browser. Nothing is installed automatically.</p>
+          </div>
+          <button type="button" id="update-check-btn">Check for Updates…</button>
+          <p class="update-hint" id="update-preference-error" role="status"></p>
+        </section>
       </div>
     </div>
   </div>

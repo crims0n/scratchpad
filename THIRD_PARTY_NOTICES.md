@@ -1,5 +1,11 @@
 # Third-party notices
 
+Scratchpad's optional update checker uses [reqwest](https://github.com/seanmonstar/reqwest)
+and [semver](https://github.com/dtolnay/semver), each available under the MIT or
+Apache License 2.0. HTTPS is provided by rustls and its platform certificate verifier.
+The release manifest generator uses [node-semver](https://github.com/npm/node-semver)
+under the ISC License; it is a build dependency and is not bundled in the app.
+
 Scratchpad includes [Marked](https://github.com/markedjs/marked), a Markdown parser.
 
 Copyright (c) 2018+, MarkedJS

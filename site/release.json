@@ -2,6 +2,19 @@
   "schemaVersion": 1,
   "generatedAt": "2026-08-23T22:03:45Z",
   "repository": "crims0n/scratchpad",
+  "channels": {
+    "stable": null,
+    "beta": {
+      "tag": "scratchpad-beta-v0.4.0",
+      "name": "Scratchpad Beta v0.4.0",
+      "version": "0.4.0",
+      "channel": "beta",
+      "prerelease": true,
+      "publishedAt": "2026-08-23T22:03:45Z",
+      "url": "https://github.com/crims0n/scratchpad/releases/tag/scratchpad-beta-v0.4.0",
+      "notes": "Scratchpad Beta v0.4.0 expands Find and improves editor highlighting in narrow windows."
+    }
+  },
   "release": {
     "tag": "scratchpad-beta-v0.4.0",
     "name": "Scratchpad Beta v0.4.0",

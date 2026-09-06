@@ -3,6 +3,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { pathToFileURL } from "node:url";
+import semver from "semver";
 
 const REPOSITORY = "crims0n/scratchpad";
 const DOWNLOAD_PREFIX = `/${REPOSITORY}/releases/download/`;
@@ -25,7 +26,7 @@ function getAssetRule(name) {
 function getTrustedDownloadUrl(rawUrl) {
   try {
     const url = new URL(rawUrl);
-    if (url.protocol !== "https:" || url.hostname !== "github.com") return null;
+    if (url.protocol !== "https:" || url.host !== "github.com" || url.username || url.password) return null;
     if (!url.pathname.startsWith(DOWNLOAD_PREFIX)) return null;
     return url.href;
   } catch {
@@ -39,9 +40,19 @@ function getSha256(digest) {
 }
 
 export function buildReleaseManifest(releases, { generatedAt = new Date().toISOString() } = {}) {
+  const versionOf = (release) => String(release.tag_name || "").replace(/^(scratchpad-beta-v|v)/, "");
+  const hasCanonicalVersion = (release) => {
+    const version = versionOf(release);
+    const parsed = semver.parse(version);
+    return parsed && `${parsed.version}${parsed.build.length ? `+${parsed.build.join(".")}` : ""}` === version;
+  };
   const candidates = (Array.isArray(releases) ? releases : [releases])
-    .filter((release) => release && !release.draft && release.published_at)
-    .sort((left, right) => new Date(right.published_at) - new Date(left.published_at));
+    .flat() // GitHub's --paginate --slurp returns one array per page.
+    .filter((release) => release && !release.draft && Number.isFinite(Date.parse(release.published_at)) && hasCanonicalVersion(release))
+    .sort((left, right) => semver.rcompare(versionOf(left), versionOf(right)) || new Date(right.published_at) - new Date(left.published_at));
+
+  const channels = { stable: null, beta: null };
+  let latest = null;
 
   for (const release of candidates) {
     const assets = (release.assets || []).flatMap((asset) => {
@@ -67,24 +78,26 @@ export function buildReleaseManifest(releases, { generatedAt = new Date().toISOS
     if (assets.length === 0) continue;
 
     const tag = String(release.tag_name || "");
-    const version = tag.replace(/^scratchpad-beta-v/i, "").replace(/^v/i, "");
-    return {
-      schemaVersion: 1,
-      generatedAt,
-      repository: REPOSITORY,
-      release: {
-        tag,
-        name: release.name || tag,
-        version,
-        prerelease: Boolean(release.prerelease),
-        publishedAt: release.published_at,
-        url: release.html_url || `https://github.com/${REPOSITORY}/releases/tag/${encodeURIComponent(tag)}`,
-        notes: String(release.body || "").trim(),
-        assets
-      }
+    const version = versionOf(release);
+    const channel = release.prerelease || tag.startsWith("scratchpad-beta-v") || semver.prerelease(version) ? "beta" : "stable";
+    if (channels[channel]) continue;
+    // Construct the link from a validated tag; never forward arbitrary release URLs.
+    const selected = {
+      tag,
+      name: release.name || tag,
+      version,
+      channel,
+      prerelease: channel === "beta",
+      publishedAt: release.published_at,
+      url: `https://github.com/${REPOSITORY}/releases/tag/${encodeURIComponent(tag)}`,
+      notes: String(release.body || "").trim()
     };
+    channels[channel] = selected;
+    latest ||= { ...selected, assets };
   }
 
+  // Keep the website's schema-1 release field; desktop clients require channels.
+  if (latest) return { schemaVersion: 1, generatedAt, repository: REPOSITORY, release: latest, channels };
   throw new Error("No published Scratchpad release with recognized installer assets was found");
 }
 

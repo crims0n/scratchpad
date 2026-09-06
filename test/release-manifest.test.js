@@ -83,3 +83,20 @@ test("manifest generation fails closed without recognized trusted assets", () =>
     /No published Scratchpad release/
   );
 });
+
+test("channels select semantic versions, not publication order, and construct release links", () => {
+  const make = (version, prerelease, published_at = release.published_at) => ({ ...release, tag_name: `${prerelease ? "scratchpad-beta-v" : "v"}${version}`, prerelease, published_at, html_url: "https://untrusted.example/" });
+  const manifest = buildReleaseManifest([
+    make("0.9.0", true, "2026-09-01T00:00:00Z"),
+    make("0.10.0", true), make("0.8.0", false),
+    make("0.7.0", false, "2026-09-02T00:00:00Z"),
+    make("nonsense", false), make("1.0.0-beta.2", true), make("1.0.0-beta.10", true)
+  ]);
+  assert.equal(manifest.channels.beta.version, "1.0.0-beta.10");
+  assert.equal(manifest.channels.stable.version, "0.8.0");
+  assert.equal(manifest.channels.stable.channel, "stable");
+  assert.equal(manifest.channels.stable.url, "https://github.com/crims0n/scratchpad/releases/tag/v0.8.0");
+  assert.equal(buildReleaseManifest([release]).channels.stable, null);
+  assert.equal(buildReleaseManifest([[make("0.3.0", true)], [release]]).channels.beta.version, "0.4.0");
+  assert.throws(() => buildReleaseManifest([make("v9.0.0", false), make(" 9.0.0 ", false)]), /No published/);
+});
