@@ -141,7 +141,7 @@ export function createUpdateUi({ document, invoke, storage, closeAbout }) {
       byId("update-automatic").checked = state.automatic;
       byId("update-preference-error").textContent = state.preferenceError;
       const messages = {
-        idle: "Check when you’re ready.", checking: "Checking for updates…",
+        idle: "", checking: "Checking for updates…",
         current: "You’re up to date on this release channel.",
         available: `Scratchpad ${state.release?.version} is available.`,
         skipped: `Version ${state.skippedVersion} is skipped. A manual check will show it again.`,
