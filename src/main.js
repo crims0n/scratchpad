@@ -11,6 +11,7 @@ import {
 } from "./storage.js";
 import { LOCAL_TRASH_KEY, readTrash, trashSummary, restoredNote, persistNotesAndTrashLocally, emptyTrashLocally } from "./trash.js";
 import { createTrashUi } from "./trash-ui.js";
+import { createUpdateUi } from "./updates.js";
 import { createMcpWriter, createNoteRevisionTracker, createFolderRevisionTracker } from "./mcp-writes.js";
 import { renderMarkdown, resolveLinkAction, sanitizeMarkdownHtml } from "./markdown.js";
 import { getNotePreview } from "./note-preview.js";
@@ -769,6 +770,11 @@ async function init() {
   // 1. Localize shortcut labels and attach event listeners immediately.
   applyPlatformShortcutLabels();
   attachEventListeners();
+  const updateChecker = createUpdateUi({
+    document, invoke, storage: localStorage,
+    closeAbout: closeAboutModal
+  });
+  window.addEventListener("pagehide", () => updateChecker.dispose(), { once: true });
   await registerCloseHandler();
   await registerWindowResizeHandler();
 
@@ -4559,8 +4565,9 @@ function closeAboutModal() {
 
 function trapModalFocus(event, modal) {
   const focusable = [...modal.querySelectorAll(
-    "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"
-  )];
+    "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex='-1'])"
+  )].filter((element) => !element.closest("[hidden]") &&
+    (!element.closest("details:not([open])") || element.tagName === "SUMMARY"));
   if (focusable.length === 0) return;
 
   const first = focusable[0];
