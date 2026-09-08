@@ -2211,7 +2211,7 @@ async function toggleMcpAccess() {
       console.error("Failed to refresh the MCP note snapshot after startup", error);
     }
     updateMcpUiState();
-    showNotification("Read-only agent access enabled");
+    showNotification("Agent access enabled — reads only until you allow write functions in MCP Configuration");
   } catch (error) {
     if (disabling) mcpPermissions = previousPermissions;
     updateMcpUiState();
