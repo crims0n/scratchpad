@@ -180,7 +180,6 @@ impl Default for McpState {
 pub(crate) struct McpConnectionInfo {
     command: String,
     args: Vec<String>,
-    mode: &'static str,
 }
 
 #[tauri::command]
@@ -261,7 +260,6 @@ pub(crate) fn get_mcp_connection_info() -> Result<McpConnectionInfo, String> {
     Ok(McpConnectionInfo {
         command,
         args: vec!["--mcp-stdio".into()],
-        mode: "readOnly",
     })
 }
 

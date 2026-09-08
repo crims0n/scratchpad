@@ -22,8 +22,7 @@ test("agent access shares the live collection and can be turned off", async () =
     handlers: {
       start_mcp_server: () => ({
         command: "/Applications/Scratchpad.app/Contents/MacOS/scratchpad",
-        args: ["--mcp-stdio"],
-        mode: "readOnly"
+        args: ["--mcp-stdio"]
       })
     }
   });
