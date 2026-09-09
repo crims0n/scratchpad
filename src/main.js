@@ -116,7 +116,7 @@ const exportBtn = document.getElementById("export-btn");
 const dbConnectBtn = document.getElementById("db-connect-btn");
 const dbDisconnectBtn = document.getElementById("db-disconnect-btn");
 const workspaceMenuValue = document.getElementById("workspace-menu-value");
-const agentAccessMenuValue = document.getElementById("agent-access-menu-value");
+const mcpPermissionsSummary = document.getElementById("mcp-permissions-summary");
 const agentAccessToggleBtn = document.getElementById("agent-access-toggle-btn");
 const mcpPermissionInputs = [...document.querySelectorAll("[data-mcp-tool]")];
 const mcpSelectAllInputs = [...document.querySelectorAll("[data-mcp-select-all]")];
@@ -2109,8 +2109,8 @@ function updateMcpUiState() {
   mcpStatus.hidden = !isMcpEnabled;
   const readCount = MCP_READ_TOOLS.filter(tool => mcpPermissions[tool]).length;
   const writeCount = MCP_WRITE_TOOLS.filter(tool => mcpPermissions[tool]).length;
-  agentAccessMenuValue.textContent = isMcpEnabled ? `${readCount} read · ${writeCount} write functions enabled` : "Off";
-  mcpStatus.title = `MCP listening: ${agentAccessMenuValue.textContent.toLowerCase()}`;
+  mcpPermissionsSummary.textContent = isMcpEnabled ? `${readCount} read · ${writeCount} write functions enabled` : "Off";
+  mcpStatus.title = `MCP listening: ${mcpPermissionsSummary.textContent.toLowerCase()}`;
   agentAccessToggleBtn.textContent = isMcpEnabled ? "On" : "Off";
   agentAccessToggleBtn.setAttribute("aria-pressed", String(isMcpEnabled));
   for (const input of mcpPermissionInputs) {

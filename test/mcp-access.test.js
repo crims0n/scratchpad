@@ -31,7 +31,7 @@ test("agent access shares the live collection and can be turned off", async () =
   app.click("agent-access-toggle-btn");
   await settle(30);
 
-  assert.equal(document.getElementById("agent-access-menu-value").textContent, "5 read · 0 write functions enabled");
+  assert.equal(document.getElementById("mcp-permissions-summary").textContent, "5 read · 0 write functions enabled");
   assert.equal(document.getElementById("agent-access-toggle-btn").textContent, "On");
   assert.equal(document.getElementById("actions-dropdown-content").classList.contains("show"), true);
   assert.equal(document.getElementById("actions-btn").getAttribute("aria-expanded"), "true");
@@ -91,7 +91,7 @@ test("agent access shares the live collection and can be turned off", async () =
   app.click("agent-access-toggle-btn");
   await settle(30);
   assert.equal(app.invocations.at(-1).command, "stop_mcp_server");
-  assert.equal(document.getElementById("agent-access-menu-value").textContent, "Off");
+  assert.equal(document.getElementById("mcp-permissions-summary").textContent, "Off");
   assert.equal(document.getElementById("actions-dropdown-content").classList.contains("show"), true);
   document.body.click();
   assert.equal(document.getElementById("actions-dropdown-content").classList.contains("show"), false);

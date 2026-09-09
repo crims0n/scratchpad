@@ -45,7 +45,7 @@ test("appending uses live revisions, preserves selection, and retries failed sav
   assert.equal((await send(args)).ok, false, "creation permission alone does not grant append access");
   app.click("mcp-permission-append_to_note");
   await settle();
-  assert.equal(document.getElementById("agent-access-menu-value").textContent, "5 read · 3 write functions enabled");
+  assert.equal(document.getElementById("mcp-permissions-summary").textContent, "5 read · 3 write functions enabled");
   editor.focus();
   editor.setSelectionRange(2, 5);
   const result = await send(args);
@@ -107,6 +107,6 @@ test("appending uses live revisions, preserves selection, and retries failed sav
   assert.equal(editor.value, disk.notes[0].content);
   app.click("mcp-permission-append_to_note");
   await settle();
-  assert.equal(document.getElementById("agent-access-menu-value").textContent, "5 read · 2 write functions enabled");
+  assert.equal(document.getElementById("mcp-permissions-summary").textContent, "5 read · 2 write functions enabled");
   assert.equal((await send({ ...failureArgs, collectionId: snapshot().collectionId })).ok, false);
 });
