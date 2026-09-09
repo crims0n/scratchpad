@@ -41,7 +41,7 @@ test("MCP creations persist, preserve editor work, and cannot cross workspace sw
   await settle();
   app.click("mcp-permission-create_folder");
   await settle();
-  assert.equal(document.getElementById("agent-access-menu-value").textContent, "5 read · 2 write functions enabled");
+  assert.equal(document.getElementById("mcp-permissions-summary").textContent, "5 read · 2 write functions enabled");
   const localCollection = currentCollection();
   const folderArgs = { collectionId: localCollection, requestId: "local-folder", name: "Research" };
   const folder = await send("create_folder", folderArgs);
@@ -128,6 +128,6 @@ test("MCP creations persist, preserve editor work, and cannot cross workspace sw
   await settle();
   app.click("mcp-permission-create_folder");
   await settle();
-  assert.equal(document.getElementById("agent-access-menu-value").textContent, "5 read · 0 write functions enabled");
+  assert.equal(document.getElementById("mcp-permissions-summary").textContent, "5 read · 0 write functions enabled");
   assert.equal((await send("create_note", { ...noteArgs, collectionId: currentCollection(), requestId: "disabled" })).ok, false);
 });

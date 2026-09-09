@@ -39,7 +39,7 @@ test("editor and sidebar view settings are adjustable and persistent", async () 
   assert.equal(document.getElementById("import-btn").textContent, "Import text file");
   assert.equal(document.getElementById("export-btn").textContent, "Export Markdown file");
   assert.equal(document.getElementById("db-connect-btn").textContent, "Open workspace");
-  assert.equal(document.getElementById("agent-access-menu-value").textContent, "Off");
+  assert.equal(document.getElementById("mcp-permissions-summary").textContent, "Off");
   assert.equal(document.getElementById("agent-access-toggle-btn").textContent, "Off");
   assert.equal(document.getElementById("agent-access-config-btn").textContent, "MCP Configuration");
   assert.equal(document.getElementById("help-menu-btn").textContent, "Help & reference");
