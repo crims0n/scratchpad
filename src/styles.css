@@ -37,8 +37,11 @@
   --border-color: #e2e8f0;
   
   --text-primary: #0f172a;
-  --text-secondary: #64748b;
-  --text-muted: #94a3b8;
+  --text-secondary: #575d6a;
+  --text-muted: #666971;
+  --text-on-active: #0f172a;
+  --text-secondary-on-active: #484b5f;
+  --text-muted-on-active: #69697e;
   
   --accent-color: #a855f7;
   --accent-hover: #7e22ce;
@@ -83,8 +86,11 @@
     --border-color: #1e2640;
     
     --text-primary: #f3f4f6;
-    --text-secondary: #9ca3af;
-    --text-muted: #6b7280;
+    --text-secondary: #afb1b7;
+    --text-muted: #8e9199;
+    --text-on-active: #f3f4f6;
+    --text-secondary-on-active: #c2bfca;
+    --text-muted-on-active: #a49fb0;
     
     --accent-color: #a855f7;
     --accent-hover: #c084fc;
@@ -127,8 +133,11 @@ html.theme-light {
   --border-color: #e2e8f0;
   
   --text-primary: #0f172a;
-  --text-secondary: #64748b;
-  --text-muted: #94a3b8;
+  --text-secondary: #575d6a;
+  --text-muted: #666971;
+  --text-on-active: #0f172a;
+  --text-secondary-on-active: #484b5f;
+  --text-muted-on-active: #69697e;
   
   --accent-color: #a855f7;
   --accent-hover: #7e22ce;
@@ -172,8 +181,11 @@ html.theme-dark {
   --border-color: #1e2640;
   
   --text-primary: #f3f4f6;
-  --text-secondary: #9ca3af;
-  --text-muted: #6b7280;
+  --text-secondary: #afb1b7;
+  --text-muted: #8e9199;
+  --text-on-active: #f3f4f6;
+  --text-secondary-on-active: #c2bfca;
+  --text-muted-on-active: #a49fb0;
   
   --accent-color: #a855f7;
   --accent-hover: #c084fc;
@@ -551,6 +563,11 @@ body {
 .note-item.active {
   background-color: var(--bg-note-active);
   border-color: var(--border-note-active);
+  /* The active row paints the theme's selection colour behind the title, meta
+     and snippet, so rebind the text tones to ones measured against it. */
+  --text-primary: var(--text-on-active);
+  --text-secondary: var(--text-secondary-on-active);
+  --text-muted: var(--text-muted-on-active);
 }
 
 .note-item.dragging {
