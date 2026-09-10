@@ -22,19 +22,24 @@ const MIN_SECONDARY_CONTRAST = 5;
 // snippet rather than forcing both to the same near-white.
 const MIN_ACTIVE_SURFACE_HEADROOM = 8;
 
+// Opaque hex only. A translucent colour has no contrast until it is composited
+// over whatever sits behind it, and for a theme's background or foreground that
+// backdrop isn't ours to assume -- so #RGBA and #RRGGBBAA are reported as
+// unmeasurable, exactly like the rgba()/hsl() forms an imported theme may use.
+// Callers leave such colours alone rather than guessing at an opaque stand-in.
 export function parseColor(value) {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   if (!trimmed.startsWith("#")) return null;
 
   let digits = trimmed.slice(1);
-  if (digits.length === 3 || digits.length === 4) {
+  if (!/^[0-9a-fA-F]+$/.test(digits)) return null;
+  if (digits.length === 3) {
     digits = digits.split("").map(d => d + d).join("");
   }
-  if (digits.length !== 6 && digits.length !== 8) return null;
-  if (!/^[0-9a-fA-F]+$/.test(digits)) return null;
+  if (digits.length !== 6) return null;
 
-  const rgb = parseInt(digits.slice(0, 6), 16);
+  const rgb = parseInt(digits, 16);
   return [(rgb >> 16) & 0xff, (rgb >> 8) & 0xff, rgb & 0xff];
 }
 
@@ -92,6 +97,19 @@ export function ensureContrast(color, surfaces, target) {
   }
   return candidate;
 }
+
+// Every property deriveThemeSurfaceColors can set. A theme it can only partly
+// derive -- or not at all -- returns a subset, so callers must clear the whole
+// list before applying, or the previous theme's tones stay on the element.
+export const DERIVED_THEME_PROPERTIES = [
+  "--bg-note-hover",
+  "--bg-note-active",
+  "--text-secondary",
+  "--text-muted",
+  "--text-on-active",
+  "--text-secondary-on-active",
+  "--text-muted-on-active"
+];
 
 // Returns the CSS custom properties a theme should set beyond its own colours,
 // or null when the theme's colours aren't parseable (a custom theme may use any

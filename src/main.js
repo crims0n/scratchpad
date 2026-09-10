@@ -15,7 +15,7 @@ import { createUpdateUi } from "./updates.js";
 import { createMcpWriter, createNoteRevisionTracker, createFolderRevisionTracker } from "./mcp-writes.js";
 import { renderMarkdown, resolveLinkAction, sanitizeMarkdownHtml } from "./markdown.js";
 import { getNotePreview } from "./note-preview.js";
-import { deriveThemeSurfaceColors } from "./theme-colors.js";
+import { DERIVED_THEME_PROPERTIES, deriveThemeSurfaceColors } from "./theme-colors.js";
 import { PRESET_THEMES } from "./preset-themes.js";
 import { compareNoteText, emptyNoteComparison } from "./note-compare.js";
 import { findTextMatches } from "./find.js";
@@ -4494,6 +4494,12 @@ function applyTheme(themeId) {
     delete root.dataset.themeStyle;
   }
 
+  // Drop anything derived for the previous theme first. A theme whose colours
+  // can only be partly measured sets only part of the list, and a stale
+  // --text-on-active from a dark theme is exactly how near-white text ends up
+  // on a pale row.
+  DERIVED_THEME_PROPERTIES.forEach(prop => root.style.removeProperty(prop));
+
   const isDark = isColorDark(theme.background);
   if (isDark) {
     document.documentElement.classList.add("theme-dark");
@@ -4543,9 +4549,8 @@ function clearCustomThemeStyles() {
     "--bg-app", "--editor-bg", "--editor-text", "--preview-bg", "--preview-text",
     "--bg-sidebar", "--sidebar-bg", "--statusbar-bg", "--topbar-bg", "--dropdown-bg",
     "--border-color", "--text-primary", "--accent-color", "--accent-hover",
-    "--bg-note-active", "--border-note-active",
-    "--text-secondary", "--text-muted", "--bg-note-hover",
-    "--text-on-active", "--text-secondary-on-active", "--text-muted-on-active"
+    "--border-note-active",
+    ...DERIVED_THEME_PROPERTIES
   ];
   props.forEach(p => root.style.removeProperty(p));
   delete root.dataset.themeStyle;

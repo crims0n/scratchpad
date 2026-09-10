@@ -5,6 +5,7 @@ import test from "node:test";
 
 import { PRESET_THEMES } from "../src/preset-themes.js";
 import {
+  DERIVED_THEME_PROPERTIES,
   contrastRatio,
   deriveThemeSurfaceColors,
   ensureContrast,
@@ -23,13 +24,17 @@ test("parseColor reads every hex form and rejects everything else", () => {
   assert.deepEqual(parseColor("#fff"), [255, 255, 255]);
   assert.deepEqual(parseColor("#0d1117"), [13, 17, 23]);
   assert.deepEqual(parseColor("  #0D1117  "), [13, 17, 23]);
-  assert.deepEqual(parseColor("#0d111780"), [13, 17, 23], "alpha is dropped, not parsed as colour");
-
   assert.equal(parseColor("rebeccapurple"), null);
   assert.equal(parseColor("rgba(59,130,246,0.15)"), null);
   assert.equal(parseColor("#12345"), null);
   assert.equal(parseColor("#gggggg"), null);
   assert.equal(parseColor(undefined), null);
+
+  // Translucent hex is unmeasurable, not "opaque with the alpha ignored" --
+  // treating #1f6feb66 as #1f6feb would measure against the wrong surface and
+  // hand back an opaque colour the theme never asked for.
+  assert.equal(parseColor("#1f6feb66"), null);
+  assert.equal(parseColor("#f0f8"), null);
 });
 
 test("contrastRatio matches the WCAG reference values", () => {
@@ -140,4 +145,38 @@ test("a theme with no selection at all gets a tint of its own sidebar", () => {
 
   assert.ok(derived["--bg-note-active"]);
   assert.ok(ratio(derived["--text-muted-on-active"], derived["--bg-note-active"]) >= AA);
+});
+
+test("a translucent selection is left alone rather than flattened to opaque", () => {
+  const derived = deriveThemeSurfaceColors({
+    background: "#0d1117",
+    foreground: "#c9d1d9",
+    sidebar: "#010409",
+    selection: "#1f6feb66"
+  });
+
+  assert.ok(derived["--text-muted"], "the tones we can measure are still derived");
+  assert.ok(!("--bg-note-active" in derived));
+  assert.ok(!("--text-muted-on-active" in derived));
+});
+
+test("a translucent background or foreground makes the whole theme unmeasurable", () => {
+  assert.equal(deriveThemeSurfaceColors({ background: "#0d111780", foreground: "#c9d1d9" }), null);
+  assert.equal(deriveThemeSurfaceColors({ background: "#0d1117", foreground: "#c9d1d980" }), null);
+});
+
+test("DERIVED_THEME_PROPERTIES covers everything a derivation can return", () => {
+  const full = deriveThemeSurfaceColors(PRESET_THEMES[0]);
+  assert.deepEqual(Object.keys(full).sort(), [...DERIVED_THEME_PROPERTIES].sort());
+
+  // Partial derivations must stay a subset, or callers clearing the list would
+  // leave a stale property behind.
+  const partial = deriveThemeSurfaceColors({
+    background: "#0d1117",
+    foreground: "#c9d1d9",
+    selection: "rgb(31 111 235)"
+  });
+  Object.keys(partial).forEach((property) => {
+    assert.ok(DERIVED_THEME_PROPERTIES.includes(property), property);
+  });
 });
