@@ -86,6 +86,7 @@ const toggleSidebarBtn = document.getElementById("toggle-sidebar");
 const newNoteBtn = document.getElementById("new-note-btn");
 const newFolderBtn = document.getElementById("new-folder-btn");
 const searchInput = document.getElementById("search-input");
+const noteListContainer = document.getElementById("note-list-container");
 const noteList = document.getElementById("note-list");
 const noteTitleInput = document.getElementById("note-title");
 const editorWrapper = document.getElementById("editor-wrapper");
@@ -761,6 +762,12 @@ function createNote(title = "Untitled Scratchpad", content = "", folderId = unde
   if (typeof activeItem?.scrollIntoView === "function") {
     activeItem.scrollIntoView({ block: "nearest" });
   }
+
+  // A blank scratchpad has nothing to render, and Preview hides the editor, so
+  // it would open on an empty pane with nowhere to type. Only that mode strands
+  // the user: Split still shows an editor, and an import or the welcome note
+  // arrives with content worth previewing, so both are left as they are.
+  if (!content && currentLayoutMode === "preview") setLayoutMode("edit");
   editorTextarea.focus();
 }
 
@@ -2279,6 +2286,16 @@ function attachEventListeners() {
 
   // New note button
   newNoteBtn.addEventListener("click", () => createNote());
+
+  // Double-clicking the empty space below the list creates a scratchpad, the way
+  // double-clicking empty tab-bar space does in the editors people arrive from.
+  // Only the container and the list itself are empty space: every other element
+  // under the pointer is a note, a folder header, or the folder-name input, and
+  // those own their double-clicks (selecting a folder name to rename it, say).
+  noteListContainer.addEventListener("dblclick", (event) => {
+    if (event.target !== noteListContainer && event.target !== noteList) return;
+    createNote();
+  });
   newFolderBtn.addEventListener("click", startFolderCreation);
 
   // Search filter
