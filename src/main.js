@@ -757,6 +757,12 @@ function createNote(title = "Untitled Scratchpad", content = "", folderId = unde
   if (typeof activeItem?.scrollIntoView === "function") {
     activeItem.scrollIntoView({ block: "nearest" });
   }
+
+  // A blank scratchpad has nothing to render, and Preview hides the editor, so
+  // it would open on an empty pane with nowhere to type. Only that mode strands
+  // the user: Split still shows an editor, and an import or the welcome note
+  // arrives with content worth previewing, so both are left as they are.
+  if (!content && currentLayoutMode === "preview") setLayoutMode("edit");
   editorTextarea.focus();
 }
 
