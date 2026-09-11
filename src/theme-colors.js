@@ -122,13 +122,17 @@ export const DERIVED_THEME_PROPERTIES = [
 // Returns the CSS custom properties a theme should set beyond its own colours,
 // or null when the theme's colours aren't parseable (a custom theme may use any
 // CSS colour string) -- callers should leave the built-in values in place then.
-export function deriveThemeSurfaceColors(theme) {
+//
+// `parseOpaqueColor` decides what is measurable. It defaults to hex so this
+// module stays free of the DOM and testable on its own; the app passes one
+// backed by the engine, which reads rgb(), hsl() and named colours too.
+export function deriveThemeSurfaceColors(theme, parseOpaqueColor = parseColor) {
   if (!theme) return null;
-  const background = parseColor(theme.background);
-  const foreground = parseColor(theme.foreground);
+  const background = parseOpaqueColor(theme.background);
+  const foreground = parseOpaqueColor(theme.foreground);
   if (!background || !foreground) return null;
 
-  const sidebar = parseColor(theme.sidebar) || background;
+  const sidebar = parseOpaqueColor(theme.sidebar) || background;
   const hover = quantize(mix(sidebar, foreground, 0.09));
   const surfaces = [background, sidebar, hover];
 
@@ -138,7 +142,7 @@ export function deriveThemeSurfaceColors(theme) {
     "--text-muted": toHex(ensureContrast(mix(foreground, sidebar, 0.48), surfaces, MIN_TEXT_CONTRAST))
   };
 
-  const selection = parseColor(theme.selection);
+  const selection = parseOpaqueColor(theme.selection);
   // An imported theme may name its selection in a form we can't measure. Leave
   // the row alone rather than replacing a colour the author deliberately chose.
   if (!selection && theme.selection) return derived;

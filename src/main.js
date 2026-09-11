@@ -16,6 +16,7 @@ import { createMcpWriter, createNoteRevisionTracker, createFolderRevisionTracker
 import { renderMarkdown, resolveLinkAction, sanitizeMarkdownHtml } from "./markdown.js";
 import { getNotePreview } from "./note-preview.js";
 import { ACTIVE_TEXT_PROPERTIES, DERIVED_THEME_PROPERTIES, deriveThemeSurfaceColors } from "./theme-colors.js";
+import { createCssColorResolver, createOpaqueColorParser, isColorDark } from "./css-color.js";
 import { PRESET_THEMES } from "./preset-themes.js";
 import { compareNoteText, emptyNoteComparison } from "./note-compare.js";
 import { findTextMatches } from "./find.js";
@@ -78,6 +79,11 @@ import {
 // ----------------------------------------------------
 
 const { invoke } = window.__TAURI__ ? window.__TAURI__.core : { invoke: () => Promise.resolve() };
+
+// Resolves any CSS colour an imported theme may use to sRGB, by asking the
+// engine. Themes only change on demand, so the probe it uses costs nothing.
+const resolveCssColor = createCssColorResolver(document);
+const parseOpaqueThemeColor = createOpaqueColorParser(resolveCssColor);
 
 // Select DOM elements
 const appContainer = document.getElementById("app");
@@ -4534,7 +4540,7 @@ function applyTheme(themeId) {
   // on a pale row.
   DERIVED_THEME_PROPERTIES.forEach(prop => root.style.removeProperty(prop));
 
-  const isDark = isColorDark(theme.background);
+  const isDark = isColorDark(theme.background, resolveCssColor);
   if (isDark) {
     document.documentElement.classList.add("theme-dark");
     document.documentElement.classList.remove("theme-light");
@@ -4564,7 +4570,7 @@ function applyTheme(themeId) {
   // the built-in palette, so preview snippets stay readable on every theme.
   // This runs last so it can also refine --bg-note-active; themes whose colours
   // aren't parseable keep the plain values set above.
-  const derived = deriveThemeSurfaceColors(theme) || {};
+  const derived = deriveThemeSurfaceColors(theme, parseOpaqueThemeColor) || {};
   Object.entries(derived).forEach(([prop, value]) => root.style.setProperty(prop, value));
 
   // The active row rebinds its text to the on-active tones whether or not we
@@ -4595,18 +4601,6 @@ function clearCustomThemeStyles() {
   ];
   props.forEach(p => root.style.removeProperty(p));
   delete root.dataset.themeStyle;
-}
-
-function isColorDark(hex) {
-  if (!hex || typeof hex !== "string" || !hex.startsWith("#")) return true;
-  const c = hex.substring(1);
-  const rgb = parseInt(c.length === 3 ? c.split('').map(x => x + x).join('') : c, 16);
-  if (isNaN(rgb)) return true;
-  const r = (rgb >> 16) & 0xff;
-  const g = (rgb >> 8) & 0xff;
-  const b = (rgb >> 0) & 0xff;
-  const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  return luma < 128;
 }
 
 function isValidColor(str) {
