@@ -294,6 +294,7 @@ let highlightRedrawTimer = null;
 let highlightSettledRedrawTimer = null;
 let highlightResizeObserver = null;
 let nativeWindowResizeUnlisten = null;
+let nativeAboutUnlisten = null;
 let dbSaveQueue = Promise.resolve();
 let isClosing = false;
 let localMirrorFailureNotified = false;
@@ -601,7 +602,11 @@ async function init() {
     document, invoke, storage: localStorage,
     closeAbout: closeAboutModal
   });
-  window.addEventListener("pagehide", () => updateChecker.dispose(), { once: true });
+  window.addEventListener("pagehide", () => {
+    updateChecker.dispose();
+    nativeAboutUnlisten?.();
+  }, { once: true });
+  await registerNativeAboutHandler();
   await registerCloseHandler();
   await registerWindowResizeHandler();
 
@@ -1520,6 +1525,17 @@ async function registerWindowResizeHandler() {
     });
   } catch (error) {
     console.error("Failed to register the native highlight resize handler", error);
+  }
+}
+
+async function registerNativeAboutHandler() {
+  const listen = window.__TAURI__?.event?.listen;
+  if (typeof listen !== "function") return;
+
+  try {
+    nativeAboutUnlisten = await listen("scratchpad-open-about", openAboutModal);
+  } catch (error) {
+    console.error("Failed to register the native About menu handler", error);
   }
 }
 
@@ -4389,6 +4405,7 @@ function cycleHelpTab(backwards = false) {
 // About Modal Logic
 // ----------------------------------------------------
 function openAboutModal() {
+  if (isAboutModalOpen) return;
   aboutModalPreviousFocus = document.activeElement;
   isAboutModalOpen = true;
   aboutModalBackdrop.style.display = "flex";
