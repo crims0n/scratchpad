@@ -15,8 +15,10 @@ export const settle = (ms = 50) => new Promise((resolve) => setTimeout(resolve, 
 // `storage` seeds local storage before boot; `handlers` maps a Tauri command to
 // the value it should resolve with, or throws to simulate a failing command.
 // `instance` gives the module a distinct URL so a single process can boot the
-// app more than once, which is what a two-launch test needs.
-export async function bootApp({ storage = {}, handlers = {}, instance = 1, windowApi = {} } = {}) {
+// app more than once, which is what a two-launch test needs. `globals` installs
+// globals jsdom does not implement -- `CSS.supports`, say, which the app uses to
+// validate imported theme colours.
+export async function bootApp({ storage = {}, handlers = {}, instance = 1, windowApi = {}, globals = {} } = {}) {
   const html = await readFile(new URL("../../src/index.html", import.meta.url), "utf8");
   const dom = new JSDOM(html, { url: "http://localhost/", pretendToBeVisual: true });
 
@@ -44,6 +46,13 @@ export async function bootApp({ storage = {}, handlers = {}, instance = 1, windo
   Object.defineProperty(globalThis, "navigator", {
     value: dom.window.navigator,
     configurable: true
+  });
+
+  // main.js reads these as bare globals, so they have to land on globalThis as
+  // well as on the window the app sees.
+  Object.entries(globals).forEach(([name, value]) => {
+    dom.window[name] = value;
+    globalThis[name] = value;
   });
 
   Object.entries(storage).forEach(([key, value]) => {
