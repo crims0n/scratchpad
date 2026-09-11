@@ -7,7 +7,7 @@ export const WELCOME_NOTE_CONTENT = `# Welcome to Scratchpad!
 Scratchpad is a fast, local-first place for notes, snippets, and Markdown. Everything is saved automatically as you write.
 
 ## Start writing
-- Create a scratchpad with \`Cmd/Ctrl+N\` and find your notes from the sidebar.
+- Create a scratchpad with \`Cmd/Ctrl+N\`, or by double-clicking the empty space below the sidebar list, and find your notes from the sidebar.
 - Switch between **Edit**, **Split**, and **Preview** to work with rendered Markdown.
 - Open a second note beside this one with \`Cmd/Ctrl+\\\`.
 - With two notes open, choose **Compare** in the toolbar to highlight removed text on the left and added text on the right as you edit.

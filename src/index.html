@@ -47,7 +47,7 @@
         <input type="text" id="search-input" aria-label="Search scratchpads" placeholder="Search scratchpads..." autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
       </div>
 
-      <div class="note-list-container">
+      <div class="note-list-container" id="note-list-container">
         <ul class="note-list" id="note-list">
           <!-- Dynamic note items inserted here -->
         </ul>
@@ -603,7 +603,7 @@
         <div class="help-pane active" id="pane-shortcuts" role="tabpanel" aria-labelledby="tab-shortcuts-btn">
           <div class="shortcuts-section">
             <h4 class="shortcuts-heading">Workspace & Notes</h4>
-            <p class="shortcuts-note">Use the folder button in the sidebar to create collapsible folders. Pinned notes stay at the very top as ordinary notes, while unpinned notes without a folder remain below the folders. Drag notes onto folders to move them, or right-click a folder to add a note, rename, reorder, or safely remove it. Deleting a folder from the sidebar returns its notes to the top level.</p>
+            <p class="shortcuts-note">Double-click the empty space below the scratchpad list to create a new scratchpad. Use the folder button in the sidebar to create collapsible folders. Pinned notes stay at the very top as ordinary notes, while unpinned notes without a folder remain below the folders. Drag notes onto folders to move them, or right-click a folder to add a note, rename, reorder, or safely remove it. Deleting a folder from the sidebar returns its notes to the top level.</p>
             <p class="shortcuts-note">Right-click a note and choose <strong>Delete Note</strong> to move it to trash. Click the <strong>trash icon at the bottom right</strong> and choose <strong>Restore</strong> to recover it. Restored notes return to their original folder, or the top level if it no longer exists. Right-click the trash icon (or focus it and press Shift+F10), choose <strong>Empty Trash…</strong>, and confirm to permanently remove recovery copies. Each local collection or workspace has its own trash, which survives restarts and never expires automatically.</p>
             <div class="shortcut-row">
               <span class="shortcut-desc">New Scratchpad</span>
