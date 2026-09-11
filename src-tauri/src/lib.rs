@@ -4,12 +4,22 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use tauri::Manager;
+#[cfg(target_os = "macos")]
+use tauri::{
+    menu::{Menu, MenuItem},
+    AppHandle, Emitter, Runtime,
+};
 
 mod mcp;
 mod updates;
 pub use mcp::run_mcp_stdio;
 
 const PREFERENCES_FILE_NAME: &str = "scratchpad-preferences.json";
+
+#[cfg(target_os = "macos")]
+const NATIVE_ABOUT_MENU_ID: &str = "scratchpad-native-about";
+#[cfg(target_os = "macos")]
+const OPEN_ABOUT_EVENT: &str = "scratchpad-open-about";
 
 #[derive(serde::Serialize, serde::Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -573,10 +583,67 @@ fn show_alert_dialog(title: String, message: String) {
         .show();
 }
 
+#[cfg(target_os = "macos")]
+fn macos_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
+    let menu = Menu::default(app)?;
+    let app_menu = menu
+        .items()?
+        .into_iter()
+        .next()
+        .and_then(|item| item.as_submenu().cloned())
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Tauri's default macOS application menu is missing",
+            )
+        })?;
+
+    // Tauri's first application-menu item is a predefined About command that
+    // opens the system metadata panel. Replace only that item so the standard
+    // Services, Hide, and Quit behavior remains intact.
+    app_menu.remove_at(0)?.ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Tauri's default macOS About menu item is missing",
+        )
+    })?;
+    let about = MenuItem::with_id(
+        app,
+        NATIVE_ABOUT_MENU_ID,
+        format!("About {}", app.package_info().name),
+        true,
+        None::<&str>,
+    )?;
+    app_menu.insert(&about, 0)?;
+
+    Ok(menu)
+}
+
+#[cfg(target_os = "macos")]
+fn handle_macos_menu_event<R: Runtime>(app: &AppHandle<R>, event: tauri::menu::MenuEvent) {
+    if event.id() != NATIVE_ABOUT_MENU_ID {
+        return;
+    }
+
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+        if let Err(error) = window.emit(OPEN_ABOUT_EVENT, ()) {
+            eprintln!("Could not open the Scratchpad About panel: {error}");
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run(context: tauri::Context<tauri::Wry>) {
-    tauri::Builder::default()
-        .manage(mcp::McpState::default())
+    let builder = tauri::Builder::default().manage(mcp::McpState::default());
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .menu(macos_menu)
+        .on_menu_event(handle_macos_menu_event);
+
+    builder
         // Markdown links have no default handling in the webview; the opener
         // plugin sends them to the user's browser instead. Its capability scope
         // limits it to the same schemes the Markdown sanitizer allows.
