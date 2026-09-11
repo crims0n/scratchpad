@@ -29,7 +29,7 @@ See [release notes](RELEASE_NOTES.md) for highlights, compatibility details, and
 - Optional local MCP agent access with five read tools, eight individually enabled write tools, and a live listening indicator
 - Optional update checks with in-app release notes, separate Beta and Stable channels, and automatic checks off by default
 
-- Multiple scratchpads with automatic saving and titles derived from the first line
+- Multiple scratchpads with automatic saving, titles derived from the first line, and quick creation by double-clicking empty sidebar space
 - Edit, synchronized edit/preview, and full Markdown preview layouts
 - Optional Markdown editor coloring and language-aware fenced-code highlighting in previews
 - Optional, theme-aware source line numbers in either editor pane
@@ -43,7 +43,7 @@ See [release notes](RELEASE_NOTES.md) for highlights, compatibility details, and
 - Copy as Markdown or sanitized rendered HTML
 - Optional portable workspace files that reopen automatically
 - Recoverable note deletion with persistent trash, Restore actions, and user-confirmed Empty Trash
-- Built-in and importable color themes
+- Built-in and importable color themes with contrast-aware sidebar and active-note tones
 - Persistent editor zoom and adjustable editor line spacing
 - A sectioned Scratchpad menu, About panel, keyboard shortcut reference, and Markdown cheatsheet
 
@@ -156,7 +156,7 @@ A custom JSON theme requires `background` and `foreground`. Other colors receive
 }
 ```
 
-Simple TOML/key-value theme files using the same names are also accepted. Imported colors are validated before they are stored or rendered.
+Simple TOML/key-value theme files using the same names are also accepted. Imported colors are validated before they are stored or rendered. Opaque hex, RGB, HSL, named, and `color(srgb …)` values are measured against the theme's own surfaces so secondary text remains readable; translucent or wider-gamut values are preserved without being flattened into guessed colors.
 
 ## Development
 
