@@ -98,6 +98,16 @@ export function ensureContrast(color, surfaces, target) {
   return candidate;
 }
 
+// The tones the active note row rebinds its text to. That rebinding is
+// unconditional in the stylesheet, so a caller that cannot derive these must
+// still supply them from the theme itself -- left unset they resolve from the
+// built-in palette, which a theme we could not measure may look nothing like.
+export const ACTIVE_TEXT_PROPERTIES = [
+  "--text-on-active",
+  "--text-secondary-on-active",
+  "--text-muted-on-active"
+];
+
 // Every property deriveThemeSurfaceColors can set. A theme it can only partly
 // derive -- or not at all -- returns a subset, so callers must clear the whole
 // list before applying, or the previous theme's tones stay on the element.
@@ -106,9 +116,7 @@ export const DERIVED_THEME_PROPERTIES = [
   "--bg-note-active",
   "--text-secondary",
   "--text-muted",
-  "--text-on-active",
-  "--text-secondary-on-active",
-  "--text-muted-on-active"
+  ...ACTIVE_TEXT_PROPERTIES
 ];
 
 // Returns the CSS custom properties a theme should set beyond its own colours,

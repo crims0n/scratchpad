@@ -4,7 +4,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { bootApp } from "./helpers/app-harness.js";
-import { DERIVED_THEME_PROPERTIES, contrastRatio, parseColor } from "../src/theme-colors.js";
+import {
+  ACTIVE_TEXT_PROPERTIES,
+  DERIVED_THEME_PROPERTIES,
+  contrastRatio,
+  parseColor
+} from "../src/theme-colors.js";
 
 // A theme we can only partly measure: hex surfaces, but a selection colour that
 // carries alpha. It sets some derived properties and not others, which is how a
@@ -45,9 +50,11 @@ test("switching away from a dark theme leaves none of its tones behind", async (
     .filter(property => root.style.getPropertyValue(property) === "#c9d1d9");
   assert.deepEqual(stale, []);
 
-  assert.equal(root.style.getPropertyValue("--text-on-active"), "");
-  assert.equal(root.style.getPropertyValue("--text-secondary-on-active"), "");
-  assert.equal(root.style.getPropertyValue("--text-muted-on-active"), "");
+  // What it could not derive is pinned to its own foreground, not left to the
+  // stylesheet -- see theme-unmeasurable.test.js.
+  ACTIVE_TEXT_PROPERTIES.forEach((property) => {
+    assert.equal(root.style.getPropertyValue(property), partlyMeasurable.foreground, property);
+  });
 
   // The tones it can measure are still derived, and still readable.
   const muted = parseColor(root.style.getPropertyValue("--text-muted"));

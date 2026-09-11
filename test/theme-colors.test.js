@@ -5,6 +5,7 @@ import test from "node:test";
 
 import { PRESET_THEMES } from "../src/preset-themes.js";
 import {
+  ACTIVE_TEXT_PROPERTIES,
   DERIVED_THEME_PROPERTIES,
   contrastRatio,
   deriveThemeSurfaceColors,
@@ -179,4 +180,19 @@ test("DERIVED_THEME_PROPERTIES covers everything a derivation can return", () =>
   Object.keys(partial).forEach((property) => {
     assert.ok(DERIVED_THEME_PROPERTIES.includes(property), property);
   });
+});
+
+test("every active-row tone is one of the derived properties", () => {
+  ACTIVE_TEXT_PROPERTIES.forEach((property) => {
+    assert.ok(DERIVED_THEME_PROPERTIES.includes(property), property);
+  });
+
+  // A partial derivation withholds the active tones as a set, so a caller can
+  // backfill them together rather than testing each one.
+  const partial = deriveThemeSurfaceColors({
+    background: "#0d1117",
+    foreground: "#c9d1d9",
+    selection: "rgb(31 111 235)"
+  });
+  assert.deepEqual(ACTIVE_TEXT_PROPERTIES.filter(property => property in partial), []);
 });

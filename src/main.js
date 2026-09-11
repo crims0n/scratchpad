@@ -15,7 +15,7 @@ import { createUpdateUi } from "./updates.js";
 import { createMcpWriter, createNoteRevisionTracker, createFolderRevisionTracker } from "./mcp-writes.js";
 import { renderMarkdown, resolveLinkAction, sanitizeMarkdownHtml } from "./markdown.js";
 import { getNotePreview } from "./note-preview.js";
-import { DERIVED_THEME_PROPERTIES, deriveThemeSurfaceColors } from "./theme-colors.js";
+import { ACTIVE_TEXT_PROPERTIES, DERIVED_THEME_PROPERTIES, deriveThemeSurfaceColors } from "./theme-colors.js";
 import { PRESET_THEMES } from "./preset-themes.js";
 import { compareNoteText, emptyNoteComparison } from "./note-compare.js";
 import { findTextMatches } from "./find.js";
@@ -4530,10 +4530,17 @@ function applyTheme(themeId) {
   // the built-in palette, so preview snippets stay readable on every theme.
   // This runs last so it can also refine --bg-note-active; themes whose colours
   // aren't parseable keep the plain values set above.
-  const derived = deriveThemeSurfaceColors(theme);
-  if (derived) {
-    Object.entries(derived).forEach(([prop, value]) => root.style.setProperty(prop, value));
-  }
+  const derived = deriveThemeSurfaceColors(theme) || {};
+  Object.entries(derived).forEach(([prop, value]) => root.style.setProperty(prop, value));
+
+  // The active row rebinds its text to the on-active tones whether or not we
+  // could measure them, so anything left underived is pinned to the theme's own
+  // foreground. That keeps the row at the contrast its author chose instead of
+  // resolving to a built-in palette picked by a light/dark guess that cannot
+  // read this theme's colours either.
+  ACTIVE_TEXT_PROPERTIES
+    .filter(prop => !derived[prop])
+    .forEach(prop => root.style.setProperty(prop, theme.foreground));
 
   if (themeBtnText) {
     themeBtnText.textContent = `Theme: ${theme.name}`;
