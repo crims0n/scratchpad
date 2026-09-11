@@ -33,13 +33,28 @@ const namedDark = {
   isCustom: true
 };
 
+// CSS Color 4 notation, which engines keep all the way to the computed value
+// instead of rewriting as rgb(). sRGB is the one space in it that needs no
+// conversion, so a theme written this way is as readable as any other.
+const srgbLight = {
+  id: "srgb-light",
+  name: "sRGB Light",
+  background: "color(srgb 1 1 1)",
+  foreground: "color(srgb 0.07 0.07 0.07)",
+  sidebar: "color(srgb 0.96 0.97 0.98)",
+  accent: "color(srgb 0.23 0.51 0.96)",
+  border: "color(srgb 0.78 0.78 0.78)",
+  selection: "color(srgb 0.86 0.92 1)",
+  isCustom: true
+};
+
 const app = await bootApp({
   // jsdom ships no CSS object, so the importer would reject every non-hex
   // colour before the classification under test ever ran.
   globals: { CSS: { supports: () => true } },
   storage: {
     scratchpad_active_theme: rgbLight.id,
-    scratchpad_custom_themes: [rgbLight, namedDark]
+    scratchpad_custom_themes: [rgbLight, namedDark, srgbLight]
   }
 });
 
@@ -83,6 +98,18 @@ test("an hsl() and named-colour theme is classified dark", () => {
   const sidebar = parseOpaque(namedDark.sidebar);
   const muted = parseColor(root.style.getPropertyValue("--text-muted"));
   assert.ok(muted, "--text-muted is derived from named colours");
+  assert.ok(contrastRatio(muted, sidebar) >= 4.5, "--text-muted on the sidebar");
+});
+
+test("a white color(srgb ...) theme is classified light and derived", () => {
+  selectTheme(srgbLight.name);
+
+  assert.equal(root.classList.contains("theme-light"), true);
+  assert.equal(root.classList.contains("theme-dark"), false);
+
+  const sidebar = parseOpaque(srgbLight.sidebar);
+  const muted = parseColor(root.style.getPropertyValue("--text-muted"));
+  assert.ok(muted, "--text-muted is derived");
   assert.ok(contrastRatio(muted, sidebar) >= 4.5, "--text-muted on the sidebar");
 });
 

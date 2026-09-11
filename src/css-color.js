@@ -6,38 +6,70 @@
 //
 // Rather than reimplement CSS colour parsing (rgb, hsl, named, and whatever the
 // engine adds next), this hands the value back to the engine and reads the
-// computed colour, which is serialised as rgb()/rgba() in every engine. The set
-// of colours that resolve here is then the same set CSS.supports admits, by
-// construction, instead of a second grammar that drifts from it.
+// computed colour, which engines serialise as rgb()/rgba() -- or, for a colour
+// written in CSS Color 4 notation, as that same notation. Both sRGB
+// serialisations are read here, so the set of colours that resolve is the set
+// CSS.supports admits minus the spaces sRGB cannot express, rather than a
+// second grammar that drifts from it.
 
 // Matches the computed serialisation: "rgb(12, 34, 56)" or "rgba(12, 34, 56,
 // 0.5)". Modern engines may emit the space-separated form, so both are read.
-const RGB_PATTERN = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)$/i;
+const RGB_PATTERN = /^rgba?\(([^)]*)\)$/i;
+// A CSS Color 4 colour keeps its own notation when computed, so an sRGB one
+// arrives as "color(srgb 1 1 1)" -- same colours as rgb(), 0-1 components.
+// Other spaces in that notation (display-p3, srgb-linear, xyz) name colours
+// outside sRGB or on a different transfer curve; converting them takes real
+// colour-space maths, and a wrong conversion is worse than the stated
+// fallback, so they stay unresolved alongside oklch().
+const COLOR_SRGB_PATTERN = /^color\(\s*srgb\s+([^)]*)\)$/i;
+
+// One component of a computed colour. `none` is a missing component, which
+// renders as zero; a percentage is relative to `full`, the unit's own maximum.
+function componentValue(token, full) {
+  if (typeof token !== "string" || !token) return NaN;
+  if (token.toLowerCase() === "none") return 0;
+  if (token.endsWith("%")) return (Number(token.slice(0, -1)) / 100) * full;
+  return Number(token);
+}
+
+// Splits "12 34 56 / 0.5", "12, 34, 56, 0.5" and "1 1 1" alike.
+function splitComponents(body) {
+  const [channels, ...rest] = body.split("/");
+  const tokens = channels.trim().split(/[\s,]+/).filter(Boolean);
+  if (tokens.length === 4 && rest.length === 0) return { tokens: tokens.slice(0, 3), alpha: tokens[3] };
+  if (tokens.length !== 3 || rest.length > 1) return null;
+  return { tokens, alpha: rest.length ? rest[0].trim() : undefined };
+}
 
 export function parseComputedColor(value) {
   if (typeof value !== "string") return null;
-  const match = value.trim().match(RGB_PATTERN);
-  if (!match) return null;
+  const trimmed = value.trim();
 
-  const rgb = match.slice(1, 4).map((channel) => {
-    const number = Number(channel);
-    return Math.max(0, Math.min(255, Math.round(number)));
-  });
-  if (rgb.some(Number.isNaN)) return null;
+  const srgbMatch = trimmed.match(COLOR_SRGB_PATTERN);
+  const rgbMatch = srgbMatch ? null : trimmed.match(RGB_PATTERN);
+  if (!srgbMatch && !rgbMatch) return null;
 
-  const rawAlpha = match[4];
-  const alpha = rawAlpha === undefined
-    ? 1
-    : (rawAlpha.endsWith("%") ? Number(rawAlpha.slice(0, -1)) / 100 : Number(rawAlpha));
+  // color(srgb ...) states its channels as 0-1, rgb() as 0-255.
+  const scale = srgbMatch ? 255 : 1;
+  const parts = splitComponents((srgbMatch || rgbMatch)[1]);
+  if (!parts) return null;
+
+  const channels = parts.tokens.map(token => componentValue(token, srgbMatch ? 1 : 255) * scale);
+  if (channels.some(Number.isNaN)) return null;
+  // Components may fall outside the range -- an out-of-gamut colour, or a
+  // percentage over 100 -- and are clipped the way the engine clips them.
+  const rgb = channels.map(channel => Math.max(0, Math.min(255, Math.round(channel))));
+
+  const alpha = parts.alpha === undefined ? 1 : componentValue(parts.alpha, 1);
   if (Number.isNaN(alpha)) return null;
 
   return { rgb, alpha: Math.max(0, Math.min(1, alpha)) };
 }
 
 // Returns { rgb, alpha } for any colour the engine can resolve to sRGB, or null
-// for one it cannot -- an unsupported form, or a wide-gamut colour like oklch()
-// that engines compute to themselves rather than to rgb(). Callers decide what
-// an unresolved colour means; none of them may guess from the syntax.
+// for one it cannot -- an unsupported form, or a colour in a space sRGB cannot
+// express, like oklch() or display-p3. Callers decide what an unresolved colour
+// means; none of them may guess from the syntax.
 export function createCssColorResolver(doc) {
   let probe = null;
 

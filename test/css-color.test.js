@@ -24,6 +24,15 @@ test("computed colours are read as rgb with alpha", () => {
   // The space-separated serialisation newer engines may emit.
   assert.deepEqual(parseComputedColor("rgb(12 34 56 / 25%)"), { rgb: [12, 34, 56], alpha: 0.25 });
   assert.equal(parseComputedColor("oklch(0.7 0.1 200)"), null);
+  // CSS Color 4 notation: sRGB is the one space that needs no conversion.
+  assert.deepEqual(parseComputedColor("color(srgb 1 1 1)"), { rgb: [255, 255, 255], alpha: 1 });
+  assert.deepEqual(parseComputedColor("color(srgb 0 0.4 1 / 0.5)"), { rgb: [0, 102, 255], alpha: 0.5 });
+  assert.deepEqual(parseComputedColor("color(srgb none 1 none)"), { rgb: [0, 255, 0], alpha: 1 });
+  // Out-of-gamut components are clipped the way the engine clips them.
+  assert.deepEqual(parseComputedColor("color(srgb 1.2 -0.3 0.5)"), { rgb: [255, 0, 128], alpha: 1 });
+  assert.equal(parseComputedColor("color(display-p3 1 0 0)"), null);
+  assert.equal(parseComputedColor("color(srgb-linear 1 1 1)"), null);
+  assert.equal(parseComputedColor("color(srgb 1 1)"), null);
   assert.equal(parseComputedColor("canvastext"), null);
   assert.equal(parseComputedColor(null), null);
 });
@@ -36,6 +45,10 @@ test("every form of the same colour resolves alike", () => {
   assert.deepEqual(resolve("rebeccapurple"), { rgb: [102, 51, 153], alpha: 1 });
   assert.deepEqual(resolve("hsl(210 50% 20%)"), { rgb: [26, 51, 77], alpha: 1 });
   assert.deepEqual(resolve("rgba(0, 0, 0, 0.5)"), { rgb: [0, 0, 0], alpha: 0.5 });
+  // The engine keeps this notation through to the computed value, and even
+  // normalises its percentages, so the resolver has to read it as written.
+  assert.deepEqual(resolve("color(srgb 1 1 1)"), { rgb: [255, 255, 255], alpha: 1 });
+  assert.deepEqual(resolve("color(srgb 100% 0% 0%)"), { rgb: [255, 0, 0], alpha: 1 });
   const hexAlpha = resolve("#0000007f");
   assert.deepEqual(hexAlpha.rgb, [0, 0, 0]);
   assert.ok(Math.abs(hexAlpha.alpha - 0.5) < 0.01, `alpha ${hexAlpha.alpha}`);
@@ -78,6 +91,17 @@ test("an unresolvable colour falls back to dark", () => {
   assert.equal(resolve("oklch(0.95 0.02 200)"), null);
   assert.equal(dark("oklch(0.95 0.02 200)"), true);
   assert.equal(dark("not-a-colour"), true);
+  // A space sRGB cannot express needs real conversion, so it stays unresolved
+  // rather than being read as if its components were sRGB.
+  assert.equal(resolve("color(display-p3 1 1 1)"), null);
+  assert.equal(dark("color(display-p3 1 1 1)"), true);
+});
+
+test("a colour written in sRGB notation is classified like its rgb() twin", () => {
+  assert.equal(dark("color(srgb 1 1 1)"), false);
+  assert.equal(dark("color(srgb 0.05 0.07 0.09)"), true);
+  assert.deepEqual(parseOpaque("color(srgb 1 1 1)"), parseOpaque("rgb(255, 255, 255)"));
+  assert.equal(parseOpaque("color(srgb 1 1 1 / 0.5)"), null, "still translucent");
 });
 
 test("only opaque colours are offered for contrast measurement", () => {
