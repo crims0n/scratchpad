@@ -44,7 +44,7 @@ test("the Scratchpad menu opens Help and About dialogs and returns focus", async
   assert.equal(document.querySelectorAll(".about-description").length, 2);
   assert.match(aboutBackdrop.textContent, /open-source, local-first Markdown editor/);
   assert.match(aboutBackdrop.textContent, /without an account, cloud service, analytics, or telemetry/);
-  assert.equal(document.getElementById("about-version").textContent, "0.7.2");
+  assert.equal(document.getElementById("about-version").textContent, "0.7.3");
 
   document.querySelector('.about-links a[href="https://github.com/crims0n/scratchpad"]').click();
   await app.settle(20);
