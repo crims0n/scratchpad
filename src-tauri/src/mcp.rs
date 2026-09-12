@@ -16,7 +16,7 @@ use rmcp::transport::{async_rw::AsyncRwTransport, Transport};
 use rmcp::{
     tool, tool_handler, tool_router, ErrorData as McpError, RoleServer, ServerHandler, ServiceExt,
 };
-use serde::Serialize;
+use serde::{Deserialize, Deserializer, Serialize};
 use subtle::ConstantTimeEq;
 use tauri::{Emitter, Manager};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -30,6 +30,8 @@ use crate::{Folder, Note};
 const MCP_PORT: u16 = 39_393;
 const MCP_TOKEN_FILE_NAME: &str = "scratchpad-mcp-token";
 const CONNECTION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+const INITIAL_ACCEPT_RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(25);
+const MAX_ACCEPT_RETRY_DELAY: std::time::Duration = std::time::Duration::from_secs(1);
 const MAX_REQUEST_BYTES: usize = 256 * 1024;
 const DEFAULT_PAGE_SIZE: u32 = 50;
 const MAX_PAGE_SIZE: u32 = 200;
@@ -346,13 +348,35 @@ async fn serve_local_connections(
     cancellation: CancellationToken,
 ) {
     let mut sessions = JoinSet::new();
+    let mut accept_retry_delay = INITIAL_ACCEPT_RETRY_DELAY;
     loop {
         tokio::select! {
             biased;
             _ = cancellation.cancelled() => break,
             _ = sessions.join_next(), if !sessions.is_empty() => {},
             connection = listener.accept(), if sessions.len() < 32 => {
-                let Ok((mut stream, _)) = connection else { break };
+                let mut stream = match connection {
+                    Ok((stream, _)) => {
+                        accept_retry_delay = INITIAL_ACCEPT_RETRY_DELAY;
+                        stream
+                    }
+                    Err(error) => {
+                        eprintln!("Scratchpad MCP listener could not accept a connection: {error}");
+                        if !should_retry_accept(&error) {
+                            break;
+                        }
+                        let delay = accept_retry_delay;
+                        accept_retry_delay = accept_retry_delay
+                            .saturating_mul(2)
+                            .min(MAX_ACCEPT_RETRY_DELAY);
+                        tokio::select! {
+                            biased;
+                            _ = cancellation.cancelled() => break,
+                            _ = tokio::time::sleep(delay) => {}
+                        }
+                        continue;
+                    }
+                };
                 let snapshot = snapshot.clone();
                 let token = token.clone();
                 let session_cancellation = cancellation.child_token();
@@ -381,6 +405,15 @@ async fn serve_local_connections(
     // before another enable can start accepting connections.
     cancellation.cancel();
     while sessions.join_next().await.is_some() {}
+}
+
+fn should_retry_accept(error: &std::io::Error) -> bool {
+    !matches!(
+        error.kind(),
+        std::io::ErrorKind::InvalidInput
+            | std::io::ErrorKind::NotConnected
+            | std::io::ErrorKind::Unsupported
+    )
 }
 
 async fn serve_mcp_connection(stream: TcpStream, snapshot: SharedSnapshot, ct: CancellationToken) {
@@ -802,11 +835,41 @@ struct ListFoldersArgs {
     offset: Option<u32>,
 }
 
+#[derive(Debug, Default, PartialEq, Eq)]
+enum FolderFilter {
+    #[default]
+    All,
+    TopLevel,
+    Folder(String),
+}
+
+impl FolderFilter {
+    fn includes(&self, note: &Note) -> bool {
+        match self {
+            Self::All => true,
+            Self::TopLevel => note.folder_id.is_none(),
+            Self::Folder(folder_id) => note.folder_id.as_deref() == Some(folder_id),
+        }
+    }
+}
+
+fn deserialize_folder_filter<'de, D>(deserializer: D) -> Result<FolderFilter, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(match Option::<String>::deserialize(deserializer)? {
+        Some(folder_id) => FolderFilter::Folder(folder_id),
+        None => FolderFilter::TopLevel,
+    })
+}
+
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 struct ListNotesArgs {
-    /// Return only notes assigned to this folder id.
-    folder_id: Option<String>,
+    /// Omit to return all notes, pass null for top-level notes, or pass a folder id.
+    #[serde(default, deserialize_with = "deserialize_folder_filter")]
+    #[schemars(with = "Option<String>")]
+    folder_id: FolderFilter,
     /// Maximum notes to return (1-200, default 50).
     limit: Option<u32>,
     /// Number of notes to skip (default 0).
@@ -818,8 +881,10 @@ struct ListNotesArgs {
 struct SearchNotesArgs {
     /// Literal text to find in note titles or Markdown content.
     query: String,
-    /// Return only notes assigned to this folder id.
-    folder_id: Option<String>,
+    /// Omit to search all notes, pass null for top-level notes, or pass a folder id.
+    #[serde(default, deserialize_with = "deserialize_folder_filter")]
+    #[schemars(with = "Option<String>")]
+    folder_id: FolderFilter,
     /// Maximum notes to return (1-200, default 50).
     limit: Option<u32>,
     /// Number of matching notes to skip (default 0).
@@ -1006,7 +1071,7 @@ fn list_folders_data(snapshot: &Snapshot, limit: u32, offset: u32) -> FoldersPag
 
 fn list_notes_data(
     snapshot: &Snapshot,
-    folder_id: Option<&str>,
+    folder_filter: &FolderFilter,
     limit: u32,
     offset: u32,
 ) -> NotesPage {
@@ -1014,7 +1079,7 @@ fn list_notes_data(
     let matching: Vec<_> = snapshot
         .notes
         .iter()
-        .filter(|note| folder_id.is_none_or(|id| note.folder_id.as_deref() == Some(id)))
+        .filter(|note| folder_filter.includes(note))
         .collect();
     let notes = matching
         .iter()
@@ -1033,7 +1098,7 @@ fn list_notes_data(
 fn search_notes_data(
     snapshot: &Snapshot,
     query: &str,
-    folder_id: Option<&str>,
+    folder_filter: &FolderFilter,
     limit: u32,
     offset: u32,
 ) -> NotesPage {
@@ -1042,7 +1107,7 @@ fn search_notes_data(
     let matching: Vec<_> = snapshot
         .notes
         .iter()
-        .filter(|note| folder_id.is_none_or(|id| note.folder_id.as_deref() == Some(id)))
+        .filter(|note| folder_filter.includes(note))
         .filter(|note| {
             note.title.to_lowercase().contains(&query)
                 || note.content.to_lowercase().contains(&query)
@@ -1535,12 +1600,7 @@ impl ScratchpadServer {
         }
         let limit = page_size(args.limit, MAX_PAGE_SIZE, DEFAULT_PAGE_SIZE)?;
         let page = self.with_snapshot(|snapshot| {
-            list_notes_data(
-                snapshot,
-                args.folder_id.as_deref(),
-                limit,
-                args.offset.unwrap_or(0),
-            )
+            list_notes_data(snapshot, &args.folder_id, limit, args.offset.unwrap_or(0))
         })?;
         successful_result(page)
     }
@@ -1570,7 +1630,7 @@ impl ScratchpadServer {
             search_notes_data(
                 snapshot,
                 &args.query,
-                args.folder_id.as_deref(),
+                &args.folder_id,
                 limit,
                 args.offset.unwrap_or(0),
             )
@@ -1695,7 +1755,7 @@ mod tests {
             .unwrap());
         assert!(server
             .list_notes(Parameters(ListNotesArgs {
-                folder_id: None,
+                folder_id: FolderFilter::All,
                 limit: None,
                 offset: None
             }))
@@ -1706,7 +1766,7 @@ mod tests {
         assert!(server
             .search_notes(Parameters(SearchNotesArgs {
                 query: "café".into(),
-                folder_id: None,
+                folder_id: FolderFilter::All,
                 limit: None,
                 offset: None
             }))
@@ -1885,13 +1945,88 @@ mod tests {
         assert_eq!(folders.folders[0].note_count, 1);
         assert_eq!(folders.folders[0].revision, "revision-work");
 
-        let page = list_notes_data(&snapshot, None, 1, 0);
+        let page = list_notes_data(&snapshot, &FolderFilter::All, 1, 0);
         assert_eq!(page.notes[0].id, "one");
         assert_eq!(page.next_offset, Some(1));
 
-        let search = search_notes_data(&snapshot, "CAFÉ", None, 50, 0);
+        let search = search_notes_data(&snapshot, "CAFÉ", &FolderFilter::All, 50, 0);
         assert_eq!(search.notes.len(), 1);
         assert_eq!(search.notes[0].id, "one");
+    }
+
+    #[test]
+    fn list_and_search_folder_filters_distinguish_omitted_null_and_id() {
+        let all = serde_json::from_value::<ListNotesArgs>(serde_json::json!({})).unwrap();
+        assert_eq!(all.folder_id, FolderFilter::All);
+        let top_level =
+            serde_json::from_value::<ListNotesArgs>(serde_json::json!({"folderId": null})).unwrap();
+        assert_eq!(top_level.folder_id, FolderFilter::TopLevel);
+        let folder = serde_json::from_value::<SearchNotesArgs>(
+            serde_json::json!({"query": "body", "folderId": "work"}),
+        )
+        .unwrap();
+        assert_eq!(folder.folder_id, FolderFilter::Folder("work".into()));
+        assert!(
+            serde_json::from_value::<ListNotesArgs>(serde_json::json!({"folderId": 42})).is_err()
+        );
+
+        let snapshot = snapshot();
+        let top_level = list_notes_data(&snapshot, &FolderFilter::TopLevel, 50, 0);
+        assert_eq!(
+            top_level
+                .notes
+                .iter()
+                .map(|note| note.id.as_str())
+                .collect::<Vec<_>>(),
+            ["two"]
+        );
+        let folder = search_notes_data(
+            &snapshot,
+            "body",
+            &FolderFilter::Folder("work".into()),
+            50,
+            0,
+        );
+        assert_eq!(
+            folder
+                .notes
+                .iter()
+                .map(|note| note.id.as_str())
+                .collect::<Vec<_>>(),
+            ["one"]
+        );
+
+        for schema in [
+            schemars::schema_for!(ListNotesArgs),
+            schemars::schema_for!(SearchNotesArgs),
+        ] {
+            let schema = serde_json::to_value(schema).unwrap();
+            assert_eq!(
+                schema["properties"]["folderId"]["type"],
+                serde_json::json!(["string", "null"])
+            );
+            assert!(!schema["required"]
+                .as_array()
+                .is_some_and(|required| required.contains(&serde_json::json!("folderId"))));
+        }
+    }
+
+    #[test]
+    fn accept_errors_retry_unless_the_listener_is_unusable() {
+        for kind in [
+            std::io::ErrorKind::ConnectionAborted,
+            std::io::ErrorKind::Other,
+            std::io::ErrorKind::PermissionDenied,
+        ] {
+            assert!(should_retry_accept(&std::io::Error::from(kind)));
+        }
+        for kind in [
+            std::io::ErrorKind::InvalidInput,
+            std::io::ErrorKind::NotConnected,
+            std::io::ErrorKind::Unsupported,
+        ] {
+            assert!(!should_retry_accept(&std::io::Error::from(kind)));
+        }
     }
 
     #[test]

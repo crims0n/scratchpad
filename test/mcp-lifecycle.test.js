@@ -8,6 +8,7 @@ test("MCP status follows confirmed access and workspace changes preserve the liv
   let startFails = true;
   let stopFails = true;
   let finishStarting;
+  let finishWorkspaceSnapshot;
   const app = await bootApp({
     storage: {
       scratchpad_notes: [{
@@ -22,6 +23,11 @@ test("MCP status follows confirmed access and workspace changes preserve the liv
       },
       stop_mcp_server: () => {
         if (stopFails) throw new Error("Could not stop server");
+      },
+      update_mcp_snapshot: ({ collectionName }) => {
+        if (collectionName === "mcp-workspace.db") {
+          return new Promise(resolve => { finishWorkspaceSnapshot = resolve; });
+        }
       },
       select_db_file: () => "/tmp/mcp-workspace.db",
       load_db_notes: () => [{
@@ -58,7 +64,17 @@ test("MCP status follows confirmed access and workspace changes preserve the liv
   assert.equal(toggle.disabled, false);
 
   app.click("db-connect-btn");
-  await settle(100);
+  await settle();
+  assert.equal(typeof finishWorkspaceSnapshot, "function");
+  app.click("db-disconnect-btn");
+  await settle();
+  assert.equal(
+    app.invocations.some(({ command, args }) => command === "set_last_workspace" && args.dbPath === null),
+    false,
+    "the switch remains closed until the new MCP snapshot is live"
+  );
+  finishWorkspaceSnapshot();
+  await settle();
   let snapshot = app.invocations.findLast(({ command }) => command === "update_mcp_snapshot").args;
   assert.equal(snapshot.collectionName, "mcp-workspace.db");
   assert.deepEqual(snapshot.notes.map(note => note.id), ["workspace"]);
