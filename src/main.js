@@ -1937,9 +1937,7 @@ async function syncMcpNote(noteId) {
 
 function scheduleMcpSnapshotUpdate() {
   if (!isMcpEnabled || !window.__TAURI__) return;
-  mcpNoteSnapshotTimers.forEach(timer => clearTimeout(timer));
-  mcpNoteSnapshotTimers.clear();
-  clearTimeout(mcpSnapshotTimer);
+  cancelScheduledMcpSnapshotUpdates();
   mcpSnapshotTimer = setTimeout(() => {
     mcpSnapshotTimer = null;
     syncMcpSnapshot().catch(error => {
@@ -1958,6 +1956,13 @@ function scheduleMcpNoteUpdate(noteId) {
     });
   }, 50);
   mcpNoteSnapshotTimers.set(noteId, timer);
+}
+
+function cancelScheduledMcpSnapshotUpdates() {
+  clearTimeout(mcpSnapshotTimer);
+  mcpSnapshotTimer = null;
+  mcpNoteSnapshotTimers.forEach(timer => clearTimeout(timer));
+  mcpNoteSnapshotTimers.clear();
 }
 
 function updateMcpUiState() {
@@ -2039,10 +2044,7 @@ async function toggleMcpAccess() {
       mcpPermissions = Object.fromEntries(Object.keys(mcpPermissions).map(tool => [tool, false]));
       await dbSaveQueue;
       await invoke("stop_mcp_server");
-      clearTimeout(mcpSnapshotTimer);
-      mcpSnapshotTimer = null;
-      mcpNoteSnapshotTimers.forEach(timer => clearTimeout(timer));
-      mcpNoteSnapshotTimers.clear();
+      cancelScheduledMcpSnapshotUpdates();
       isMcpEnabled = false;
       mcpConnectionInfo = null;
       updateMcpUiState();
@@ -2933,8 +2935,14 @@ async function switchMcpCollection(operation) {
     await operation();
   } finally {
     mcpCollectionId = window.crypto.randomUUID();
-    isWorkspaceSwitching = false;
-    scheduleMcpSnapshotUpdate();
+    cancelScheduledMcpSnapshotUpdates();
+    try {
+      await syncMcpSnapshot();
+    } catch (error) {
+      console.error("Failed to update the MCP note snapshot after switching collections", error);
+    } finally {
+      isWorkspaceSwitching = false;
+    }
   }
 }
 

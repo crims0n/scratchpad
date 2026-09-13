@@ -78,7 +78,8 @@ List and search calls accept `limit` and `offset` and return `nextOffset` when
 another page exists. `get_note` returns at most 20,000 characters by default;
 follow its `nextOffset` until `truncated` is false. These offsets count Unicode
 characters, not UTF-8 bytes. `list_notes` and `search_notes` also accept an
-optional `folderId`.
+optional `folderId`. Omit `folderId` to include every folder, pass a folder ID
+to filter to that folder, or pass `null` to include only top-level notes.
 
 ### Function permissions
 
