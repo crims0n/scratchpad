@@ -21,7 +21,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-dirs = "6"
+dirs = "7"
 reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
 semver = "1"
 rmcp = { version = "3.2", default-features = false, features = ["server", "macros", "schemars", "transport-io"] }
