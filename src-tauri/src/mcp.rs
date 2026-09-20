@@ -9,7 +9,7 @@ use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{
     CallToolResult, ClientJsonRpcMessage, ClientRequest, ContentBlock, EmptyResult, GetMeta,
-    Implementation, ProtocolVersion, ServerCapabilities, ServerInfo, ServerJsonRpcMessage,
+    Implementation, ProtocolVersion, ServerCapabilities, ServerConfig, ServerJsonRpcMessage,
     ServerResult, SubscriptionFilter,
 };
 use rmcp::transport::{async_rw::AsyncRwTransport, Transport};
@@ -458,10 +458,10 @@ async fn serve_mcp_connection(stream: TcpStream, snapshot: SharedSnapshot, ct: C
         };
         service
     } else {
-        // rmcp 3.2's negotiation path awaits the first handler before polling
-        // its outgoing channel. A long-lived subscriptions/listen deadlocks
-        // there. Start the SDK service loop directly for metadata-based clients;
-        // it validates each request and can emit the initial acknowledgment.
+        // The SDK negotiation path can await the first handler before polling its
+        // outgoing channel. A long-lived subscriptions/listen deadlocks there.
+        // Start the SDK service loop directly for metadata-based clients; it
+        // validates each request and can emit the initial acknowledgment.
         rmcp::service::serve_directly_with_ct(server, transport, None, ct)
     };
     let _ = service.waiting().await;
@@ -1671,8 +1671,8 @@ impl ScratchpadServer {
 
 #[tool_handler]
 impl ServerHandler for ScratchpadServer {
-    fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+    fn get_info(&self) -> ServerConfig {
+        ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_server_info(Implementation::new("scratchpad-mcp", env!("CARGO_PKG_VERSION")))
             .with_instructions(
                 "Access to the collection currently open in Scratchpad, including unsaved edits. Each function requires its permission enabled in MCP Configuration. All read functions start enabled; all write functions start disabled. delete_note moves a note to persistent trash and requires expectedRevision from get_note. delete_folder requires expectedRevision from list_folders and rejects nonempty folders. list_trash lists recovery metadata; only the user can restore or empty trash through the UI. rename_note and move_note require expectedRevision from get_note. rename_folder requires expectedRevision from list_folders. All edits preserve content except append_to_note, which requires the expectedRevision from get_note, appends exact text, and never adds separators. A revision conflict requires rereading; a save failure requires retrying identical arguments because the change may already be in the editor. Get collectionId from a read result and supply a unique requestId for each write; reuse identical arguments on retries. Retry keys last for this collection session; a switch or app restart invalidates collectionId. Results are paginated; follow nextOffset until it is null. get_note offsets count Unicode characters, not bytes.",
