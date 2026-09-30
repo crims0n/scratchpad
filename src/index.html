@@ -202,6 +202,21 @@
         </div>
       </header>
 
+      <section id="local-recovery-banner" class="local-recovery-banner" aria-label="Local data recovery" hidden>
+        <p id="local-recovery-message" role="alert"></p>
+        <div class="local-recovery-actions">
+          <button id="local-recovery-export-btn" class="mcp-config-copy-btn" type="button">Export preserved data…</button>
+          <button id="local-recovery-retry-btn" class="mcp-config-copy-btn" type="button">Retry reading</button>
+          <button id="local-recovery-replace-btn" class="mcp-config-copy-btn" type="button">Replace unreadable data…</button>
+        </div>
+        <div id="local-recovery-confirmation" hidden>
+          <p>This replaces only unreadable notes or folder metadata with empty values. Readable data and trash are kept. An original recovery copy must be saved locally first; export it too for safekeeping. Manual repair may still be needed.</p>
+          <button id="local-recovery-cancel-btn" class="mcp-config-copy-btn" type="button">Cancel</button>
+          <button id="local-recovery-confirm-btn" class="mcp-config-copy-btn" type="button">Preserve copy and replace unreadable data</button>
+        </div>
+        <p id="local-recovery-action-status" role="status" aria-live="polite"></p>
+      </section>
+
       <!-- Panes Container -->
       <div class="panes-container" id="panes-container">
         <!-- Primary Pane -->
@@ -605,6 +620,7 @@
             <h4 class="shortcuts-heading">Workspace & Notes</h4>
             <p class="shortcuts-note">Double-click the empty space below the scratchpad list to create a new scratchpad. Use the folder button in the sidebar to create collapsible folders. Pinned notes stay at the very top as ordinary notes, while unpinned notes without a folder remain below the folders. Drag notes onto folders to move them, or right-click a folder to add a note, rename, reorder, or safely remove it. Deleting a folder from the sidebar returns its notes to the top level.</p>
             <p class="shortcuts-note">Right-click a note and choose <strong>Delete Note</strong> to move it to trash. Click the <strong>trash icon at the bottom right</strong> and choose <strong>Restore</strong> to recover it. Restored notes return to their original folder, or the top level if it no longer exists. Right-click the trash icon (or focus it and press Shift+F10), choose <strong>Empty Trash…</strong>, and confirm to permanently remove recovery copies. Each local collection or workspace has its own trash, which survives restarts and never expires automatically.</p>
+            <p class="shortcuts-note">If local notes or folder metadata cannot be read, the <strong>Local data recovery</strong> banner keeps the collection read-only and preserves the original values. <strong>Export preserved data…</strong> saves raw recovery JSON for manual repair (not a Markdown import or full backup); keep it private. <strong>Retry reading</strong> leaves the source unchanged. <strong>Replace unreadable data…</strong> requires confirmation and a saved local recovery copy before replacing unreadable values; readable data and trash are retained. Healthy workspaces remain usable, and closing does not overwrite unreadable local data.</p>
             <div class="shortcut-row">
               <span class="shortcut-desc">New Scratchpad</span>
               <div class="shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>N</kbd></div>

@@ -18,7 +18,7 @@ export const settle = (ms = 50) => new Promise((resolve) => setTimeout(resolve, 
 // app more than once, which is what a two-launch test needs. `globals` installs
 // globals jsdom does not implement -- `CSS.supports`, say, which the app uses to
 // validate imported theme colours.
-export async function bootApp({ storage = {}, handlers = {}, instance = 1, windowApi = {}, globals = {} } = {}) {
+export async function bootApp({ storage = {}, handlers = {}, instance = 1, windowApi = {}, globals = {}, beforeBoot } = {}) {
   const html = await readFile(new URL("../../src/index.html", import.meta.url), "utf8");
   const dom = new JSDOM(html, { url: "http://localhost/", pretendToBeVisual: true });
 
@@ -61,6 +61,9 @@ export async function bootApp({ storage = {}, handlers = {}, instance = 1, windo
       typeof value === "string" ? value : JSON.stringify(value)
     );
   });
+
+  // Install storage-failure simulations after seeding but before startup reads.
+  await beforeBoot?.(dom.window);
 
   await import(`${new URL("../../src/main.js", import.meta.url).href}?boot=${instance}`);
   await settle();

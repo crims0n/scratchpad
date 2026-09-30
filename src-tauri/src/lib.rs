@@ -208,9 +208,23 @@ fn ensure_workspace_schema(conn: &rusqlite::Connection) -> Result<(), String> {
 
 #[tauri::command]
 fn save_file_native(content: String, default_name: String) -> Result<String, String> {
+    save_text_file(content, default_name, "Markdown", &["md"])
+}
+
+#[tauri::command]
+fn save_recovery_file_native(content: String, default_name: String) -> Result<String, String> {
+    save_text_file(content, default_name, "Recovery JSON", &["json"])
+}
+
+fn save_text_file(
+    content: String,
+    default_name: String,
+    filter_name: &str,
+    extensions: &[&str],
+) -> Result<String, String> {
     let file_path = rfd::FileDialog::new()
         .set_file_name(&default_name)
-        .add_filter("Markdown", &["md"])
+        .add_filter(filter_name, extensions)
         .save_file();
 
     if let Some(path) = file_path {
@@ -655,6 +669,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             load_workspace_preference,
             set_last_workspace,
             save_file_native,
+            save_recovery_file_native,
             import_file_native,
             select_db_file,
             load_db_notes,

@@ -94,6 +94,12 @@ Use a note's sidebar delete button or right-click it and choose **Delete Note** 
 
 Right-click the trash icon and choose **Empty Trash…**, then confirm to permanently remove the listed recovery copies. Keyboard users can focus the icon and press `Shift+F10` to open its menu. Trash survives restarts and has no automatic expiry. Only the user can restore notes or empty trash; MCP agents can list its metadata. See [storage and recovery details](docs/mcp.md#deleting-and-recovering-notes) for save-failure behavior.
 
+If saved local notes or folder metadata cannot be read, a **Local data recovery** banner keeps that collection read-only. Startup, autosave, MCP writes, switching collections, and closing the app do not replace the unreadable values. Readable notes can still be viewed and copied, and healthy workspace files remain usable.
+
+Choose **Export preserved data…** to save a recovery JSON file containing the original raw strings, including malformed JSON, and any previous recovery copy. This is for manual recovery, not a collection backup or a file the Markdown importer can restore. The file can include active and trashed note content; keep it private. **Retry reading** reloads the original local values without changing them.
+
+If you choose **Replace unreadable data…** and confirm, Scratchpad first saves an original recovery copy locally, then replaces only the unreadable notes or folder metadata with empty values. Readable data and trash are retained. A failed archive write prevents replacement; if a later replacement write fails, the original copy remains available. Export for safekeeping before proceeding: the local recovery copy is not protected from clearing app data. The banner keeps that copy available to export after replacement and future launches. Missing folder metadata may need manual reconstruction; this action does not repair damaged JSON automatically.
+
 ## Keyboard shortcuts
 
 The app displays `Cmd` on macOS and `Ctrl` on Windows or Linux.
