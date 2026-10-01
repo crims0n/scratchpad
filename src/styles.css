@@ -2363,6 +2363,16 @@ html:not(.editor-line-numbers-enabled) .app-container.compare-mode .editor-line-
   gap: 20px;
 }
 
+#collection-backup-modal p {
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+#collection-backup-modal button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
 .help-pane.active {
   display: flex;
 }

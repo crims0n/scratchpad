@@ -10,6 +10,7 @@ use tauri::{
     AppHandle, Emitter, Runtime,
 };
 
+mod backup;
 mod mcp;
 mod recovery;
 mod updates;
@@ -215,6 +216,80 @@ fn save_file_native(content: String, default_name: String) -> Result<String, Str
 #[tauri::command]
 fn save_recovery_file_native(content: String, default_name: String) -> Result<String, String> {
     save_text_file(content, default_name, "Recovery JSON", &["json"])
+}
+
+#[tauri::command]
+fn save_collection_backup(
+    app: tauri::AppHandle,
+    content: String,
+    db_path: Option<String>,
+) -> Result<Option<String>, String> {
+    let path = rfd::FileDialog::new()
+        .set_file_name("scratchpad-collection-backup.json")
+        .add_filter("Collection backup JSON", &["json"])
+        .save_file();
+    match path {
+        Some(path) => {
+            backup::ensure_export_destination(
+                &path,
+                &backup::directory(&app)?,
+                db_path.as_deref(),
+            )?;
+            backup::export(&path, &content)?;
+            Ok(Some(path.to_string_lossy().into_owned()))
+        }
+        None => Ok(None),
+    }
+}
+
+#[tauri::command]
+fn read_collection_backup() -> Result<Option<String>, String> {
+    let path = rfd::FileDialog::new()
+        .add_filter("Collection backup JSON", &["json"])
+        .pick_file();
+    path.map(|path| fs::read_to_string(path).map_err(|error| error.to_string()))
+        .transpose()
+}
+
+#[tauri::command]
+fn preserve_collection_backup(app: tauri::AppHandle, content: String) -> Result<String, String> {
+    backup::preserve(&backup::directory(&app)?, &content)
+}
+
+#[tauri::command]
+fn begin_local_restore(
+    app: tauri::AppHandle,
+    values: serde_json::Value,
+    content: String,
+) -> Result<String, String> {
+    backup::begin(&backup::directory(&app)?, values, &content)
+}
+
+#[tauri::command]
+fn read_local_restore(app: tauri::AppHandle) -> Result<Option<serde_json::Value>, String> {
+    backup::read(&backup::directory(&app)?)
+}
+
+#[tauri::command]
+fn complete_local_restore(app: tauri::AppHandle) -> Result<(), String> {
+    backup::complete(&backup::directory(&app)?)
+}
+
+#[tauri::command]
+fn workspace_collection_initialized(db_path: String) -> Result<bool, String> {
+    let conn = rusqlite::Connection::open(db_path).map_err(|error| error.to_string())?;
+    ensure_workspace_schema(&conn)?;
+    let exists: bool = conn.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='collection_metadata')", [], |row| row.get(0))
+        .map_err(|error| error.to_string())?;
+    if !exists {
+        return Ok(false);
+    }
+    conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM collection_metadata WHERE key='initialized')",
+        [],
+        |row| row.get(0),
+    )
+    .map_err(|error| error.to_string())
 }
 
 fn recovery_directory(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -552,6 +627,18 @@ fn save_workspace_db(
 
     let transaction = conn.transaction().map_err(|e| e.to_string())?;
     transaction
+        .execute(
+            "CREATE TABLE IF NOT EXISTS collection_metadata (key TEXT PRIMARY KEY)",
+            [],
+        )
+        .map_err(|e| e.to_string())?;
+    transaction
+        .execute(
+            "INSERT OR IGNORE INTO collection_metadata (key) VALUES ('initialized')",
+            [],
+        )
+        .map_err(|e| e.to_string())?;
+    transaction
         .execute("DELETE FROM notes", [])
         .map_err(|e| e.to_string())?;
     transaction
@@ -693,6 +780,13 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             set_last_workspace,
             save_file_native,
             save_recovery_file_native,
+            save_collection_backup,
+            read_collection_backup,
+            preserve_collection_backup,
+            begin_local_restore,
+            read_local_restore,
+            complete_local_restore,
+            workspace_collection_initialized,
             archive_local_recovery,
             has_local_recovery_copies,
             read_local_recovery_copies,
@@ -898,6 +992,54 @@ mod tests {
         assert_eq!(load_db_notes(db_path.clone()).unwrap()[0].id, original.id);
         assert!(load_db_trash(db_path.clone()).unwrap().is_empty());
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn collection_backup_round_trip_includes_order_pins_trash_and_initialized_empty_workspaces() {
+        let path = temporary_db_path("backup-round-trip");
+        let db_path = path.to_string_lossy().into_owned();
+        assert!(!workspace_collection_initialized(db_path.clone()).unwrap());
+        let mut pinned = note("pinned", "Unicode 🐈", 5);
+        pinned.is_pinned = true;
+        pinned.folder_id = Some("f".into());
+        let notes = vec![pinned, note("second", "Body", 6)];
+        let folders = vec![folder("empty", "Empty"), folder("f", "Folder")];
+        let mut deleted = note("gone", "Deleted body", 3);
+        deleted.folder_id = Some("removed".into());
+        let trash = vec![TrashEntry {
+            id: "t".into(),
+            note: deleted,
+            deleted_at: 4,
+            folder_name: Some("Removed".into()),
+        }];
+        let expected = serde_json::json!({ "notes": notes, "folders": folders, "trash": trash });
+        let serialized =
+            serde_json::json!({ "kind": "scratchpad-collection-backup", "schemaVersion": 1,
+            "createdAt": "2026-10-01T00:00:00Z", "collection": expected })
+            .to_string();
+        let parsed: serde_json::Value = serde_json::from_str(&serialized).unwrap();
+        save_workspace_db(
+            db_path.clone(),
+            serde_json::from_value(parsed["collection"]["notes"].clone()).unwrap(),
+            serde_json::from_value(parsed["collection"]["folders"].clone()).unwrap(),
+            Some(serde_json::from_value(parsed["collection"]["trash"].clone()).unwrap()),
+        )
+        .unwrap();
+        assert_eq!(
+            serde_json::json!({ "notes": load_db_notes(db_path.clone()).unwrap(),
+            "folders": load_db_folders(db_path.clone()).unwrap(), "trash": load_db_trash(db_path.clone()).unwrap() }),
+            expected
+        );
+        assert!(workspace_collection_initialized(db_path.clone()).unwrap());
+        save_workspace_db(db_path.clone(), vec![], vec![], Some(trash)).unwrap();
+        assert!(load_db_notes(db_path.clone()).unwrap().is_empty());
+        assert_eq!(load_db_trash(db_path.clone()).unwrap().len(), 1);
+        save_workspace_db(db_path.clone(), vec![], vec![], Some(vec![])).unwrap();
+        assert!(workspace_collection_initialized(db_path.clone()).unwrap());
+        assert!(load_db_notes(db_path.clone()).unwrap().is_empty());
+        assert!(load_db_folders(db_path.clone()).unwrap().is_empty());
+        assert!(load_db_trash(db_path).unwrap().is_empty());
+        fs::remove_file(path).unwrap();
     }
 
     #[test]

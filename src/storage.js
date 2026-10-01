@@ -44,8 +44,9 @@ export function parseLocalFolders(raw) {
 export function createLocalCollectionStorage(storage, archive = null) {
   let loaded = false;
   let archiveAvailable = false;
+  let restoreBlocked = false;
   let snapshot = { notes: [], folders: [], raw: {}, errors: {}, readFailures: [] };
-  const blocked = () => !loaded || Object.keys(snapshot.errors).length > 0;
+  const blocked = () => restoreBlocked || !loaded || Object.keys(snapshot.errors).length > 0;
   const guarded = {
     getItem: key => storage.getItem(key),
     setItem(key, value) {
@@ -103,6 +104,7 @@ export function createLocalCollectionStorage(storage, archive = null) {
   }
 
   async function replaceUnreadable(checkCurrent = () => {}) {
+    if (restoreBlocked) throw new Error("Recover the interrupted collection restore before replacing unreadable data");
     if (!loaded || !blocked()) return load();
     if (snapshot.readFailures.length) throw new Error("Storage could not be read; retry reading before replacing data");
     if (!archive) throw new Error("Automatic replacement requires the desktop app; export preserved data for manual recovery");
@@ -136,7 +138,8 @@ export function createLocalCollectionStorage(storage, archive = null) {
   }
 
   return { storage: guarded, load, blocked, recoveryData, replaceUnreadable, refreshArchives,
-    canReplace: () => Boolean(archive),
+    setRestoreBlocked: value => { restoreBlocked = value; },
+    canReplace: () => Boolean(archive) && !restoreBlocked,
     hasArchive: () => {
       try { return archiveAvailable || storage.getItem(LOCAL_RECOVERY_KEY) !== null; } catch { return archiveAvailable; }
     } };
