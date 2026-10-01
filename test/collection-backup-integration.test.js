@@ -106,6 +106,10 @@ test("empty and trash-only local restore survive restart without a welcome note"
     const restarted = await boot(bridge, { storage });
     assert.deepEqual(local(restarted), candidate);
     assert.deepEqual(restarted.sidebarTitles(), []);
+    for (const id of ["editor-textarea", "note-title", "secondary-editor-textarea", "secondary-note-title"]) {
+      assert.equal(document.getElementById(id).readOnly, true);
+    }
+    assert.equal(document.getElementById("empty-collection-prompt").hidden, false);
     restarted.dom.window.close();
   }
 });
@@ -121,6 +125,88 @@ test("cancelled restore resumes previously pending edits without taking a safety
   assert.equal(app.read("scratchpad_notes")[0].content, "pending before cancel");
   assert.equal(bridge.safety.length, 0);
   app.dom.window.close();
+});
+
+test("empty local editors reject unattached input and unlock when a note is created", async () => {
+  const bridge = native(), app = await boot(bridge, { storage: { ...seed(empty), scratchpad_layout_mode: "preview" } });
+  const prompt = document.getElementById("empty-collection-prompt");
+  assert.equal(prompt.hidden, false);
+  assert.match(prompt.textContent, /Create a new scratchpad or select a note/);
+  // Read-only attributes prevent actual typing; even synthetic input cannot
+  // leave unattached text on screen that looks as if it was saved.
+  for (const id of ["editor-textarea", "note-title", "secondary-editor-textarea", "secondary-note-title"]) {
+    const field = document.getElementById(id);
+    assert.equal(field.readOnly, true);
+    field.value = "must not look saved";
+    field.dispatchEvent(new window.Event("input"));
+    assert.equal(field.value, "");
+  }
+  assert.deepEqual(local(app), empty);
+  app.click("new-note-btn"); await app.settle();
+  assert.equal(document.getElementById("editor-textarea").readOnly, false);
+  assert.equal(document.getElementById("note-title").readOnly, false);
+  assert.equal(prompt.hidden, true);
+  const title = document.getElementById("note-title");
+  title.value = "Keep this title"; title.dispatchEvent(new window.Event("input"));
+  await app.type("Keep this body");
+  assert.equal(app.read("scratchpad_notes")[0].title, "Keep this title");
+  assert.equal(app.read("scratchpad_notes")[0].content, "Keep this body");
+  app.dom.window.close();
+});
+
+test("connecting folders-only, trash-only, and new empty workspaces protects empty editors", async () => {
+  const cases = [
+    { workspace: { ...empty, folders: original.folders }, storage: seed(original), initialized: true },
+    { workspace: { ...empty, trash: original.trash }, storage: seed(original), initialized: true },
+    { workspace: empty, storage: seed(empty), initialized: false },
+    { workspace: empty, storage: { scratchpad_notes: "{ damaged", scratchpad_folders: [], scratchpad_trash: [] }, initialized: false }
+  ];
+  for (const scenario of cases) {
+    const bridge = native(scenario.workspace), app = await boot(bridge, { storage: scenario.storage, handlers: {
+      select_db_file: () => "/tmp/empty-connect.db",
+      workspace_collection_initialized: () => scenario.initialized
+    } });
+    app.click("db-connect-btn"); await app.settle();
+    assert.equal(document.getElementById("workspace-menu-value").textContent, "empty-connect.db");
+    assert.equal(document.getElementById("empty-collection-prompt").hidden, false);
+    assert.equal(document.getElementById("editor-textarea").readOnly, true);
+    assert.equal(document.getElementById("note-title").readOnly, true);
+    assert.deepEqual(bridge.workspace(), scenario.workspace);
+    app.click("split-note-btn");
+    assert.equal(document.getElementById("secondary-editor-textarea").readOnly, true);
+    assert.equal(document.getElementById("secondary-note-title").readOnly, true);
+    app.click("new-note-btn"); await app.settle();
+    assert.equal(document.getElementById("empty-collection-prompt").hidden, true);
+    assert.equal(document.getElementById("editor-textarea").readOnly, false);
+    assert.equal(document.getElementById("secondary-editor-textarea").readOnly, false);
+    await app.type("Saved in workspace");
+    // The incremental save command is mocked separately from full saves.
+    const saved = app.invocations.findLast(call => call.command === "save_note_db");
+    assert.equal(saved.args.note.content, "Saved in workspace");
+    if (typeof scenario.storage.scratchpad_notes === "string") assert.equal(app.storage.getItem("scratchpad_notes"), "{ damaged");
+    app.dom.window.close();
+  }
+});
+
+test("checkpoint staging failure keeps local data editable and a later restore can retry", async () => {
+  const bridge = native(), originalBegin = bridge.handlers.begin_local_restore;
+  let fail = true;
+  bridge.handlers.begin_local_restore = args => {
+    if (fail) throw new Error("checkpoint temporary write failed");
+    return originalBegin(args);
+  };
+  const app = await boot(bridge);
+  await restore(app);
+  assert.match(document.getElementById("collection-backup-status").textContent, /Restore failed.*temporary write failed/);
+  assert.deepEqual(local(app), original);
+  assert.equal(bridge.pending(), null);
+  app.click("collection-restore-cancel"); await app.settle();
+  assert.equal(document.getElementById("editor-textarea").readOnly, false);
+  assert.equal(document.getElementById("local-recovery-banner").hidden, true);
+  fail = false;
+  await restore(app);
+  assert.deepEqual(local(app), incoming);
+  await close(app);
 });
 
 test("restore safety copy includes edits pending at confirmation", async () => {

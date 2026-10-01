@@ -824,6 +824,7 @@ function deleteNote(id, event) {
 }
 
 function loadActiveNote() {
+  refreshEditorAvailability();
   const activeNote = notes.find(n => n.id === activeNoteId);
   if (!activeNote) {
     clearEmptyCollectionUi();
@@ -1624,7 +1625,7 @@ async function registerNativeAboutHandler() {
 function handleEditorInput() {
   if (isLocalRecoveryBlocked()) { loadActiveNote(); return; }
   const activeNote = notes.find(n => n.id === activeNoteId);
-  if (!activeNote) return;
+  if (!activeNote) { loadActiveNote(); return; }
 
   activeNote.content = editorTextarea.value;
   activeNote.updatedAt = Date.now();
@@ -1670,7 +1671,7 @@ function handleEditorInput() {
 function handleTitleInput() {
   if (isLocalRecoveryBlocked()) { loadActiveNote(); return; }
   const activeNote = notes.find(n => n.id === activeNoteId);
-  if (!activeNote) return;
+  if (!activeNote) { loadActiveNote(); return; }
 
   activeNote.title = noteTitleInput.value.trim() || "Untitled Scratchpad";
   activeNote.isTitleLocked = true; // User edited manually, lock auto-renaming
@@ -3100,6 +3101,21 @@ function setRecoveryRequiredState() {
   saveStatus.classList.add("unsaved");
 }
 
+function refreshEditorAvailability() {
+  const locked = isLocalRecoveryBlocked() || isCollectionBackupBusy;
+  const hasPrimaryNote = notes.some(note => note.id === activeNoteId);
+  const hasSecondaryNote = notes.some(note => note.id === secondaryNoteId);
+  editorTextarea.readOnly = noteTitleInput.readOnly = locked || !hasPrimaryNote;
+  secondaryEditorTextarea.readOnly = secondaryNoteTitle.readOnly = locked || !hasSecondaryNote;
+  editorTextarea.placeholder = hasPrimaryNote ? "Type something here... Supports Markdown formatting."
+    : "Create or select a note to start writing.";
+  noteTitleInput.placeholder = hasPrimaryNote ? "Untitled Scratchpad" : "No note selected";
+  secondaryEditorTextarea.placeholder = hasSecondaryNote ? "Type something here... Supports Markdown formatting."
+    : "Create or select a note to start writing.";
+  secondaryNoteTitle.placeholder = hasSecondaryNote ? "Untitled Scratchpad" : "No note selected";
+  document.getElementById("empty-collection-prompt").hidden = hasPrimaryNote || isLocalRecoveryBlocked();
+}
+
 function refreshLocalRecoveryUi() {
   const blocked = isLocalRecoveryBlocked();
   const banner = document.getElementById("local-recovery-banner");
@@ -3118,7 +3134,7 @@ function refreshLocalRecoveryUi() {
   document.getElementById("local-recovery-replace-btn").disabled = !localCollection.canReplace();
   document.getElementById("local-recovery-replace-btn").title = localCollection.canReplace() ? "" : "Automatic replacement is available in the desktop app; export for manual recovery";
   document.getElementById("local-recovery-confirmation").hidden = true;
-  for (const element of [editorTextarea, noteTitleInput, secondaryEditorTextarea, secondaryNoteTitle]) element.readOnly = blocked;
+  refreshEditorAvailability();
   for (const element of [newNoteBtn, newFolderBtn, importBtn, replaceOneBtn, replaceAllBtn,
     ctxInsertBtn, ctxPinBtn, ctxMoveUpBtn, ctxMoveDownBtn, ctxMoveFolderBtn, ctxDeleteNoteBtn,
     ctxFolderNewNoteBtn, ctxFolderRenameBtn, ctxFolderMoveUpBtn, ctxFolderMoveDownBtn, ctxFolderDeleteBtn]) element.disabled = blocked;
@@ -4572,12 +4588,18 @@ function syncSecondaryNoteUi(reload = false) {
     secondaryNoteId = alternative?.id || null;
   }
   populateSecondaryNoteSelect();
+  refreshEditorAvailability();
   if (reload && isSplitNoteMode && secondaryNoteId) loadSecondaryNote();
 }
 
 function loadSecondaryNote() {
+  refreshEditorAvailability();
   const note = notes.find(n => n.id === secondaryNoteId);
-  if (!note) return;
+  if (!note) {
+    secondaryEditorTextarea.value = secondaryNoteTitle.value = "";
+    for (const element of [secondaryMarkdownPreview, secondaryEditorBackdrop, secondaryEditorLineNumbers]) element.replaceChildren();
+    return;
+  }
 
   cancelScheduledNoteComparison();
 
@@ -4596,7 +4618,7 @@ function loadSecondaryNote() {
 function handleSecondaryEditorInput() {
   if (isLocalRecoveryBlocked()) { loadSecondaryNote(); return; }
   const note = notes.find(n => n.id === secondaryNoteId);
-  if (!note) return;
+  if (!note) { loadSecondaryNote(); return; }
 
   note.content = secondaryEditorTextarea.value;
   note.updatedAt = Date.now();
@@ -4636,7 +4658,7 @@ function handleSecondaryEditorInput() {
 function handleSecondaryTitleInput() {
   if (isLocalRecoveryBlocked()) { loadSecondaryNote(); return; }
   const note = notes.find(n => n.id === secondaryNoteId);
-  if (!note) return;
+  if (!note) { loadSecondaryNote(); return; }
 
   note.title = secondaryNoteTitle.value.trim() || "Untitled Scratchpad";
   note.isTitleLocked = true;

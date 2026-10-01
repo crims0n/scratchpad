@@ -125,6 +125,27 @@ fn validate_values(values: &serde_json::Value) -> Result<(), String> {
     Ok(())
 }
 
+fn publish_checkpoint_with(
+    directory: &Path,
+    content: &str,
+    stage: impl FnOnce(&Path, &str) -> Result<(), String>,
+) -> Result<(), String> {
+    let temporary = directory.join(format!(".local-restore-{}.tmp", uuid::Uuid::new_v4()));
+    let result = (|| {
+        stage(&temporary, content)?;
+        // An atomic hard link publishes the verified bytes without replacing an
+        // existing checkpoint, even if another creator wins after begin's check.
+        // The temporary file is on the same filesystem and is never recovery input.
+        fs::hard_link(&temporary, directory.join(JOURNAL))
+            .map_err(|error| format!("Could not publish restore checkpoint: {error}"))?;
+        let _ = fs::remove_file(&temporary);
+        // If this fails, retain the already valid checkpoint for safe recovery.
+        sync_directory(directory)
+    })();
+    let _ = fs::remove_file(&temporary);
+    result
+}
+
 pub fn begin(directory: &Path, values: serde_json::Value, content: &str) -> Result<String, String> {
     validate_values(&values)?;
     if directory.join(JOURNAL).exists() {
@@ -134,10 +155,7 @@ pub fn begin(directory: &Path, values: serde_json::Value, content: &str) -> Resu
     let journal =
         serde_json::json!({ "schemaVersion": 1, "values": values, "safetyPath": safety_path })
             .to_string();
-    // Exclusive creation prevents overwriting an earlier checkpoint. A partial
-    // journal is deliberately retained and fails closed on the next launch.
-    write_new_verified(&directory.join(JOURNAL), &journal)?;
-    sync_directory(directory)?;
+    publish_checkpoint_with(directory, &journal, write_new_verified)?;
     Ok(safety_path)
 }
 
@@ -195,6 +213,57 @@ mod tests {
         complete(&dir).unwrap();
         assert!(read(&dir).unwrap().is_none());
         assert!(Path::new(&safety).exists());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn incomplete_checkpoint_staging_never_publishes_or_blocks_retry() {
+        for partial in ["{ partial", ""] {
+            let dir = directory();
+            fs::create_dir_all(&dir).unwrap();
+            let result = publish_checkpoint_with(&dir, "unused", |path, _| {
+                fs::write(path, partial).unwrap();
+                Err("simulated disk-full, sync, or verification failure".into())
+            });
+            assert!(result.is_err());
+            assert!(!dir.join(JOURNAL).exists());
+            assert!(read(&dir).unwrap().is_none());
+            assert_eq!(fs::read_dir(&dir).unwrap().count(), 0);
+            // Once storage is available, retry succeeds without manual cleanup.
+            begin(&dir, values(), &content()).unwrap();
+            assert_eq!(read(&dir).unwrap(), Some(values()));
+            complete(&dir).unwrap();
+            fs::remove_dir_all(dir).unwrap();
+        }
+    }
+
+    #[test]
+    fn abandoned_temporary_checkpoint_is_not_recovery_input() {
+        let dir = directory();
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(".local-restore-abandoned.tmp"), "{ partial").unwrap();
+        assert!(read(&dir).unwrap().is_none());
+        begin(&dir, values(), &content()).unwrap();
+        assert_eq!(read(&dir).unwrap(), Some(values()));
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn checkpoint_publication_never_overwrites_a_racing_checkpoint() {
+        let dir = directory();
+        fs::create_dir_all(&dir).unwrap();
+        let original = serde_json::json!({ "schemaVersion": 1, "values": values() }).to_string();
+        let replacement = serde_json::json!({ "schemaVersion": 1, "values": {
+            "scratchpad_notes": "replacement", "scratchpad_folders": null, "scratchpad_trash": null } }).to_string();
+        let result = publish_checkpoint_with(&dir, &replacement, |path, content| {
+            write_new_verified(path, content)?;
+            fs::write(dir.join(JOURNAL), &original).unwrap();
+            Ok(())
+        });
+        assert!(result.is_err());
+        assert_eq!(fs::read_to_string(dir.join(JOURNAL)).unwrap(), original);
+        assert_eq!(read(&dir).unwrap(), Some(values()));
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 1);
         fs::remove_dir_all(dir).unwrap();
     }
 

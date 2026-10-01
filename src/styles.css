@@ -2560,6 +2560,16 @@ kbd {
   font-size: 0.85rem;
 }
 .local-recovery-banner p { margin: 0 0 8px; }
+.empty-collection-prompt {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
 .local-recovery-banner p:empty { display: none; }
 .local-recovery-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 #local-recovery-confirmation { margin-top: 12px; }
