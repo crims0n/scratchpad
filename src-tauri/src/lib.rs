@@ -11,6 +11,7 @@ use tauri::{
 };
 
 mod mcp;
+mod recovery;
 mod updates;
 pub use mcp::run_mcp_stdio;
 
@@ -208,9 +209,45 @@ fn ensure_workspace_schema(conn: &rusqlite::Connection) -> Result<(), String> {
 
 #[tauri::command]
 fn save_file_native(content: String, default_name: String) -> Result<String, String> {
+    save_text_file(content, default_name, "Markdown", &["md"])
+}
+
+#[tauri::command]
+fn save_recovery_file_native(content: String, default_name: String) -> Result<String, String> {
+    save_text_file(content, default_name, "Recovery JSON", &["json"])
+}
+
+fn recovery_directory(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map(|directory| directory.join("local-recovery"))
+        .map_err(|error| format!("Could not resolve recovery directory: {error}"))
+}
+
+#[tauri::command]
+fn archive_local_recovery(app: tauri::AppHandle, content: String) -> Result<String, String> {
+    recovery::save_copy(&recovery_directory(&app)?, &content)
+}
+
+#[tauri::command]
+fn has_local_recovery_copies(app: tauri::AppHandle) -> Result<bool, String> {
+    recovery::has_copies(&recovery_directory(&app)?)
+}
+
+#[tauri::command]
+fn read_local_recovery_copies(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    recovery::read_copies(&recovery_directory(&app)?)
+}
+
+fn save_text_file(
+    content: String,
+    default_name: String,
+    filter_name: &str,
+    extensions: &[&str],
+) -> Result<String, String> {
     let file_path = rfd::FileDialog::new()
         .set_file_name(&default_name)
-        .add_filter("Markdown", &["md"])
+        .add_filter(filter_name, extensions)
         .save_file();
 
     if let Some(path) = file_path {
@@ -655,6 +692,10 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             load_workspace_preference,
             set_last_workspace,
             save_file_native,
+            save_recovery_file_native,
+            archive_local_recovery,
+            has_local_recovery_copies,
+            read_local_recovery_copies,
             import_file_native,
             select_db_file,
             load_db_notes,

@@ -94,6 +94,12 @@ Use a note's sidebar delete button or right-click it and choose **Delete Note** 
 
 Right-click the trash icon and choose **Empty Trash…**, then confirm to permanently remove the listed recovery copies. Keyboard users can focus the icon and press `Shift+F10` to open its menu. Trash survives restarts and has no automatic expiry. Only the user can restore notes or empty trash; MCP agents can list its metadata. See [storage and recovery details](docs/mcp.md#deleting-and-recovering-notes) for save-failure behavior.
 
+If saved local notes or folder metadata cannot be read, a **Local data recovery** banner keeps that collection read-only. Startup, autosave, MCP writes, switching collections, and closing the app do not replace the unreadable values. Readable notes can still be viewed and copied, and healthy workspace files remain usable.
+
+Choose **Export preserved data…** to save a recovery JSON bundle containing the current unreadable raw strings, including malformed JSON, and all preserved recovery files. Each preserved file is included as its original JSON string; previous copies are not nested inside new snapshots. This is for manual recovery, not a collection backup or a file the Markdown importer can restore. The bundle can include active and trashed note content; keep it private. **Retry reading** reloads the original local values without changing them.
+
+In the desktop app, **Replace unreadable data…** requires confirmation and first saves and verifies an independent recovery file in the app data directory's `local-recovery` folder, outside the webview's localStorage quota. Only then does it replace unreadable notes or folder metadata with empty values. Readable data and trash are retained. A failed archive write prevents replacement; if a later replacement write fails, the original file remains available. Earlier localStorage recovery copies are preserved in that file before being removed from localStorage. Export for safekeeping before proceeding: deleting the app data directory also deletes these recovery files. The banner keeps all finalized copies available to export after replacement and future launches. Browser-only sessions can export but cannot automatically replace unreadable data. Missing folder metadata may need manual reconstruction; this action does not repair damaged JSON automatically.
+
 ## Keyboard shortcuts
 
 The app displays `Cmd` on macOS and `Ctrl` on Windows or Linux.

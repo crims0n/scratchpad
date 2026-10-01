@@ -2539,6 +2539,21 @@ kbd {
 #actions-btn.has-update::after { content: ""; position: absolute; top: 4px; right: 4px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent-color); }
 [hidden] { display: none !important; }
 
+.local-recovery-banner {
+  flex: 0 0 auto;
+  max-height: 45vh;
+  overflow: auto;
+  padding: 12px 18px;
+  color: var(--text-primary);
+  background: var(--bg-sidebar);
+  border-bottom: 2px solid var(--accent-color);
+  font-size: 0.85rem;
+}
+.local-recovery-banner p { margin: 0 0 8px; }
+.local-recovery-banner p:empty { display: none; }
+.local-recovery-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+#local-recovery-confirmation { margin-top: 12px; }
+
 .about-modal-title {
   display: flex;
   align-items: center;

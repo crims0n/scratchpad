@@ -18,15 +18,22 @@ export const settle = (ms = 50) => new Promise((resolve) => setTimeout(resolve, 
 // app more than once, which is what a two-launch test needs. `globals` installs
 // globals jsdom does not implement -- `CSS.supports`, say, which the app uses to
 // validate imported theme colours.
-export async function bootApp({ storage = {}, handlers = {}, instance = 1, windowApi = {}, globals = {} } = {}) {
+export async function bootApp({ storage = {}, handlers = {}, instance = 1, windowApi = {}, globals = {}, beforeBoot,
+  recoveryCopies = [], storageQuota = 5000000 } = {}) {
   const html = await readFile(new URL("../../src/index.html", import.meta.url), "utf8");
-  const dom = new JSDOM(html, { url: "http://localhost/", pretendToBeVisual: true });
+  const dom = new JSDOM(html, { url: "http://localhost/", pretendToBeVisual: true, storageQuota });
 
   const invocations = [];
   async function invoke(command, args) {
     invocations.push({ command, args });
     const handler = handlers[command];
     if (typeof handler === "function") return handler(args);
+    if (command === "archive_local_recovery") {
+      recoveryCopies.push(args.content);
+      return `/tmp/recovery-${recoveryCopies.length}.json`;
+    }
+    if (command === "has_local_recovery_copies") return recoveryCopies.length > 0;
+    if (command === "read_local_recovery_copies") return [...recoveryCopies];
     if (command === "load_db_folders" || command === "load_db_trash") return [];
     return null;
   }
@@ -62,6 +69,9 @@ export async function bootApp({ storage = {}, handlers = {}, instance = 1, windo
     );
   });
 
+  // Install storage-failure simulations after seeding but before startup reads.
+  await beforeBoot?.(dom.window);
+
   await import(`${new URL("../../src/main.js", import.meta.url).href}?boot=${instance}`);
   await settle();
 
@@ -69,6 +79,7 @@ export async function bootApp({ storage = {}, handlers = {}, instance = 1, windo
     dom,
     emit: (name, payload) => eventListeners.get(name)?.({ payload }),
     invocations,
+    recoveryCopies,
     settle,
     storage: dom.window.localStorage,
     // Everything local storage holds, ready to seed the next launch.

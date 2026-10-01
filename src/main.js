@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import {
-  LOCAL_FOLDERS_KEY,
   LOCAL_NOTES_BACKUP_KEY,
-  LOCAL_NOTES_KEY,
+  createLocalCollectionStorage,
   persistFoldersLocally,
   persistNotesLocally,
-  readStoredFolders,
   readStoredNotes
 } from "./storage.js";
 import { LOCAL_TRASH_KEY, readTrash, trashSummary, restoredNote, persistNotesAndTrashLocally, emptyTrashLocally } from "./trash.js";
@@ -79,6 +77,13 @@ import {
 // ----------------------------------------------------
 
 const { invoke } = window.__TAURI__ ? window.__TAURI__.core : { invoke: () => Promise.resolve() };
+const localCollection = createLocalCollectionStorage(localStorage, window.__TAURI__ ? {
+  saveCopy: content => invoke("archive_local_recovery", { content }),
+  hasCopies: () => invoke("has_local_recovery_copies"),
+  readCopies: () => invoke("read_local_recovery_copies")
+} : null);
+const collectionStorage = localCollection.storage;
+let recoveryArchiveError = "";
 
 // Resolves any CSS colour an imported theme may use to sRGB, by asking the
 // engine. Themes only change on demand, so the probe it uses costs nothing.
@@ -336,7 +341,7 @@ function enqueueWorkspaceOperation(operation) {
 const mcpWriter = createMcpWriter({
   state: () => ({
     permissions: Object.fromEntries(Object.entries(mcpPermissions).map(([tool, allowed]) => [tool, isMcpEnabled && allowed])),
-    switching: isWorkspaceSwitching || isClosePending,
+    switching: isWorkspaceSwitching || isClosePending || isLocalRecoveryBlocked(),
     collectionId: mcpCollectionId, dbPath: activeDbPath, notes, folders, trash, editingFolderId
   }),
   uuid: () => window.crypto.randomUUID(),
@@ -400,11 +405,11 @@ const mcpWriter = createMcpWriter({
       await persistWorkspace(candidate);
     } else {
       const result = ["create_folder", "rename_folder", "delete_folder"].includes(operation) && !trashNeedsSave
-        ? persistFoldersLocally(localStorage, candidate.folders)
-        : persistNotesAndTrashLocally(localStorage, candidate.notes, candidate.trash);
+        ? persistFoldersLocally(collectionStorage, candidate.folders)
+        : persistNotesAndTrashLocally(collectionStorage, candidate.notes, candidate.trash);
       if (!result.ok) throw new Error("Could not save MCP write to local storage");
       if (trashNeedsSave) {
-        const folderResult = persistFoldersLocally(localStorage, candidate.folders);
+        const folderResult = persistFoldersLocally(collectionStorage, candidate.folders);
         if (!folderResult.ok) throw new Error("Could not save folders to local storage");
       }
       trashNeedsSave = false;
@@ -439,7 +444,8 @@ async function persistWorkspace(candidate) {
 }
 
 const trashUi = createTrashUi({
-  state: () => ({ entries: trash, collectionId: mcpCollectionId, error: trashLoadError }),
+  state: () => ({ entries: trash, collectionId: mcpCollectionId,
+    error: isLocalRecoveryBlocked() ? "Local collection needs recovery before trash can be changed" : trashLoadError }),
   restore: (id, collectionId) => enqueueWorkspaceOperation(async () => {
     checkTrashCollection(collectionId);
     const entry = trash.find(entry => entry.id === id);
@@ -463,7 +469,7 @@ const trashUi = createTrashUi({
     const nextTrash = trash.filter(entry => !selected.has(entry.id));
     if (activeDbPath) await persistTrashState(notes, nextTrash);
     else {
-      const result = emptyTrashLocally(localStorage, notes, nextTrash);
+      const result = emptyTrashLocally(collectionStorage, notes, nextTrash);
       if (!result.ok) { setSaveFailedState(); throw result.error; }
       trashNeedsSave = false;
     }
@@ -475,6 +481,7 @@ const trashUi = createTrashUi({
 });
 
 function checkTrashCollection(collectionId) {
+  if (isLocalRecoveryBlocked()) throw new Error("Local collection needs recovery before trash can be changed");
   if (trashLoadError) throw new Error(trashLoadError);
   if (collectionId !== mcpCollectionId || isWorkspaceSwitching || isClosePending) {
     throw new Error("Collection changed or is switching; reopen Trash before continuing");
@@ -485,7 +492,7 @@ async function persistTrashState(nextNotes, nextTrash) {
   try {
     if (activeDbPath) await persistWorkspace({ dbPath: activeDbPath, notes: nextNotes, folders, trash: nextTrash });
     else {
-      const result = persistNotesAndTrashLocally(localStorage, nextNotes, nextTrash);
+      const result = persistNotesAndTrashLocally(collectionStorage, nextNotes, nextTrash);
       if (!result.ok) throw result.error;
     }
     trashNeedsSave = false;
@@ -625,10 +632,9 @@ async function init() {
   }
 
   // 3. Always load the local-only collection first as guaranteed baseline
-  loadNotesFromLocalStorage();
-  loadFoldersFromLocalStorage();
+  loadLocalCollection();
   loadTrashFromLocalStorage();
-  notes = normalizeNoteFolderAssignments(notes, folders);
+  if (!localCollection.blocked()) notes = normalizeNoteFolderAssignments(notes, folders);
   loadCollapsedFolders();
   adoptLegacyStashedNotes();
 
@@ -662,15 +668,17 @@ async function init() {
         // Seed a completely empty workspace with the active local collection.
         // Include the welcome note in the awaited transaction so a failed first
         // write falls back to local mode instead of exposing an unsaved workspace.
-        const seedNotes = notes.length > 0
+        const seedFolders = localCollection.blocked() ? [] : folders;
+        const seedNotes = !localCollection.blocked() && notes.length > 0
           ? notes
           : [createNoteRecord(WELCOME_NOTE_TITLE, WELCOME_NOTE_CONTENT, null)];
         await invoke("save_workspace_db", {
           dbPath: activeDbPath,
           notes: seedNotes,
-          folders
+          folders: seedFolders
         });
         notes = seedNotes;
+        folders = seedFolders;
       }
       trash = dbTrash;
       trashLoadError = null;
@@ -694,16 +702,25 @@ async function init() {
   }
 
   // 5. Create default note if none exist
-  if (notes.length === 0) {
+  if (notes.length === 0 && !isLocalRecoveryBlocked()) {
     createNote(WELCOME_NOTE_TITLE, WELCOME_NOTE_CONTENT);
   } else {
     // Select first note by default
-    activeNoteId = notes[0].id;
+    activeNoteId = notes[0]?.id ?? null;
   }
 
   // 6. Render UI
   renderNoteList();
   loadActiveNote();
+  refreshLocalRecoveryUi();
+  try {
+    await localCollection.refreshArchives();
+    refreshLocalRecoveryUi();
+  } catch (error) {
+    recoveryArchiveError = `Could not check recovery copies: ${error.message || error}`;
+    refreshLocalRecoveryUi();
+    document.getElementById("local-recovery-action-status").textContent = recoveryArchiveError;
+  }
 }
 
 // ----------------------------------------------------
@@ -747,6 +764,7 @@ function createNoteRecord(title, content, folderId) {
 }
 
 function createNote(title = "Untitled Scratchpad", content = "", folderId = undefined) {
+  if (isLocalRecoveryBlocked()) return;
   const activeNote = notes.find((note) => note.id === activeNoteId);
   const destinationFolderId = folderId === undefined
     ? (isNotePinned(activeNote) ? null : validFolderId(activeNote?.folderId, folders))
@@ -759,7 +777,7 @@ function createNote(title = "Untitled Scratchpad", content = "", folderId = unde
   if (collapsedFolderIds.delete(destinationSectionId)) persistCollapsedFolders();
   searchInput.value = "";
   
-  saveNotesToStorage({ syncWorkspace: true });
+  const saved = saveNotesToStorage({ syncWorkspace: true });
   renderNoteList();
   loadActiveNote();
   syncSecondaryNoteUi(true);
@@ -775,10 +793,12 @@ function createNote(title = "Untitled Scratchpad", content = "", folderId = unde
   // arrives with content worth previewing, so both are left as they are.
   if (!content && currentLayoutMode === "preview") setLayoutMode("edit");
   editorTextarea.focus();
+  return saved;
 }
 
 function deleteNote(id, event) {
   if (event) event.stopPropagation();
+  if (isLocalRecoveryBlocked()) return;
   const collectionId = mcpCollectionId;
   return enqueueWorkspaceOperation(async () => {
     checkTrashCollection(collectionId);
@@ -795,7 +815,10 @@ function deleteNote(id, event) {
 
 function loadActiveNote() {
   const activeNote = notes.find(n => n.id === activeNoteId);
-  if (!activeNote) return;
+  if (!activeNote) {
+    clearEmptyCollectionUi();
+    return;
+  }
 
   cancelScheduledNoteComparison();
 
@@ -817,6 +840,25 @@ function loadActiveNote() {
     updateHighlights();
   }
   if (compareStopped) renderSecondaryEditorBackdrop();
+}
+
+function clearEmptyCollectionUi() {
+  clearTimeout(previewDebounceTimer);
+  primaryEditorRenderScheduler.cancel();
+  secondaryEditorRenderScheduler.cancel();
+  cancelScheduledNoteComparison();
+  resetNoteComparison();
+  for (const element of [editorTextarea, noteTitleInput, secondaryEditorTextarea, secondaryNoteTitle]) element.value = "";
+  findMatches = [];
+  activeMatchIndex = -1;
+  if (isFindBarOpen) runFind({ selectActive: false });
+  updateWordCharCount();
+  syncCompareControl();
+  // Find refresh can render an empty-line sentinel; leave no collection view
+  // behind, even when Find or comparison was open in the departed workspace.
+  for (const element of [markdownPreview, secondaryMarkdownPreview, editorBackdrop, secondaryEditorBackdrop,
+    editorLineNumbers, secondaryEditorLineNumbers]) element.replaceChildren();
+  previewHighlightsRendered = false;
 }
 
 function createNoteListItem(note) {
@@ -858,6 +900,7 @@ function createNoteListItem(note) {
         <span>${formattedDate}</span>
       </div>
     `;
+    item.querySelectorAll("button").forEach(button => { button.disabled = isLocalRecoveryBlocked(); });
     
     let isItemDragged = false;
 
@@ -894,6 +937,7 @@ function createNoteListItem(note) {
 
     // Pointer-based drag and drop for rock-solid reordering in desktop webviews
     item.addEventListener("pointerdown", (e) => {
+      if (isLocalRecoveryBlocked()) return;
       if (e.button !== 0 || e.target.closest("button")) return;
       
       const pointerId = e.pointerId;
@@ -1026,6 +1070,7 @@ function createNoteListItem(note) {
 
       function onPointerUp() {
         cleanupPointerDrag();
+        if (isLocalRecoveryBlocked()) return;
 
         if (hasDragged && isOverSplitDropZone) {
           openNoteInSecondaryPane(note.id);
@@ -1134,6 +1179,7 @@ function renderFolderEditor(folder = null) {
 }
 
 function finishFolderEdit(rawName, folderId) {
+  if (isLocalRecoveryBlocked()) return;
   if (!isCreatingFolder && editingFolderId === null) return;
   const name = normalizeFolderName(rawName);
   if (!name) {
@@ -1169,12 +1215,14 @@ function finishFolderEdit(rawName, folderId) {
 }
 
 function startFolderCreation() {
+  if (isLocalRecoveryBlocked()) return;
   editingFolderId = null;
   isCreatingFolder = true;
   renderNoteList(searchInput.value);
 }
 
 function startFolderRename(folderId) {
+  if (isLocalRecoveryBlocked()) return;
   if (!folders.some((folder) => folder.id === folderId)) return;
   isCreatingFolder = false;
   editingFolderId = folderId;
@@ -1183,6 +1231,7 @@ function startFolderRename(folderId) {
 }
 
 function deleteFolder(folderId) {
+  if (isLocalRecoveryBlocked()) return;
   const folder = folders.find((candidate) => candidate.id === folderId);
   if (!folder) return;
   const movedCount = notes.filter((note) => note.folderId === folderId).length;
@@ -1198,6 +1247,7 @@ function deleteFolder(folderId) {
 }
 
 function moveNoteToFolder(noteId, folderId) {
+  if (isLocalRecoveryBlocked()) return;
   const noteIndex = notes.findIndex((note) => note.id === noteId);
   if (noteIndex === -1) return;
   const destinationId = validFolderId(folderId, folders);
@@ -1223,6 +1273,7 @@ function moveNoteToFolder(noteId, folderId) {
 
 function attachFolderDrag(header, folder) {
   header.addEventListener("pointerdown", (event) => {
+    if (isLocalRecoveryBlocked()) return;
     if (event.button !== 0 || event.target.closest("input")) return;
     const pointerId = event.pointerId;
     const startX = event.clientX;
@@ -1278,6 +1329,7 @@ function attachFolderDrag(header, folder) {
 
     function onPointerUp() {
       cleanupPointerDrag();
+      if (isLocalRecoveryBlocked()) return;
       if (!hasDragged || !targetHeader) return;
       const fromIndex = folders.findIndex((candidate) => candidate.id === folder.id);
       const targetIndex = folders.findIndex((candidate) => candidate.id === targetHeader.dataset.sectionId);
@@ -1389,6 +1441,10 @@ function renderNoteList(filter = "") {
 // collection and nothing else, so a workspace session never writes over notes
 // it does not contain.
 function saveNotesToStorage({ noteId = activeNoteId, syncWorkspace = false } = {}) {
+  if (isLocalRecoveryBlocked()) {
+    setRecoveryRequiredState();
+    return Promise.resolve(false);
+  }
   if (syncWorkspace) {
     scheduleMcpSnapshotUpdate();
   } else {
@@ -1418,8 +1474,8 @@ function saveNotesToStorage({ noteId = activeNoteId, syncWorkspace = false } = {
     return workspaceSave;
   }
 
-  const noteResult = persistNotesAndTrashLocally(localStorage, notes, trash);
-  const folderResult = persistFoldersLocally(localStorage, folders);
+  const noteResult = persistNotesAndTrashLocally(collectionStorage, notes, trash);
+  const folderResult = persistFoldersLocally(collectionStorage, folders);
   const localResult = noteResult.ok ? folderResult : noteResult;
 
   if (localResult.ok) {
@@ -1467,16 +1523,19 @@ function clearPendingSaveTimers() {
 
 async function flushPendingSaves() {
   clearPendingSaveTimers();
+  // Recovery mode is read-only: there are no edits to flush. Allow closing and
+  // opening another workspace without attempting to save the failed collection.
+  if (isLocalRecoveryBlocked()) return true;
   return saveNotesToStorage({ syncWorkspace: true });
 }
 
 function persistLocalMirrorBeforePageExit() {
   // A workspace session has nothing to flush here, and writing would replace
   // the local-only collection with the workspace's notes.
-  if (activeDbPath) return;
+  if (activeDbPath || localCollection.blocked()) return;
 
-  const result = persistNotesAndTrashLocally(localStorage, notes, trash);
-  const folderResult = persistFoldersLocally(localStorage, folders);
+  const result = persistNotesAndTrashLocally(collectionStorage, notes, trash);
+  const folderResult = persistFoldersLocally(collectionStorage, folders);
   if (!result.ok || !folderResult.ok) {
     console.error("Failed to flush local workspace data during page exit", result.error || folderResult.error);
   }
@@ -1549,6 +1608,7 @@ async function registerNativeAboutHandler() {
 // UI Logic: Word counts, auto-saves, live previews
 // ----------------------------------------------------
 function handleEditorInput() {
+  if (isLocalRecoveryBlocked()) { loadActiveNote(); return; }
   const activeNote = notes.find(n => n.id === activeNoteId);
   if (!activeNote) return;
 
@@ -1594,6 +1654,7 @@ function handleEditorInput() {
 }
 
 function handleTitleInput() {
+  if (isLocalRecoveryBlocked()) { loadActiveNote(); return; }
   const activeNote = notes.find(n => n.id === activeNoteId);
   if (!activeNote) return;
 
@@ -1620,6 +1681,7 @@ function triggerSavingState() {
 }
 
 function setSavedState() {
+  if (isLocalRecoveryBlocked()) { setRecoveryRequiredState(); return; }
   if (activeDbPath) {
     const fileName = activeDbPath.split(/[/\\]/).pop();
     saveStatus.textContent = `Saved (${fileName})`;
@@ -2195,6 +2257,7 @@ function exportAsMarkdownFile() {
 }
 
 function importFile() {
+  if (isLocalRecoveryBlocked()) return;
   if (window.__TAURI__) {
     invoke("import_file_native")
       .then((file) => {
@@ -2269,12 +2332,24 @@ function dismissNotification(message, sequence = null) {
 // Event Listeners
 // ----------------------------------------------------
 function attachEventListeners() {
+  document.getElementById("local-recovery-export-btn").addEventListener("click", exportLocalRecovery);
+  document.getElementById("local-recovery-retry-btn").addEventListener("click", () => recoverLocalCollection());
+  document.getElementById("local-recovery-replace-btn").addEventListener("click", () => {
+    document.getElementById("local-recovery-confirmation").hidden = false;
+    document.getElementById("local-recovery-cancel-btn").focus();
+  });
+  document.getElementById("local-recovery-cancel-btn").addEventListener("click", () => {
+    document.getElementById("local-recovery-confirmation").hidden = true;
+    document.getElementById("local-recovery-replace-btn").focus();
+  });
+  document.getElementById("local-recovery-confirm-btn").addEventListener("click", () => recoverLocalCollection(true));
+
   // Editor and Title inputs
   editorTextarea.addEventListener("input", handleEditorInput);
-  editorTextarea.addEventListener("keydown", handleEditorTab);
-  editorTextarea.addEventListener("keydown", handleMarkdownAutocomplete);
-  editorTextarea.addEventListener("keydown", handleEditorSmartKeydown);
-  editorTextarea.addEventListener("paste", handleMarkdownPaste);
+  editorTextarea.addEventListener("keydown", event => { if (!editorTextarea.readOnly) handleEditorTab(event); });
+  editorTextarea.addEventListener("keydown", event => { if (!editorTextarea.readOnly) handleMarkdownAutocomplete(event); });
+  editorTextarea.addEventListener("keydown", event => { if (!editorTextarea.readOnly) handleEditorSmartKeydown(event); });
+  editorTextarea.addEventListener("paste", event => { if (!editorTextarea.readOnly) handleMarkdownPaste(event); });
   editorTextarea.addEventListener("select", updateWordCharCount);
   editorTextarea.addEventListener("mouseup", updateWordCharCount);
   editorTextarea.addEventListener("keyup", updateWordCharCount);
@@ -2388,10 +2463,10 @@ function attachEventListeners() {
     loadSecondaryNote();
   });
   secondaryEditorTextarea.addEventListener("input", handleSecondaryEditorInput);
-  secondaryEditorTextarea.addEventListener("keydown", handleEditorTab);
-  secondaryEditorTextarea.addEventListener("keydown", handleMarkdownAutocomplete);
-  secondaryEditorTextarea.addEventListener("keydown", handleEditorSmartKeydown);
-  secondaryEditorTextarea.addEventListener("paste", handleMarkdownPaste);
+  secondaryEditorTextarea.addEventListener("keydown", event => { if (!secondaryEditorTextarea.readOnly) handleEditorTab(event); });
+  secondaryEditorTextarea.addEventListener("keydown", event => { if (!secondaryEditorTextarea.readOnly) handleMarkdownAutocomplete(event); });
+  secondaryEditorTextarea.addEventListener("keydown", event => { if (!secondaryEditorTextarea.readOnly) handleEditorSmartKeydown(event); });
+  secondaryEditorTextarea.addEventListener("paste", event => { if (!secondaryEditorTextarea.readOnly) handleMarkdownPaste(event); });
   secondaryEditorTextarea.addEventListener("select", () => updateWordCharCountForText(secondaryEditorTextarea));
   secondaryEditorTextarea.addEventListener("mouseup", () => updateWordCharCountForText(secondaryEditorTextarea));
   secondaryEditorTextarea.addEventListener("keyup", () => updateWordCharCountForText(secondaryEditorTextarea));
@@ -2554,6 +2629,7 @@ function attachEventListeners() {
     if (folderId) startFolderRename(folderId);
   });
   ctxFolderMoveUpBtn.addEventListener("click", () => {
+    if (isLocalRecoveryBlocked()) return;
     const folderId = contextMenuFolderId;
     hideContextMenu();
     if (!folderId) return;
@@ -2564,6 +2640,7 @@ function attachEventListeners() {
     showNotification("Folder moved up");
   });
   ctxFolderMoveDownBtn.addEventListener("click", () => {
+    if (isLocalRecoveryBlocked()) return;
     const folderId = contextMenuFolderId;
     hideContextMenu();
     if (!folderId) return;
@@ -2823,21 +2900,123 @@ function escapeHTML(str) {
   );
 }
 
-// Database helpers
-function loadNotesFromLocalStorage() {
-  const savedNotes = localStorage.getItem(LOCAL_NOTES_KEY);
-  if (savedNotes) {
-    try {
-      notes = normalizePinnedNoteOrder(JSON.parse(savedNotes));
-    } catch (e) {
-      console.error("Failed to parse saved notes, resetting", e);
-      notes = [];
+// Local recovery is independent of the open workspace: a healthy workspace can
+// still be used while the damaged local collection remains untouched.
+function isLocalRecoveryBlocked() {
+  return !activeDbPath && localCollection.blocked();
+}
+
+function loadLocalCollection() {
+  const saved = localCollection.load();
+  notes = normalizePinnedNoteOrder(saved.notes);
+  folders = normalizeFolders(saved.folders);
+}
+
+function setRecoveryRequiredState() {
+  saveStatus.textContent = "Recovery required";
+  saveStatus.title = "Local collection is read-only; original saved data has not been replaced";
+  saveStatus.classList.add("unsaved");
+}
+
+function refreshLocalRecoveryUi() {
+  const blocked = isLocalRecoveryBlocked();
+  const banner = document.getElementById("local-recovery-banner");
+  const needsRecovery = localCollection.blocked();
+  banner.hidden = !needsRecovery && !localCollection.hasArchive() && !recoveryArchiveError;
+  document.getElementById("local-recovery-message").textContent = needsRecovery
+    ? `Local notes or folders could not be read. The original saved data has not been replaced. ${activeDbPath
+      ? "Your workspace is usable; disconnect to retry or replace local data."
+      : "This collection is read-only. Export the preserved data for manual recovery, or retry reading it."}`
+    : recoveryArchiveError ? "Preserved recovery files could not be checked. Use Export preserved data to retry reading them."
+      : "A recovery copy of previously unreadable local data is preserved. Export it for manual recovery.";
+  document.getElementById("local-recovery-retry-btn").hidden = !blocked;
+  document.getElementById("local-recovery-replace-btn").hidden = !blocked;
+  document.getElementById("local-recovery-replace-btn").disabled = !localCollection.canReplace();
+  document.getElementById("local-recovery-replace-btn").title = localCollection.canReplace() ? "" : "Automatic replacement is available in the desktop app; export for manual recovery";
+  document.getElementById("local-recovery-confirmation").hidden = true;
+  for (const element of [editorTextarea, noteTitleInput, secondaryEditorTextarea, secondaryNoteTitle]) element.readOnly = blocked;
+  for (const element of [newNoteBtn, newFolderBtn, importBtn, replaceOneBtn, replaceAllBtn,
+    ctxInsertBtn, ctxPinBtn, ctxMoveUpBtn, ctxMoveDownBtn, ctxMoveFolderBtn, ctxDeleteNoteBtn,
+    ctxFolderNewNoteBtn, ctxFolderRenameBtn, ctxFolderMoveUpBtn, ctxFolderMoveDownBtn, ctxFolderDeleteBtn]) element.disabled = blocked;
+  refreshTrashUi();
+  if (blocked) setRecoveryRequiredState();
+}
+
+async function exportLocalRecovery() {
+  const button = document.getElementById("local-recovery-export-btn");
+  button.disabled = true;
+  const status = document.getElementById("local-recovery-action-status");
+  status.textContent = "";
+  try {
+    const content = await localCollection.recoveryData();
+    recoveryArchiveError = "";
+    refreshLocalRecoveryUi();
+    const defaultName = "scratchpad-local-recovery.json";
+    if (window.__TAURI__) {
+      await invoke("save_recovery_file_native", { content, defaultName });
+      status.textContent = "Recovery data exported. The local collection has not been changed.";
+    } else {
+      const url = URL.createObjectURL(new Blob([content], { type: "application/json;charset=utf-8" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = defaultName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      status.textContent = "Recovery download requested. The local collection has not been changed.";
     }
+  } catch (error) {
+    status.textContent = String(error) === "Cancelled" ? "Export cancelled; data remains preserved."
+      : `Could not export recovery data: ${error.message || error}`;
+  } finally {
+    button.disabled = false;
   }
 }
 
-function loadFoldersFromLocalStorage() {
-  folders = normalizeFolders(readStoredFolders(localStorage.getItem(LOCAL_FOLDERS_KEY)));
+async function recoverLocalCollection(replace = false) {
+  if (!isLocalRecoveryBlocked() || isWorkspaceSwitching || isClosePending) return;
+  const collectionId = mcpCollectionId;
+  const status = document.getElementById("local-recovery-action-status");
+  try {
+    await enqueueWorkspaceOperation(async () => {
+      if (collectionId !== mcpCollectionId || !isLocalRecoveryBlocked() || isWorkspaceSwitching || isClosePending) {
+        throw new Error("Collection changed; return to local notes before continuing");
+      }
+      if (replace) await localCollection.replaceUnreadable(() => {
+        if (collectionId !== mcpCollectionId || isWorkspaceSwitching || isClosePending || activeDbPath) {
+          throw new Error("Collection changed or is closing; data remains protected");
+        }
+      });
+      loadLocalCollection();
+      if (!localCollection.blocked()) {
+        notes = normalizeNoteFolderAssignments(notes, folders);
+        adoptLegacyStashedNotes();
+      }
+      activeNoteId = notes[0]?.id ?? null;
+      secondaryNoteId = null;
+      editorTextarea.value = "";
+      noteTitleInput.value = "";
+      let initializedSaved = true;
+      if (!notes.length && !localCollection.blocked()) {
+        initializedSaved = await createNote(WELCOME_NOTE_TITLE, WELCOME_NOTE_CONTENT);
+      }
+      renderNoteList(searchInput.value);
+      loadActiveNote();
+      syncSecondaryNoteUi(true);
+      refreshLocalRecoveryUi();
+      if (!localCollection.blocked()) {
+        if (trashLoadError || !initializedSaved) setSaveFailedState();
+        else setSavedState();
+      }
+      scheduleMcpSnapshotUpdate();
+    });
+    status.textContent = localCollection.blocked() ? "Local data is still unreadable and remains protected."
+      : replace ? "Unreadable values replaced. Their original recovery copy remains available to export."
+        : "Local data loaded successfully.";
+  } catch (error) {
+    status.textContent = `Could not recover local data: ${error.message || error}`;
+  }
 }
 
 function loadTrashFromLocalStorage() {
@@ -2875,6 +3054,7 @@ function loadCollapsedFolders() {
 // back in once so nothing is stranded; can be dropped after a release carries
 // the current storage layout.
 function adoptLegacyStashedNotes() {
+  if (localCollection.blocked()) return false;
   let stashed = null;
   try {
     stashed = readStoredNotes(localStorage.getItem(LOCAL_NOTES_BACKUP_KEY));
@@ -2891,7 +3071,7 @@ function adoptLegacyStashedNotes() {
   });
   notes = normalizePinnedNoteOrder([...byId.values()]);
 
-  const merged = persistNotesLocally(localStorage, notes);
+  const merged = persistNotesLocally(collectionStorage, notes);
   if (!merged.ok) {
     console.error("Failed to fold previously set-aside notes back in", merged.error);
     return false;
@@ -2913,17 +3093,15 @@ function updateDbUiState(isConnected) {
     const fileName = activeDbPath.split(/[/\\]/).pop();
     workspaceMenuValue.textContent = fileName;
     workspaceMenuValue.title = activeDbPath;
-    saveStatus.textContent = `Saved (${fileName})`;
-    saveStatus.title = `Workspace: ${activeDbPath}`;
   } else {
     dbConnectBtn.style.display = "block";
     dbDisconnectBtn.style.display = "none";
     workspaceMenuValue.textContent = "Local notes";
     workspaceMenuValue.title = "Notes stored in local webview storage";
     
-    saveStatus.textContent = "Saved";
-    saveStatus.title = "Saved to local webview storage";
   }
+  setSavedState();
+  refreshLocalRecoveryUi();
 }
 
 async function switchMcpCollection(operation) {
@@ -2970,8 +3148,8 @@ async function connectDatabaseImpl() {
   }
   if (!path) return;
 
-  const localNotes = notes.length > 0 ? notes.map((note) => ({ ...note })) : null;
-  const localFolders = folders.map((folder) => ({ ...folder }));
+  const localNotes = !localCollection.blocked() && notes.length > 0 ? notes.map((note) => ({ ...note })) : null;
+  const localFolders = localCollection.blocked() ? [] : folders.map((folder) => ({ ...folder }));
 
   // Load into a local until the switch is known to be safe, so a failure here
   // leaves the active collection untouched.
@@ -3019,6 +3197,9 @@ async function connectDatabaseImpl() {
       showNotification("Could not initialize workspace; using local notes");
       return;
     }
+  } else {
+    notes = [];
+    folders = [];
   }
 
   trash = workspaceTrash;
@@ -3063,15 +3244,16 @@ async function disconnectDatabaseImpl() {
 
   // The local-only collection was never written over while the workspace was
   // connected, so it is simply still there.
-  loadNotesFromLocalStorage();
-  loadFoldersFromLocalStorage();
+  loadLocalCollection();
   loadTrashFromLocalStorage();
-  notes = normalizeNoteFolderAssignments(notes, folders);
+  if (!localCollection.blocked()) notes = normalizeNoteFolderAssignments(notes, folders);
 
-  if (notes.length === 0) {
+  if (notes.length === 0 && !localCollection.blocked()) {
     createNote();
   } else {
-    activeNoteId = notes[0].id;
+    activeNoteId = notes[0]?.id ?? null;
+    editorTextarea.value = "";
+    noteTitleInput.value = "";
     renderNoteList();
     loadActiveNote();
   }
@@ -3277,6 +3459,7 @@ function findPrev() {
 }
 
 function applyFindReplacement(edit) {
+  if (isLocalRecoveryBlocked()) return;
   const previouslyFocused = document.activeElement;
   editorTextarea.focus({ preventScroll: true });
   applyEditorEdit(editorTextarea, edit);
@@ -3723,7 +3906,7 @@ function populateMoveFolderMenu(note) {
     button.setAttribute("role", "menuitem");
     button.dataset.folderId = folder.id;
     button.textContent = folder.name;
-    button.disabled = !isNotePinned(note) && validFolderId(note.folderId, folders) === destinationId;
+    button.disabled = isLocalRecoveryBlocked() || (!isNotePinned(note) && validFolderId(note.folderId, folders) === destinationId);
     ctxMoveFolderMenu.appendChild(button);
   });
 }
@@ -3748,8 +3931,8 @@ function showContextMenu(e, noteId = null, folderId = null) {
     const noteIndex = notes.findIndex(n => n.id === noteId);
     const note = notes[noteIndex];
     ctxPinBtn.querySelector("span").textContent = isNotePinned(note) ? "Unpin from Top" : "Pin to Top";
-    ctxMoveUpBtn.disabled = !canMoveNote(notes, noteIndex, -1);
-    ctxMoveDownBtn.disabled = !canMoveNote(notes, noteIndex, 1);
+    ctxMoveUpBtn.disabled = isLocalRecoveryBlocked() || !canMoveNote(notes, noteIndex, -1);
+    ctxMoveDownBtn.disabled = isLocalRecoveryBlocked() || !canMoveNote(notes, noteIndex, 1);
     populateMoveFolderMenu(note);
     
     ctxCutBtn.style.display = "none";
@@ -3762,8 +3945,8 @@ function showContextMenu(e, noteId = null, folderId = null) {
   } else if (folderId) {
     contextMenuNoteId = null;
     const folderIndex = folders.findIndex((folder) => folder.id === folderId);
-    ctxFolderMoveUpBtn.disabled = folderIndex <= 0;
-    ctxFolderMoveDownBtn.disabled = folderIndex === -1 || folderIndex >= folders.length - 1;
+    ctxFolderMoveUpBtn.disabled = isLocalRecoveryBlocked() || folderIndex <= 0;
+    ctxFolderMoveDownBtn.disabled = isLocalRecoveryBlocked() || folderIndex === -1 || folderIndex >= folders.length - 1;
 
     ctxOpenSideBtn.style.display = "none";
     ctxSidebarDivider.style.display = "none";
@@ -3813,8 +3996,9 @@ function showContextMenu(e, noteId = null, folderId = null) {
       hasSelection = Boolean(window.getSelection().toString());
     }
     
-    ctxCutBtn.disabled = !hasSelection;
+    ctxCutBtn.disabled = target.readOnly || !hasSelection;
     ctxCopyBtn.disabled = !hasSelection;
+    ctxPasteBtn.disabled = Boolean(target.readOnly);
   }
   
   const menuWidth = 180;
@@ -3849,6 +4033,7 @@ function hideContextMenu() {
 }
 
 function handleContextInsert(templateName) {
+  if (isLocalRecoveryBlocked()) return;
   const target = contextMenuTarget;
   if (target !== editorTextarea && target !== secondaryEditorTextarea) return;
 
@@ -3867,6 +4052,7 @@ function handleContextInsert(templateName) {
 
 async function handleContextCut() {
   if (!contextMenuTarget) return;
+  if (contextMenuTarget.readOnly) return;
   hideContextMenu();
   
   if (contextMenuTarget.tagName === "TEXTAREA" || contextMenuTarget.tagName === "INPUT") {
@@ -3875,6 +4061,7 @@ async function handleContextCut() {
     const text = contextMenuTarget.value.substring(start, end);
     if (text) {
       await navigator.clipboard.writeText(text);
+      if (contextMenuTarget.readOnly) return;
       contextMenuTarget.value = contextMenuTarget.value.substring(0, start) + contextMenuTarget.value.substring(end);
       contextMenuTarget.selectionStart = contextMenuTarget.selectionEnd = start;
       contextMenuTarget.dispatchEvent(new Event("input"));
@@ -3900,10 +4087,12 @@ async function handleContextCopy() {
 
 async function handleContextPaste() {
   if (!contextMenuTarget) return;
+  if (contextMenuTarget.readOnly) return;
   hideContextMenu();
   
   try {
     const text = await navigator.clipboard.readText();
+    if (contextMenuTarget.readOnly) return;
     if (text && (contextMenuTarget.tagName === "TEXTAREA" || contextMenuTarget.tagName === "INPUT")) {
       const start = contextMenuTarget.selectionStart;
       const end = contextMenuTarget.selectionEnd;
@@ -4199,6 +4388,7 @@ function loadSecondaryNote() {
 }
 
 function handleSecondaryEditorInput() {
+  if (isLocalRecoveryBlocked()) { loadSecondaryNote(); return; }
   const note = notes.find(n => n.id === secondaryNoteId);
   if (!note) return;
 
@@ -4238,6 +4428,7 @@ function handleSecondaryEditorInput() {
 }
 
 function handleSecondaryTitleInput() {
+  if (isLocalRecoveryBlocked()) { loadSecondaryNote(); return; }
   const note = notes.find(n => n.id === secondaryNoteId);
   if (!note) return;
 
@@ -4311,6 +4502,7 @@ function updateCursorPositionForText(el) {
 }
 
 function moveNoteUp(noteId) {
+  if (isLocalRecoveryBlocked()) return;
   const targetId = noteId || activeNoteId;
   const index = notes.findIndex(n => n.id === targetId);
   if (getNoteMoveTargetIndex(notes, index, -1) === -1) return;
@@ -4323,6 +4515,7 @@ function moveNoteUp(noteId) {
 }
 
 function moveNoteDown(noteId) {
+  if (isLocalRecoveryBlocked()) return;
   const targetId = noteId || activeNoteId;
   const index = notes.findIndex(n => n.id === targetId);
   if (getNoteMoveTargetIndex(notes, index, 1) === -1) return;
@@ -4335,6 +4528,7 @@ function moveNoteDown(noteId) {
 }
 
 function toggleNotePinned(noteId) {
+  if (isLocalRecoveryBlocked()) return;
   const note = notes.find(candidate => candidate.id === noteId);
   if (!note) return;
 
