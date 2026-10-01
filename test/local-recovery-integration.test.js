@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import assert from "node:assert/strict";
 import test from "node:test";
+import { marked } from "marked";
 import { bootApp } from "./helpers/app-harness.js";
 
 const note = { id: "valuable", title: "Kept note", content: "valuable body", updatedAt: 1, isTitleLocked: true, folderId: "work" };
@@ -107,7 +108,7 @@ test("export handles success, cancellation, and failure without replacing source
     result = outcome;
     app.click("local-recovery-export-btn");
     await app.settle();
-    assert.equal(exported.values.scratchpad_notes, original);
+    assert.equal(exported.current.values.scratchpad_notes, original);
     assert.equal(app.storage.getItem("scratchpad_notes"), original);
     assert.match(status(), outcome === "success" ? /exported/ : outcome === "Cancelled" ? /cancelled/ : /Could not export/);
   }
@@ -121,17 +122,24 @@ test("explicit replacement keeps trash, archives raw data across launches, and r
   app.click("local-recovery-confirm-btn");
   await app.settle(100);
   assert.deepEqual(app.sidebarTitles(), ["Welcome to Scratchpad!"]);
-  assert.equal(JSON.parse(app.storage.getItem("scratchpad_local_recovery")).values.scratchpad_notes, raw);
+  assert.equal(JSON.parse(app.recoveryCopies[0]).values.scratchpad_notes, raw);
+  assert.equal(app.storage.getItem("scratchpad_local_recovery"), null);
   assert.deepEqual(app.read("scratchpad_folders"), folders);
   assert.deepEqual(app.read("scratchpad_trash"), [deleted]);
   assert.equal(app.dom.window.document.getElementById("editor-textarea").readOnly, false);
   await app.type("New collection text");
   const saved = app.dumpStorage();
   dispose(app);
-  const next = await boot({ storage: saved });
+  const next = await boot({ storage: saved, recoveryCopies: app.recoveryCopies });
   assert.equal(next.read("scratchpad_notes")[0].content, "New collection text");
-  assert.equal(JSON.parse(next.storage.getItem("scratchpad_local_recovery")).values.scratchpad_notes, raw);
+  assert.equal(JSON.parse(next.recoveryCopies[0]).values.scratchpad_notes, raw);
+  assert.equal(next.dom.window.document.getElementById("local-recovery-banner").hidden, false);
   assert.equal(next.dom.window.document.getElementById("local-recovery-export-btn").hidden, false);
+  next.click("local-recovery-export-btn");
+  await next.settle();
+  const exported = JSON.parse(next.invocations.findLast(i => i.command === "save_recovery_file_native").args.content);
+  assert.equal(exported.current, null);
+  assert.equal(JSON.parse(exported.preservedCopies[0]).values.scratchpad_notes, raw);
   dispose(next);
 });
 
@@ -177,8 +185,10 @@ test("storage read errors surface recovery and can be retried without replacemen
 
 test("replacement write failures show errors and retain the original across relaunch", async () => {
   const raw = "{ notes with valuable text";
-  for (const failKey of ["scratchpad_local_recovery", "scratchpad_notes"]) {
-    const app = await boot({ storage: { scratchpad_notes: raw }, beforeBoot: window => {
+  for (const failKey of ["archive", "scratchpad_notes"]) {
+    const app = await boot({ storage: { scratchpad_notes: raw },
+      handlers: failKey === "archive" ? { archive_local_recovery: () => { throw new Error("Storage full"); } } : {},
+      beforeBoot: window => {
       const write = window.Storage.prototype.setItem;
       window.Storage.prototype.setItem = function(key, value) {
         if (key === failKey) throw new Error("Storage full");
@@ -193,7 +203,7 @@ test("replacement write failures show errors and retain the original across rela
     assert.equal(app.storage.getItem("scratchpad_notes"), raw);
     const saved = app.dumpStorage();
     dispose(app);
-    const next = await boot({ storage: saved });
+    const next = await boot({ storage: saved, recoveryCopies: app.recoveryCopies });
     assert.equal(next.storage.getItem("scratchpad_notes"), raw);
     assert.deepEqual(next.sidebarTitles(), []);
     dispose(next);
@@ -233,6 +243,132 @@ test("a failed welcome-note save after replacement is not reported as saved", as
   await app.settle();
   assert.equal(app.dom.window.document.getElementById("save-status").textContent, "Save failed");
   assert.equal(app.storage.getItem("scratchpad_notes"), "[]");
-  assert.equal(JSON.parse(app.storage.getItem("scratchpad_local_recovery")).values.scratchpad_notes, raw);
+  assert.equal(JSON.parse(app.recoveryCopies[0]).values.scratchpad_notes, raw);
+  dispose(app);
+});
+
+test("connecting a populated workspace clears the quarantine unsaved class without a save", async () => {
+  const app = await boot({ storage: { scratchpad_notes: "{ local notes" }, handlers: {
+    select_db_file: () => "/tmp/status-recovery.db", load_db_notes: () => [note]
+  } });
+  const status = app.dom.window.document.getElementById("save-status");
+  assert.equal(status.classList.contains("unsaved"), true);
+  app.click("db-connect-btn");
+  await app.settle(2200); // Allow the connection notification to restore the Saved label.
+  assert.equal(status.textContent, "Saved (status-recovery.db)");
+  assert.equal(status.classList.contains("unsaved"), false);
+  assert.equal(app.invocations.some(i => i.command === "save_note_db" || i.command === "save_workspace_db"), false);
+  dispose(app);
+});
+
+test("disconnecting to quarantined empty notes clears previews, backdrops, and counts", async () => {
+  for (const layout of ["preview", "split"]) {
+    const app = await boot({ globals: { marked }, storage: {
+      scratchpad_notes: "{ local notes", scratchpad_layout_mode: layout
+    }, handlers: { load_workspace_preference: () => "/tmp/preview-recovery.db",
+      load_db_notes: () => [{ ...note, content: "# Workspace heading\n\nWorkspace body" },
+        { ...note, id: "second", content: "# Other workspace heading\n\nOther body" }] } });
+    const document = app.dom.window.document;
+    assert.match(document.getElementById("markdown-preview").textContent, /Workspace heading/);
+    app.click("split-note-btn");
+    app.click("compare-notes-btn");
+    assert.match(document.getElementById("secondary-markdown-preview").textContent, /Other workspace heading/);
+    document.dispatchEvent(new app.dom.window.KeyboardEvent("keydown", { key: "f", ctrlKey: true, bubbles: true }));
+    document.getElementById("find-input").value = "Workspace";
+    document.getElementById("find-input").dispatchEvent(new app.dom.window.Event("input", { bubbles: true }));
+    app.click("db-disconnect-btn");
+    await app.settle(100);
+    const assertEmpty = () => {
+      assert.deepEqual(app.sidebarTitles(), []);
+      for (const id of ["markdown-preview", "editor-backdrop", "secondary-markdown-preview", "secondary-editor-backdrop"]) {
+        assert.equal(document.getElementById(id).textContent, "", id);
+      }
+      for (const id of ["editor-textarea", "secondary-editor-textarea", "note-title", "secondary-note-title"]) {
+        assert.equal(document.getElementById(id).value, "", id);
+      }
+      assert.equal(document.getElementById("word-char-count").textContent, "0 words • 0 characters");
+      assert.equal(document.getElementById("find-count").textContent, "0 of 0");
+      assert.equal(document.getElementById("compare-notes-btn").getAttribute("aria-pressed"), "false");
+    };
+    assertEmpty();
+    app.click("local-recovery-retry-btn");
+    await app.settle(100);
+    assertEmpty();
+    dispose(app);
+  }
+});
+
+test("switching or closing while archiving cannot reset the quarantined source", async () => {
+  for (const action of ["connect", "close"]) {
+    let release;
+    let started;
+    let closeHandler;
+    let destroyed = false;
+    const pending = new Promise(resolve => { release = resolve; });
+    const archiving = new Promise(resolve => { started = resolve; });
+    const copies = [];
+    const raw = "{ original local notes";
+    const app = await boot({ storage: { scratchpad_notes: raw }, recoveryCopies: copies,
+      windowApi: { getCurrentWindow: () => ({ onCloseRequested: async handler => { closeHandler = handler; },
+        destroy: async () => { destroyed = true; } }) },
+      handlers: { archive_local_recovery: async ({ content }) => {
+        started();
+        await pending;
+        copies.push(content);
+        return "/tmp/recovery.json";
+      }, select_db_file: () => "/tmp/racing-recovery.db", load_db_notes: () => [note] }
+    });
+    app.click("local-recovery-replace-btn");
+    app.click("local-recovery-confirm-btn");
+    await archiving;
+    let closing;
+    if (action === "connect") app.click("db-connect-btn");
+    else closing = closeHandler({ preventDefault() {} });
+    release();
+    await closing;
+    await app.settle(100);
+    assert.equal(app.storage.getItem("scratchpad_notes"), raw);
+    assert.equal(JSON.parse(copies[0]).values.scratchpad_notes, raw);
+    assert.match(app.dom.window.document.getElementById("local-recovery-action-status").textContent, /changed or is closing/);
+    if (action === "connect") assert.deepEqual(app.sidebarTitles(), ["Kept note"]);
+    else assert.equal(destroyed, true);
+    dispose(app);
+  }
+});
+
+test("large quarantined sources recover through native archives and export after relaunch", async () => {
+  const raw = '{"content":"' + '"'.repeat(2200000);
+  const app = await boot({ storage: { scratchpad_notes: raw } });
+  app.click("local-recovery-replace-btn");
+  app.click("local-recovery-confirm-btn");
+  await app.settle(100);
+  assert.equal(app.dom.window.document.getElementById("editor-textarea").readOnly, false);
+  assert.deepEqual(app.sidebarTitles(), ["Welcome to Scratchpad!"]);
+  assert.equal(JSON.parse(app.recoveryCopies[0]).values.scratchpad_notes, raw);
+  const saved = app.dumpStorage();
+  dispose(app);
+  const next = await boot({ storage: saved, recoveryCopies: app.recoveryCopies });
+  next.click("local-recovery-export-btn");
+  await next.settle();
+  const exported = JSON.parse(next.invocations.findLast(i => i.command === "save_recovery_file_native").args.content);
+  assert.equal(JSON.parse(exported.preservedCopies[0]).values.scratchpad_notes, raw);
+  dispose(next);
+});
+
+test("archive discovery failure is visible and export can retry reading preserved files", async () => {
+  const copy = JSON.stringify({ schemaVersion: 1, kind: "scratchpad-local-recovery",
+    values: { scratchpad_notes: "{ original" } });
+  const app = await boot({ storage: { scratchpad_notes: [note] }, recoveryCopies: [copy], handlers: {
+    has_local_recovery_copies: () => { throw new Error("Temporarily unavailable"); }
+  } });
+  const document = app.dom.window.document;
+  assert.equal(document.getElementById("local-recovery-banner").hidden, false);
+  assert.match(document.getElementById("local-recovery-action-status").textContent, /Could not check/);
+  assert.equal(document.getElementById("editor-textarea").readOnly, false);
+  app.click("local-recovery-export-btn");
+  await app.settle();
+  assert.match(document.getElementById("local-recovery-action-status").textContent, /exported/);
+  assert.equal(document.getElementById("local-recovery-banner").hidden, false);
+  assert.match(document.getElementById("local-recovery-message").textContent, /copy.*preserved/);
   dispose(app);
 });

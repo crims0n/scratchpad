@@ -77,8 +77,13 @@ import {
 // ----------------------------------------------------
 
 const { invoke } = window.__TAURI__ ? window.__TAURI__.core : { invoke: () => Promise.resolve() };
-const localCollection = createLocalCollectionStorage(localStorage);
+const localCollection = createLocalCollectionStorage(localStorage, window.__TAURI__ ? {
+  saveCopy: content => invoke("archive_local_recovery", { content }),
+  hasCopies: () => invoke("has_local_recovery_copies"),
+  readCopies: () => invoke("read_local_recovery_copies")
+} : null);
 const collectionStorage = localCollection.storage;
+let recoveryArchiveError = "";
 
 // Resolves any CSS colour an imported theme may use to sRGB, by asking the
 // engine. Themes only change on demand, so the probe it uses costs nothing.
@@ -708,6 +713,14 @@ async function init() {
   renderNoteList();
   loadActiveNote();
   refreshLocalRecoveryUi();
+  try {
+    await localCollection.refreshArchives();
+    refreshLocalRecoveryUi();
+  } catch (error) {
+    recoveryArchiveError = `Could not check recovery copies: ${error.message || error}`;
+    refreshLocalRecoveryUi();
+    document.getElementById("local-recovery-action-status").textContent = recoveryArchiveError;
+  }
 }
 
 // ----------------------------------------------------
@@ -802,7 +815,10 @@ function deleteNote(id, event) {
 
 function loadActiveNote() {
   const activeNote = notes.find(n => n.id === activeNoteId);
-  if (!activeNote) return;
+  if (!activeNote) {
+    clearEmptyCollectionUi();
+    return;
+  }
 
   cancelScheduledNoteComparison();
 
@@ -824,6 +840,25 @@ function loadActiveNote() {
     updateHighlights();
   }
   if (compareStopped) renderSecondaryEditorBackdrop();
+}
+
+function clearEmptyCollectionUi() {
+  clearTimeout(previewDebounceTimer);
+  primaryEditorRenderScheduler.cancel();
+  secondaryEditorRenderScheduler.cancel();
+  cancelScheduledNoteComparison();
+  resetNoteComparison();
+  for (const element of [editorTextarea, noteTitleInput, secondaryEditorTextarea, secondaryNoteTitle]) element.value = "";
+  findMatches = [];
+  activeMatchIndex = -1;
+  if (isFindBarOpen) runFind({ selectActive: false });
+  updateWordCharCount();
+  syncCompareControl();
+  // Find refresh can render an empty-line sentinel; leave no collection view
+  // behind, even when Find or comparison was open in the departed workspace.
+  for (const element of [markdownPreview, secondaryMarkdownPreview, editorBackdrop, secondaryEditorBackdrop,
+    editorLineNumbers, secondaryEditorLineNumbers]) element.replaceChildren();
+  previewHighlightsRendered = false;
 }
 
 function createNoteListItem(note) {
@@ -2887,14 +2922,17 @@ function refreshLocalRecoveryUi() {
   const blocked = isLocalRecoveryBlocked();
   const banner = document.getElementById("local-recovery-banner");
   const needsRecovery = localCollection.blocked();
-  banner.hidden = !needsRecovery && !localCollection.hasArchive();
+  banner.hidden = !needsRecovery && !localCollection.hasArchive() && !recoveryArchiveError;
   document.getElementById("local-recovery-message").textContent = needsRecovery
     ? `Local notes or folders could not be read. The original saved data has not been replaced. ${activeDbPath
       ? "Your workspace is usable; disconnect to retry or replace local data."
       : "This collection is read-only. Export the preserved data for manual recovery, or retry reading it."}`
-    : "A recovery copy of previously unreadable local data is preserved. Export it for manual recovery.";
+    : recoveryArchiveError ? "Preserved recovery files could not be checked. Use Export preserved data to retry reading them."
+      : "A recovery copy of previously unreadable local data is preserved. Export it for manual recovery.";
   document.getElementById("local-recovery-retry-btn").hidden = !blocked;
   document.getElementById("local-recovery-replace-btn").hidden = !blocked;
+  document.getElementById("local-recovery-replace-btn").disabled = !localCollection.canReplace();
+  document.getElementById("local-recovery-replace-btn").title = localCollection.canReplace() ? "" : "Automatic replacement is available in the desktop app; export for manual recovery";
   document.getElementById("local-recovery-confirmation").hidden = true;
   for (const element of [editorTextarea, noteTitleInput, secondaryEditorTextarea, secondaryNoteTitle]) element.readOnly = blocked;
   for (const element of [newNoteBtn, newFolderBtn, importBtn, replaceOneBtn, replaceAllBtn,
@@ -2910,7 +2948,9 @@ async function exportLocalRecovery() {
   const status = document.getElementById("local-recovery-action-status");
   status.textContent = "";
   try {
-    const content = localCollection.recoveryData();
+    const content = await localCollection.recoveryData();
+    recoveryArchiveError = "";
+    refreshLocalRecoveryUi();
     const defaultName = "scratchpad-local-recovery.json";
     if (window.__TAURI__) {
       await invoke("save_recovery_file_native", { content, defaultName });
@@ -2943,7 +2983,11 @@ async function recoverLocalCollection(replace = false) {
       if (collectionId !== mcpCollectionId || !isLocalRecoveryBlocked() || isWorkspaceSwitching || isClosePending) {
         throw new Error("Collection changed; return to local notes before continuing");
       }
-      if (replace) localCollection.replaceUnreadable();
+      if (replace) await localCollection.replaceUnreadable(() => {
+        if (collectionId !== mcpCollectionId || isWorkspaceSwitching || isClosePending || activeDbPath) {
+          throw new Error("Collection changed or is closing; data remains protected");
+        }
+      });
       loadLocalCollection();
       if (!localCollection.blocked()) {
         notes = normalizeNoteFolderAssignments(notes, folders);
@@ -3049,17 +3093,14 @@ function updateDbUiState(isConnected) {
     const fileName = activeDbPath.split(/[/\\]/).pop();
     workspaceMenuValue.textContent = fileName;
     workspaceMenuValue.title = activeDbPath;
-    saveStatus.textContent = `Saved (${fileName})`;
-    saveStatus.title = `Workspace: ${activeDbPath}`;
   } else {
     dbConnectBtn.style.display = "block";
     dbDisconnectBtn.style.display = "none";
     workspaceMenuValue.textContent = "Local notes";
     workspaceMenuValue.title = "Notes stored in local webview storage";
     
-    saveStatus.textContent = "Saved";
-    saveStatus.title = "Saved to local webview storage";
   }
+  setSavedState();
   refreshLocalRecoveryUi();
 }
 
