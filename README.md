@@ -71,7 +71,19 @@ emptying trash are available only in the UI. Existing-item edits require revisio
 checks and support safe retries. A connected agent
 may send returned note contents to its model provider.
 
-Back up important workspace files like any other local document. Local-only notes remain tied to the app data stored by the operating system and may be lost if that data is cleared.
+### Collection backup and restore
+
+In the desktop app, choose **Back Up Collection…** from the menu to save the currently open local-only or workspace collection. Pending edits are saved first; a failed save or backup is reported without claiming success. The JSON file is staged, synced, and verified before replacing any existing backup file.
+
+Choose **Restore Collection…**, select a backup, and review the destination and counts before confirming **Replace collection**. Restore replaces all active notes, folders, and trash in the current collection; it does not merge or affect other collections. Invalid, truncated, and unsupported backups are rejected before replacement. Editing, collection switching, MCP writes, and app closing are blocked while the dialog is open. Close any other Scratchpad instances using the same collection before backing up or restoring; the dialog does not lock other processes.
+
+The version 1 format uses `kind: "scratchpad-collection-backup"`, `schemaVersion: 1`, an ISO `createdAt`, and a `collection` containing ordered `notes`, ordered `folders`, and `trash`. It preserves IDs, titles, bodies, timestamps, title locks, pins, folder assignments, empty folders, and deleted-note metadata. Preferences, themes, collapsed sections, workspace paths, MCP tokens/permissions, and earlier recovery archives are **not** included. A backup can be restored into either a local-only or workspace collection, including an empty or trash-only collection. Restoring a workspace keeps the same workspace file and connection.
+
+Empty collections remain empty after reopening. With no note selected, the title and editor are read-only and a prompt explains how to create or select a note; creating/selecting one enables editing. No placeholder note is inserted automatically.
+
+Before replacement, Scratchpad saves and verifies an independent, restorable safety backup in the app data directory's `collection-backups` folder and shows its path. Keep that file until you have checked your restored data; you can restore it through the same action to undo a replacement. Workspace replacement uses one SQLite transaction. Local replacement uses a durable native checkpoint: a failed or interrupted write rolls back to the prior local values, including on the next launch. If recovery cannot complete, local data remains read-only; **Retry reading** retries checkpoint recovery. Do not delete app data while recovery is pending. The safety copies are retained and have no automatic expiry.
+
+Backups and safety copies are unencrypted and contain active **and trashed** note content; store them privately and copy important backups somewhere outside the app data directory. Clearing app data also deletes local notes and automatic safety copies. Collection backups are distinct from Markdown exports (one note) and preserved-data recovery exports (raw damaged data for manual recovery).
 
 ## Agent access (MCP)
 

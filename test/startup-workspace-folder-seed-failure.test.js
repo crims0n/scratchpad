@@ -36,11 +36,11 @@ test("a failed folders-only startup seed falls back to local mode", () => {
   assert.equal(document.getElementById("db-disconnect-btn").style.display, "none");
 });
 
-test("the fallback keeps local folders and persists its welcome note locally", () => {
+test("the fallback keeps the existing empty local collection and its folders", () => {
   assert.deepEqual(app.read("scratchpad_folders"), LOCAL_FOLDERS);
   assert.deepEqual(
     app.read("scratchpad_notes").map(({ title }) => title),
-    ["Welcome to Scratchpad!"]
+    []
   );
   assert.deepEqual(
     [...document.querySelectorAll(".note-folder-name")].map((element) => element.textContent),

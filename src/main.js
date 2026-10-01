@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import {
+  LOCAL_NOTES_KEY,
   LOCAL_NOTES_BACKUP_KEY,
   createLocalCollectionStorage,
   persistFoldersLocally,
@@ -9,6 +10,7 @@ import {
 } from "./storage.js";
 import { LOCAL_TRASH_KEY, readTrash, trashSummary, restoredNote, persistNotesAndTrashLocally, emptyTrashLocally } from "./trash.js";
 import { createTrashUi } from "./trash-ui.js";
+import { parseBackup, serializeBackup, replaceLocalCollection, recoverLocalRestore } from "./collection-backup.js";
 import { createUpdateUi } from "./updates.js";
 import { createMcpWriter, createNoteRevisionTracker, createFolderRevisionTracker } from "./mcp-writes.js";
 import { renderMarkdown, resolveLinkAction, sanitizeMarkdownHtml } from "./markdown.js";
@@ -84,6 +86,12 @@ const localCollection = createLocalCollectionStorage(localStorage, window.__TAUR
 } : null);
 const collectionStorage = localCollection.storage;
 let recoveryArchiveError = "";
+let localRestoreError = "";
+const restoreJournal = {
+  begin: (values, content) => invoke("begin_local_restore", { values, content }),
+  read: () => invoke("read_local_restore"),
+  complete: () => invoke("complete_local_restore")
+};
 
 // Resolves any CSS colour an imported theme may use to sRGB, by asking the
 // engine. Themes only change on demand, so the probe it uses costs nothing.
@@ -331,6 +339,7 @@ let mcpWriteListener = null;
 let mcpCollectionId = window.crypto.randomUUID();
 let isWorkspaceSwitching = false;
 let isClosePending = false;
+let isCollectionBackupBusy = false;
 
 function enqueueWorkspaceOperation(operation) {
   const result = dbSaveQueue.then(operation);
@@ -341,7 +350,7 @@ function enqueueWorkspaceOperation(operation) {
 const mcpWriter = createMcpWriter({
   state: () => ({
     permissions: Object.fromEntries(Object.entries(mcpPermissions).map(([tool, allowed]) => [tool, isMcpEnabled && allowed])),
-    switching: isWorkspaceSwitching || isClosePending || isLocalRecoveryBlocked(),
+    switching: isWorkspaceSwitching || isClosePending || isCollectionBackupBusy || isLocalRecoveryBlocked(),
     collectionId: mcpCollectionId, dbPath: activeDbPath, notes, folders, trash, editingFolderId
   }),
   uuid: () => window.crypto.randomUUID(),
@@ -483,7 +492,7 @@ const trashUi = createTrashUi({
 function checkTrashCollection(collectionId) {
   if (isLocalRecoveryBlocked()) throw new Error("Local collection needs recovery before trash can be changed");
   if (trashLoadError) throw new Error(trashLoadError);
-  if (collectionId !== mcpCollectionId || isWorkspaceSwitching || isClosePending) {
+  if (collectionId !== mcpCollectionId || isWorkspaceSwitching || isClosePending || isCollectionBackupBusy) {
     throw new Error("Collection changed or is switching; reopen Trash before continuing");
   }
 }
@@ -632,6 +641,7 @@ async function init() {
   }
 
   // 3. Always load the local-only collection first as guaranteed baseline
+  await recoverInterruptedCollectionRestore();
   loadLocalCollection();
   loadTrashFromLocalStorage();
   if (!localCollection.blocked()) notes = normalizeNoteFolderAssignments(notes, folders);
@@ -661,7 +671,7 @@ async function init() {
       if (dbNotes.length > 0) {
         folders = dbFolders;
         notes = normalizePinnedNoteOrder(normalizeNoteFolderAssignments(dbNotes, folders));
-      } else if (dbFolders.length > 0 || dbTrash.length > 0) {
+      } else if (dbFolders.length > 0 || dbTrash.length > 0 || await invoke("workspace_collection_initialized", { dbPath: activeDbPath })) {
         notes = [];
         folders = dbFolders;
       } else {
@@ -702,7 +712,7 @@ async function init() {
   }
 
   // 5. Create default note if none exist
-  if (notes.length === 0 && !isLocalRecoveryBlocked()) {
+  if (notes.length === 0 && !activeDbPath && localStorage.getItem(LOCAL_NOTES_KEY) === null && !isLocalRecoveryBlocked()) {
     createNote(WELCOME_NOTE_TITLE, WELCOME_NOTE_CONTENT);
   } else {
     // Select first note by default
@@ -814,6 +824,7 @@ function deleteNote(id, event) {
 }
 
 function loadActiveNote() {
+  refreshEditorAvailability();
   const activeNote = notes.find(n => n.id === activeNoteId);
   if (!activeNote) {
     clearEmptyCollectionUi();
@@ -1532,7 +1543,7 @@ async function flushPendingSaves() {
 function persistLocalMirrorBeforePageExit() {
   // A workspace session has nothing to flush here, and writing would replace
   // the local-only collection with the workspace's notes.
-  if (activeDbPath || localCollection.blocked()) return;
+  if (activeDbPath || localCollection.blocked() || isCollectionBackupBusy) return;
 
   const result = persistNotesAndTrashLocally(collectionStorage, notes, trash);
   const folderResult = persistFoldersLocally(collectionStorage, folders);
@@ -1551,6 +1562,10 @@ async function registerCloseHandler() {
       if (isClosing) return;
 
       event.preventDefault();
+      if (isCollectionBackupBusy || isWorkspaceSwitching) {
+        showNotification("Finish or cancel the collection operation before closing");
+        return;
+      }
       if (isClosePending) return;
       isClosePending = true;
       await dbSaveQueue;
@@ -1610,7 +1625,7 @@ async function registerNativeAboutHandler() {
 function handleEditorInput() {
   if (isLocalRecoveryBlocked()) { loadActiveNote(); return; }
   const activeNote = notes.find(n => n.id === activeNoteId);
-  if (!activeNote) return;
+  if (!activeNote) { loadActiveNote(); return; }
 
   activeNote.content = editorTextarea.value;
   activeNote.updatedAt = Date.now();
@@ -1656,7 +1671,7 @@ function handleEditorInput() {
 function handleTitleInput() {
   if (isLocalRecoveryBlocked()) { loadActiveNote(); return; }
   const activeNote = notes.find(n => n.id === activeNoteId);
-  if (!activeNote) return;
+  if (!activeNote) { loadActiveNote(); return; }
 
   activeNote.title = noteTitleInput.value.trim() || "Untitled Scratchpad";
   activeNote.isTitleLocked = true; // User edited manually, lock auto-renaming
@@ -2218,6 +2233,172 @@ function copyHtmlToClipboard() {
   });
 }
 
+async function recoverInterruptedCollectionRestore() {
+  if (!window.__TAURI__) return;
+  try {
+    const recovered = await recoverLocalRestore(localStorage, restoreJournal);
+    localRestoreError = "";
+    localCollection.setRestoreBlocked(false);
+    if (recovered) showNotification("Interrupted restore rolled back; your previous local collection was recovered");
+  } catch (error) {
+    localRestoreError = String(error.message || error);
+    localCollection.setRestoreBlocked(true);
+  }
+}
+
+function backupChoice(message, confirmLabel = null) {
+  const status = document.getElementById("collection-backup-status");
+  const cancel = document.getElementById("collection-restore-cancel");
+  const confirm = document.getElementById("collection-restore-confirm");
+  status.textContent = message;
+  cancel.textContent = confirmLabel ? "Cancel" : "Close";
+  cancel.disabled = false;
+  confirm.hidden = !confirmLabel;
+  confirm.textContent = confirmLabel || "Replace collection";
+  cancel.focus();
+  return new Promise(resolve => {
+    const done = choice => {
+      cancel.onclick = confirm.onclick = null;
+      cancel.disabled = true;
+      confirm.hidden = true;
+      resolve(choice);
+    };
+    cancel.onclick = () => done(false);
+    confirm.onclick = () => done(true);
+  });
+}
+
+async function collectionBackupAction(restoring) {
+  if (isCollectionBackupBusy || isWorkspaceSwitching || isClosePending) return;
+  if (isLocalRecoveryBlocked() || trashLoadError) {
+    showNotification("Recover unreadable collection data before backing up or restoring");
+    return;
+  }
+  if (!window.__TAURI__) {
+    showNotification("Collection backup and restore are available in the desktop app");
+    return;
+  }
+  isCollectionBackupBusy = true;
+  const pendingNotes = [...noteSaveDebounceTimers.keys()];
+  let didFlush = false;
+  let localRestoreStarted = false;
+  const backdrop = document.getElementById("collection-backup-backdrop");
+  const modal = document.getElementById("collection-backup-modal");
+  const status = document.getElementById("collection-backup-status");
+  const safety = document.getElementById("collection-backup-safety");
+  const cancel = document.getElementById("collection-restore-cancel");
+  const app = document.getElementById("app");
+  const previousFocus = actionsBtn;
+  const destination = activeDbPath ? activeDbPath : "Local notes";
+  backdrop.style.display = "flex";
+  backdrop.setAttribute("aria-hidden", "false");
+  document.getElementById("collection-backup-heading").textContent = restoring ? "Restore collection" : "Back up collection";
+  safety.hidden = true;
+  cancel.disabled = true;
+  document.getElementById("collection-restore-confirm").hidden = true;
+  status.textContent = restoring ? "Choose a collection backup…" : "Saving pending edits…";
+  app.inert = true;
+  for (const element of [editorTextarea, noteTitleInput, secondaryEditorTextarea, secondaryNoteTitle]) element.readOnly = true;
+  modal.focus();
+  clearPendingSaveTimers();
+  trashUi.close();
+  const blockKeys = event => {
+    if (event.key === "Tab") trapModalFocus(event, modal);
+    if (event.key === "Escape") { event.preventDefault(); if (!cancel.disabled) cancel.click(); }
+    if (!modal.contains(event.target)) event.preventDefault();
+    event.stopImmediatePropagation(); // Do not run app-wide editing shortcuts behind the dialog.
+  };
+  const blockClicks = event => {
+    if (!modal.contains(event.target)) { event.preventDefault(); event.stopImmediatePropagation(); }
+  };
+  document.addEventListener("keydown", blockKeys, true);
+  document.addEventListener("click", blockClicks, true);
+  try {
+    await dbSaveQueue;
+    let candidate;
+    if (restoring) {
+      const content = await invoke("read_collection_backup");
+      if (content == null) return;
+      candidate = parseBackup(content);
+      const summary = value => `${value.notes.length} notes, ${value.folders.length} folders, ${value.trash.length} trash entries`;
+      if (!await backupChoice(`Replace ${destination}? Current: ${summary({ notes, folders, trash })}. Backup: ${summary(candidate)}. This replaces the whole collection; it does not merge. A verified safety backup of your current collection will be retained before replacement.`, "Replace collection")) return;
+    }
+    status.textContent = "Saving pending edits…";
+    didFlush = true;
+    if (!await flushPendingSaves()) throw new Error("Pending edits could not be saved; operation stopped");
+    setSavedState();
+    const safetyContent = serializeBackup({ notes, folders, trash });
+    if (!restoring) {
+      const path = await invoke("save_collection_backup", { content: safetyContent, dbPath: activeDbPath });
+      if (path == null) return;
+      if (typeof path !== "string" || !path.trim()) throw new Error("Backup file was not confirmed");
+      await backupChoice(`Collection backup saved and verified: ${path}`);
+      return;
+    }
+    status.textContent = "Preserving your current collection and restoring…";
+    const recordSafety = path => {
+      if (typeof path !== "string" || !path.trim()) throw new Error("Safety backup file was not confirmed; restore stopped");
+      safety.hidden = false;
+      safety.textContent = `Your previous collection is preserved in: ${path}`;
+      return path;
+    };
+    if (activeDbPath) {
+      recordSafety(await invoke("preserve_collection_backup", { content: safetyContent }));
+      await persistWorkspace({ dbPath: activeDbPath, ...candidate });
+    } else {
+      localRestoreStarted = true;
+      await replaceLocalCollection(localStorage, candidate, {
+        ...restoreJournal,
+        begin: async (values, content) => recordSafety(await restoreJournal.begin(values, content))
+      }, safetyContent);
+      localCollection.load();
+    }
+    ({ notes, folders, trash } = candidate);
+    trashLoadError = null;
+    trashNeedsSave = false;
+    activeNoteId = notes[0]?.id ?? null;
+    secondaryNoteId = null;
+    searchInput.value = "";
+    renderNoteList();
+    loadActiveNote();
+    syncSecondaryNoteUi(true);
+    refreshTrashUi();
+    mcpCollectionId = window.crypto.randomUUID();
+    cancelScheduledMcpSnapshotUpdates();
+    await syncMcpSnapshot().catch(error => console.error("Could not publish restored collection", error));
+    setSavedState();
+    await backupChoice("Collection restored. The previous collection's safety backup is retained; keep it until you have checked your restored notes.");
+  } catch (error) {
+    // If even rollback failed, retry the durable checkpoint and keep local data
+    // locked if it still cannot be recovered. Never autosave a partial restore.
+    if (localRestoreStarted) {
+      localCollection.setRestoreBlocked(true);
+      await recoverInterruptedCollectionRestore();
+      loadLocalCollection();
+      loadTrashFromLocalStorage();
+      activeNoteId = notes[0]?.id ?? null;
+      renderNoteList();
+      loadActiveNote();
+      syncSecondaryNoteUi(true);
+      mcpCollectionId = window.crypto.randomUUID();
+      cancelScheduledMcpSnapshotUpdates();
+      await syncMcpSnapshot().catch(snapshotError => console.error("Could not publish recovered collection", snapshotError));
+    }
+    await backupChoice(`${restoring ? "Restore" : "Backup"} failed: ${error.message || error}`);
+  } finally {
+    document.removeEventListener("keydown", blockKeys, true);
+    document.removeEventListener("click", blockClicks, true);
+    backdrop.style.display = "none";
+    backdrop.setAttribute("aria-hidden", "true");
+    app.inert = false;
+    isCollectionBackupBusy = false;
+    refreshLocalRecoveryUi();
+    previousFocus.focus();
+    // Resume only edits which were already scheduled before opening the dialog.
+    if (!didFlush && !isLocalRecoveryBlocked()) pendingNotes.forEach(id => scheduleNoteSave(id));
+  }
+}
+
 function exportAsMarkdownFile() {
   const activeNote = notes.find(n => n.id === activeNoteId);
   if (!activeNote) return;
@@ -2532,6 +2713,8 @@ function attachEventListeners() {
   copyHtmlBtn.addEventListener("click", copyHtmlToClipboard);
   importBtn.addEventListener("click", importFile);
   exportBtn.addEventListener("click", exportAsMarkdownFile);
+  document.getElementById("collection-backup-btn").addEventListener("click", () => collectionBackupAction(false));
+  document.getElementById("collection-restore-btn").addEventListener("click", () => collectionBackupAction(true));
   dbConnectBtn.addEventListener("click", connectDatabase);
   dbDisconnectBtn.addEventListener("click", disconnectDatabase);
   agentAccessToggleBtn.addEventListener("click", (event) => {
@@ -2918,12 +3101,29 @@ function setRecoveryRequiredState() {
   saveStatus.classList.add("unsaved");
 }
 
+function refreshEditorAvailability() {
+  const locked = isLocalRecoveryBlocked() || isCollectionBackupBusy;
+  const hasPrimaryNote = notes.some(note => note.id === activeNoteId);
+  const hasSecondaryNote = notes.some(note => note.id === secondaryNoteId);
+  editorTextarea.readOnly = noteTitleInput.readOnly = locked || !hasPrimaryNote;
+  secondaryEditorTextarea.readOnly = secondaryNoteTitle.readOnly = locked || !hasSecondaryNote;
+  editorTextarea.placeholder = hasPrimaryNote ? "Type something here... Supports Markdown formatting."
+    : "Create or select a note to start writing.";
+  noteTitleInput.placeholder = hasPrimaryNote ? "Untitled Scratchpad" : "No note selected";
+  secondaryEditorTextarea.placeholder = hasSecondaryNote ? "Type something here... Supports Markdown formatting."
+    : "Create or select a note to start writing.";
+  secondaryNoteTitle.placeholder = hasSecondaryNote ? "Untitled Scratchpad" : "No note selected";
+  document.getElementById("empty-collection-prompt").hidden = hasPrimaryNote || isLocalRecoveryBlocked();
+}
+
 function refreshLocalRecoveryUi() {
   const blocked = isLocalRecoveryBlocked();
   const banner = document.getElementById("local-recovery-banner");
   const needsRecovery = localCollection.blocked();
   banner.hidden = !needsRecovery && !localCollection.hasArchive() && !recoveryArchiveError;
-  document.getElementById("local-recovery-message").textContent = needsRecovery
+  document.getElementById("local-recovery-message").textContent = localRestoreError
+    ? `Interrupted collection restore could not be recovered: ${localRestoreError}. Local data is read-only. Retry reading to recover the checkpoint; safety copies are in the app data directory's collection-backups folder.`
+    : needsRecovery
     ? `Local notes or folders could not be read. The original saved data has not been replaced. ${activeDbPath
       ? "Your workspace is usable; disconnect to retry or replace local data."
       : "This collection is read-only. Export the preserved data for manual recovery, or retry reading it."}`
@@ -2934,7 +3134,7 @@ function refreshLocalRecoveryUi() {
   document.getElementById("local-recovery-replace-btn").disabled = !localCollection.canReplace();
   document.getElementById("local-recovery-replace-btn").title = localCollection.canReplace() ? "" : "Automatic replacement is available in the desktop app; export for manual recovery";
   document.getElementById("local-recovery-confirmation").hidden = true;
-  for (const element of [editorTextarea, noteTitleInput, secondaryEditorTextarea, secondaryNoteTitle]) element.readOnly = blocked;
+  refreshEditorAvailability();
   for (const element of [newNoteBtn, newFolderBtn, importBtn, replaceOneBtn, replaceAllBtn,
     ctxInsertBtn, ctxPinBtn, ctxMoveUpBtn, ctxMoveDownBtn, ctxMoveFolderBtn, ctxDeleteNoteBtn,
     ctxFolderNewNoteBtn, ctxFolderRenameBtn, ctxFolderMoveUpBtn, ctxFolderMoveDownBtn, ctxFolderDeleteBtn]) element.disabled = blocked;
@@ -2975,6 +3175,28 @@ async function exportLocalRecovery() {
 }
 
 async function recoverLocalCollection(replace = false) {
+  if (isCollectionBackupBusy || isWorkspaceSwitching || isClosePending) return;
+  if (localRestoreError && !replace) {
+    if (activeDbPath) return;
+    isWorkspaceSwitching = true;
+    try {
+      await dbSaveQueue;
+      await recoverInterruptedCollectionRestore();
+      loadLocalCollection();
+      loadTrashFromLocalStorage();
+      renderNoteList();
+      activeNoteId = notes[0]?.id ?? null;
+      loadActiveNote();
+      syncSecondaryNoteUi(true);
+      mcpCollectionId = window.crypto.randomUUID();
+      cancelScheduledMcpSnapshotUpdates();
+      await syncMcpSnapshot().catch(error => console.error("Could not publish recovered collection", error));
+    } finally {
+      isWorkspaceSwitching = false;
+      refreshLocalRecoveryUi();
+    }
+    return;
+  }
   if (!isLocalRecoveryBlocked() || isWorkspaceSwitching || isClosePending) return;
   const collectionId = mcpCollectionId;
   const status = document.getElementById("local-recovery-action-status");
@@ -3105,7 +3327,7 @@ function updateDbUiState(isConnected) {
 }
 
 async function switchMcpCollection(operation) {
-  if (isWorkspaceSwitching) return;
+  if (isWorkspaceSwitching || isCollectionBackupBusy) return;
   isWorkspaceSwitching = true;
   trashUi.close();
   try {
@@ -3156,6 +3378,7 @@ async function connectDatabaseImpl() {
   let workspaceNotes;
   let workspaceFolders;
   let workspaceTrash;
+  let workspaceInitialized = false;
   try {
     workspaceNotes = await invoke("load_db_notes", { dbPath: path });
     if (!Array.isArray(workspaceNotes)) {
@@ -3167,6 +3390,9 @@ async function connectDatabaseImpl() {
     }
     workspaceFolders = normalizeFolders(workspaceFolders);
     workspaceTrash = await loadWorkspaceTrash(path);
+    if (!workspaceNotes.length && !workspaceFolders.length && !workspaceTrash.length) {
+      workspaceInitialized = await invoke("workspace_collection_initialized", { dbPath: path });
+    }
   } catch (err) {
     console.error("Failed to read SQLite database", err);
     showNotification("Could not open workspace; using local notes");
@@ -3182,7 +3408,7 @@ async function connectDatabaseImpl() {
   if (workspaceNotes.length > 0) {
     folders = workspaceFolders;
     notes = normalizePinnedNoteOrder(normalizeNoteFolderAssignments(workspaceNotes, folders));
-  } else if (workspaceFolders.length > 0 || workspaceTrash.length > 0) {
+  } else if (workspaceFolders.length > 0 || workspaceTrash.length > 0 || workspaceInitialized) {
     notes = [];
     folders = workspaceFolders;
   } else if (localNotes) {
@@ -3217,13 +3443,9 @@ async function connectDatabaseImpl() {
   }
 
   updateDbUiState(true);
-  if (notes.length === 0) {
-    createNote();
-  } else {
-    activeNoteId = notes[0].id;
-    renderNoteList();
-    loadActiveNote();
-  }
+  activeNoteId = notes[0]?.id ?? null;
+  renderNoteList();
+  loadActiveNote();
   syncSecondaryNoteUi(true);
   scheduleMcpSnapshotUpdate();
 
@@ -3248,7 +3470,7 @@ async function disconnectDatabaseImpl() {
   loadTrashFromLocalStorage();
   if (!localCollection.blocked()) notes = normalizeNoteFolderAssignments(notes, folders);
 
-  if (notes.length === 0 && !localCollection.blocked()) {
+  if (notes.length === 0 && localStorage.getItem(LOCAL_NOTES_KEY) === null && !localCollection.blocked()) {
     createNote();
   } else {
     activeNoteId = notes[0]?.id ?? null;
@@ -4366,12 +4588,18 @@ function syncSecondaryNoteUi(reload = false) {
     secondaryNoteId = alternative?.id || null;
   }
   populateSecondaryNoteSelect();
+  refreshEditorAvailability();
   if (reload && isSplitNoteMode && secondaryNoteId) loadSecondaryNote();
 }
 
 function loadSecondaryNote() {
+  refreshEditorAvailability();
   const note = notes.find(n => n.id === secondaryNoteId);
-  if (!note) return;
+  if (!note) {
+    secondaryEditorTextarea.value = secondaryNoteTitle.value = "";
+    for (const element of [secondaryMarkdownPreview, secondaryEditorBackdrop, secondaryEditorLineNumbers]) element.replaceChildren();
+    return;
+  }
 
   cancelScheduledNoteComparison();
 
@@ -4390,7 +4618,7 @@ function loadSecondaryNote() {
 function handleSecondaryEditorInput() {
   if (isLocalRecoveryBlocked()) { loadSecondaryNote(); return; }
   const note = notes.find(n => n.id === secondaryNoteId);
-  if (!note) return;
+  if (!note) { loadSecondaryNote(); return; }
 
   note.content = secondaryEditorTextarea.value;
   note.updatedAt = Date.now();
@@ -4430,7 +4658,7 @@ function handleSecondaryEditorInput() {
 function handleSecondaryTitleInput() {
   if (isLocalRecoveryBlocked()) { loadSecondaryNote(); return; }
   const note = notes.find(n => n.id === secondaryNoteId);
-  if (!note) return;
+  if (!note) { loadSecondaryNote(); return; }
 
   note.title = secondaryNoteTitle.value.trim() || "Untitled Scratchpad";
   note.isTitleLocked = true;

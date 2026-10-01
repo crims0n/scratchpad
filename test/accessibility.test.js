@@ -22,10 +22,10 @@ test("interactive controls have an accessible name", () => {
   assert.deepEqual(unnamed, []);
 });
 
-test("help, theme, about, MCP, and trash overlays expose modal dialog semantics", () => {
+test("help, theme, about, MCP, trash, and collection backup overlays expose modal dialog semantics", () => {
   const dialogs = [...document.querySelectorAll("[role='dialog']")];
 
-  assert.equal(dialogs.length, 5);
+  assert.equal(dialogs.length, 6);
   dialogs.forEach((dialog) => {
     assert.equal(dialog.getAttribute("aria-modal"), "true");
     assert.ok(dialog.getAttribute("aria-label") || dialog.getAttribute("aria-labelledby"));
