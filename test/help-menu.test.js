@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { bootApp } from "./helpers/app-harness.js";
 
 test("the Scratchpad menu opens Help and About dialogs and returns focus", async () => {
+  const { version } = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
   const app = await bootApp();
   const actionsButton = document.getElementById("actions-btn");
   const actionsDropdown = document.getElementById("actions-dropdown-content");
@@ -44,7 +46,7 @@ test("the Scratchpad menu opens Help and About dialogs and returns focus", async
   assert.equal(document.querySelectorAll(".about-description").length, 2);
   assert.match(aboutBackdrop.textContent, /open-source, local-first Markdown editor/);
   assert.match(aboutBackdrop.textContent, /without an account, cloud service, analytics, or telemetry/);
-  assert.equal(document.getElementById("about-version").textContent, "0.7.3");
+  assert.equal(document.getElementById("about-version").textContent, version);
 
   document.querySelector('.about-links a[href="https://github.com/crims0n/scratchpad"]').click();
   await app.settle(20);
