@@ -73,6 +73,7 @@ test('recognizes CSV with consistent columns, quoted commas, escapes, and multil
     'name,description\nAlice,"one, two"',
     'name,description\nAlice,"said ""hello"""',
     'name,description\nAlice,"first line\nsecond line"',
+    'name,description\nAlice,"first line\n# Heading\n- bullet"',
     'a,b,c\n1,,3', 'a,b\nc,d\ne,f',
     'name,value\nAlice,**bold**', 'name,url\nAlice,[link](https://example.com)'
   ]) assert.equal(detect(content), 'CSV', content);

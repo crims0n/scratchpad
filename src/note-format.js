@@ -109,9 +109,9 @@ export function detectNoteFormat(content, Parser = globalThis.DOMParser ?? globa
     } catch { /* Malformed XML stays text. */ }
   }
   if (isYaml(source)) return 'YAML';
-  // Markdown wins over CSV so comma-containing Markdown tables stay Markdown.
-  if (hasMarkdownBlocks(source)) return 'MD';
+  // Check complete CSV records before Markdown hints inside quoted cells.
   if (isCsv(source)) return 'CSV';
+  if (hasMarkdownBlocks(source)) return 'MD';
   if (/!?\[[^\]\n]+\]\([^\n)]+\)/.test(source)
     || /(`+)[^`\n]+\1|\*\*\S(?:[^\n]*?\S)?\*\*|__\S(?:[^\n]*?\S)?__|~~\S(?:[^\n]*?\S)?~~/.test(source)
     || /(?:^|\s)([*_])\S(?:[^\n]*?\S)?\1(?=$|[\s.,!?:;])/.test(source)) return 'MD';
