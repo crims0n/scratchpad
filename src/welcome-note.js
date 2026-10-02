@@ -33,6 +33,7 @@ Scratchpad is a fast, local-first place for notes, snippets, and Markdown. Every
 - Right-click a note and choose **Delete Note** to move it to trash.
 - Click the **trash icon at the bottom right**, then **Restore**, to recover a note. It returns to its original folder or the top level if that folder was removed.
 - Right-click the trash icon and choose **Empty Trash…** to permanently remove deleted notes after confirmation. Trash survives restarts, has no automatic expiry, and is separate for local notes and each workspace.
+- To clear all local notes, folders, and trash, return to **Local notes**, then choose **Clear Local Collection…** in the desktop app. Type **DELETE** to enable confirmation. A verified safety backup is retained before clearing; preferences, themes, workspaces, and existing backups stay untouched. This is not secure erasure.
 
 ## Connect an agent (optional)
 - Open **Scratchpad menu → Agent access** and turn it **On**. The **MCP listening** status shows when access is enabled.
