@@ -930,15 +930,6 @@ body {
   flex-shrink: 0;
 }
 
-.dropdown-description {
-  max-width: 260px;
-  margin: 4px 12px;
-  color: var(--text-secondary);
-  font-size: 0.76rem;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
 .dropdown-item:hover {
   background-color: var(--bg-input);
 }

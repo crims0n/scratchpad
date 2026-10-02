@@ -3292,6 +3292,7 @@ function refreshLocalRecoveryUi() {
   document.getElementById("local-recovery-confirmation").hidden = true;
   refreshEditorAvailability();
   const clearButton = document.getElementById("local-clear-btn");
+  clearButton.hidden = Boolean(activeDbPath);
   clearButton.disabled = Boolean(activeDbPath) || needsRecovery || Boolean(trashLoadError) || !window.__TAURI__;
   clearButton.title = activeDbPath ? "Return to local notes before clearing; workspace files are never cleared"
     : needsRecovery || trashLoadError ? "Recover unreadable local data before clearing"
@@ -3482,6 +3483,7 @@ function updateDbUiState(isConnected) {
     workspaceMenuValue.textContent = fileName;
     workspaceMenuValue.title = activeDbPath;
     document.getElementById("workspace-menu-storage").textContent = "Workspace file";
+    document.getElementById("collection-menu-heading").textContent = "Workspace";
     document.getElementById("collection-menu-scope").textContent = "Backup and restore apply to this workspace collection. Local notes stay separate.";
   } else {
     dbConnectBtn.style.display = "block";
@@ -3489,9 +3491,13 @@ function updateDbUiState(isConnected) {
     workspaceMenuValue.textContent = "Local notes";
     workspaceMenuValue.title = "Local notes, folders, and trash stored in this app";
     document.getElementById("workspace-menu-storage").textContent = "In this app";
+    document.getElementById("collection-menu-heading").textContent = "Collection";
     document.getElementById("collection-menu-scope").textContent = "Backup and restore apply to Local notes. Workspace files stay separate.";
     
   }
+  const location = activeDbPath ? `workspace file:\n${activeDbPath}` : "Local notes, stored in this app";
+  document.getElementById("collection-backup-btn").title = `Back up the notes, folders, and trash in ${location}.`;
+  document.getElementById("collection-restore-btn").title = `Replace the notes, folders, and trash in ${location} with a backup. This does not merge collections.`;
   setSavedState();
   refreshLocalRecoveryUi();
 }

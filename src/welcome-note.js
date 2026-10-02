@@ -31,7 +31,7 @@ Scratchpad is a fast, local-first place for notes, snippets, and Markdown. Every
 
 ## Collections and workspace files
 - A **collection** is your notes, folders, and trash. **Local notes** keeps one collection in this app; a **workspace file** holds a separate, portable collection.
-- The menu’s **Collection** section shows the active storage location. In the desktop app, choose **Open or create workspace…** to switch to a workspace, or **Return to local notes** to switch back. An empty, not-yet-initialized workspace starts with local notes and folders; local trash stays local.
+- The menu section shows the active storage location: **Collection** for local notes, or **Workspace** for a workspace file. Hover over actions for descriptions. In the desktop app, choose **Open or create workspace…** to switch to a workspace, or **Return to local notes** to switch back. An empty, not-yet-initialized workspace starts with local notes and folders; local trash stays local. **Clear Local Collection…** is shown only in local mode.
 - **Back Up Collection…** and **Restore Collection…** act on the collection shown in the menu, whether local or in a workspace file. Restore replaces, rather than merges, notes, folders, and trash after confirmation, and retains a verified safety backup. Backups are unencrypted; keep them private.
 
 ## Delete and recover

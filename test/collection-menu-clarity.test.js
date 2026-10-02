@@ -13,12 +13,13 @@ let instance = 3000;
 const text = id => document.getElementById(id).textContent;
 
 function assertDescriptions() {
-  for (const id of ["db-connect-btn", "collection-backup-btn", "collection-restore-btn", "local-clear-btn", "collection-backup-modal"]) {
+  for (const id of ["db-connect-btn", "db-disconnect-btn", "collection-backup-btn", "collection-restore-btn", "local-clear-btn", "collection-backup-modal"]) {
     const ids = document.getElementById(id).getAttribute("aria-describedby").split(/\s+/);
     ids.forEach(description => {
       const element = document.getElementById(description);
       assert.ok(element, `${id} description ${description} exists`);
-      assert.equal(element.hidden, false, `${description} is visible, not tooltip-only`);
+      const hiddenHelp = ["collection-menu-description", "workspace-menu-return-description", "collection-menu-scope", "local-clear-menu-scope"].includes(description);
+      assert.equal(element.hidden, hiddenHelp, `${description} is referenced for screen readers without adding menu paragraphs`);
     });
   }
 }
@@ -37,13 +38,20 @@ test("collection menu clarifies local/workspace scope, switching, and long filen
   } });
   assert.equal(text("workspace-menu-storage"), "In this app");
   assert.equal(text("workspace-menu-value"), "Local notes");
+  assert.equal(text("collection-menu-heading"), "Collection");
+  assert.equal(document.querySelectorAll("#workspace-menu-section p:not([hidden])").length, 0, "descriptions do not clutter the menu");
+  assert.match(document.getElementById("db-connect-btn").title, /portable workspace file.*local notes stay separate/);
+  assert.match(document.getElementById("collection-backup-btn").title, /Back up the notes, folders, and trash.*Local notes/);
+  assert.match(document.getElementById("collection-restore-btn").title, /Replace.*Local notes.*does not merge/);
   assert.match(text("collection-menu-description"), /notes, folders, and trash.*portable workspace file/);
   assert.match(text("collection-menu-scope"), /apply to Local notes/);
   assert.equal(document.getElementById("local-clear-btn").disabled, false);
+  assert.equal(document.getElementById("local-clear-btn").hidden, false);
   assertDescriptions();
 
   app.click("db-connect-btn"); await app.settle();
   assert.equal(text("workspace-menu-storage"), "Workspace file");
+  assert.equal(text("collection-menu-heading"), "Workspace");
   assert.equal(text("workspace-menu-value"), filename);
   assert.equal(document.getElementById("workspace-menu-value").title, path);
   assert.equal(text("collection-menu-scope"), "Backup and restore apply to this workspace collection. Local notes stay separate.");
@@ -52,19 +60,28 @@ test("collection menu clarifies local/workspace scope, switching, and long filen
     assert.match(document.getElementById(id).getAttribute("aria-describedby"), /workspace-menu-storage workspace-menu-value/, "accessible descriptions include the storage type and full workspace filename");
   }
   assert.equal(document.getElementById("local-clear-btn").disabled, true);
+  assert.equal(document.getElementById("local-clear-btn").hidden, true);
+  for (const id of ["collection-backup-btn", "collection-restore-btn"]) {
+    assert.equal(document.getElementById(id).hidden, false, "workspace backup and restore remain available");
+    assert.ok(document.getElementById(id).title.includes(path), "hover help names the full workspace path");
+  }
   assert.match(text("local-clear-menu-scope"), /Return to local notes to clear.*never cleared/);
   assertDescriptions();
   const valueStyle = app.dom.window.getComputedStyle(document.getElementById("workspace-menu-value"));
   assert.equal(valueStyle.textOverflow, "ellipsis");
   assert.equal(valueStyle.maxWidth, "145px");
-  assert.equal(app.dom.window.getComputedStyle(document.getElementById("collection-menu-scope")).overflowWrap, "anywhere");
+  assert.equal(app.dom.window.getComputedStyle(document.getElementById("collection-menu-scope")).display, "none");
   assert.deepEqual(app.read("scratchpad_notes"), original.notes);
 
   app.click("db-disconnect-btn"); await app.settle();
   assert.equal(text("workspace-menu-storage"), "In this app");
+  assert.equal(text("collection-menu-heading"), "Collection");
   assert.match(text("collection-menu-scope"), /apply to Local notes.*Workspace files stay separate/);
   assert.equal(text("local-clear-menu-scope"), "Clears only local notes, folders, and trash.");
   assert.equal(document.getElementById("local-clear-btn").disabled, false);
+  assert.equal(document.getElementById("local-clear-btn").hidden, false);
+  assert.match(document.getElementById("collection-backup-btn").title, /Local notes/);
+  assert.ok(!document.getElementById("collection-backup-btn").title.includes(path), "hover help resets after returning to local notes");
   assert.deepEqual(app.read("scratchpad_notes"), original.notes);
   app.dom.window.close();
 });
@@ -84,6 +101,8 @@ test("backup and restore identify local and startup-workspace targets during wor
     } });
     const destination = path ? `Workspace file: ${path}` : "Local notes (stored in this app)";
     assert.equal(text("workspace-menu-storage"), path ? "Workspace file" : "In this app");
+    assert.equal(text("collection-menu-heading"), path ? "Workspace" : "Collection");
+    assert.equal(document.getElementById("local-clear-btn").hidden, Boolean(path));
     app.click("collection-backup-btn"); await app.settle();
     assert.equal(text("collection-backup-target"), `Backup source: ${destination}\nIncludes notes, folders, and trash.`);
     assert.equal(document.getElementById("collection-backup-preflight").hidden, false);
@@ -114,11 +133,13 @@ test("backup and restore identify local and startup-workspace targets during wor
   }
 });
 
-test("clear menu explains browser-only and unreadable-data restrictions visibly", async () => {
+test("clear menu explains browser-only and unreadable-data restrictions through hover and accessible help", async () => {
   for (const browser of [true, false]) {
     const app = await bootApp({ instance: ++instance, storage: browser ? storage : { ...storage, scratchpad_notes: "{broken" },
       beforeBoot: win => { if (browser) delete win.__TAURI__; } });
     assert.equal(document.getElementById("local-clear-btn").disabled, true);
+    assert.equal(document.getElementById("local-clear-btn").hidden, false);
+    assert.match(document.getElementById("local-clear-btn").title, browser ? /desktop app/ : /Recover unreadable local data/);
     assert.match(text("local-clear-menu-scope"), browser ? /requires the desktop app.*verified safety backup/ : /Recover unreadable local data/);
     assertDescriptions();
     app.dom.window.close();

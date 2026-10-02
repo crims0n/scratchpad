@@ -124,20 +124,21 @@
             </button>
             <div class="dropdown-content" id="actions-dropdown-content" aria-label="Scratchpad menu">
               <div class="dropdown-section" id="workspace-menu-section">
-                <div class="dropdown-section-title">Collection</div>
-                <p class="dropdown-description" id="collection-menu-description">Your notes, folders, and trash, stored in this app or in a portable workspace file.</p>
+                <div class="dropdown-section-title" id="collection-menu-heading" title="A collection is your notes, folders, and trash, stored in this app or in a portable workspace file.">Collection</div>
+                <p id="collection-menu-description" hidden>Your notes, folders, and trash, stored in this app or in a portable workspace file.</p>
                 <div class="dropdown-status-row" id="collection-menu-location" aria-label="Current collection storage">
                   <span id="workspace-menu-storage">In this app</span>
                   <span class="dropdown-item-value" id="workspace-menu-value">Local notes</span>
                 </div>
-                <button class="dropdown-item" id="db-connect-btn" aria-describedby="collection-menu-description">Open or create workspace…</button>
-                <button class="dropdown-item" id="db-disconnect-btn" style="display: none;">Return to local notes</button>
+                <button class="dropdown-item" id="db-connect-btn" title="Switch to a collection in a portable workspace file. Your local notes stay separate." aria-describedby="collection-menu-description">Open or create workspace…</button>
+                <button class="dropdown-item" id="db-disconnect-btn" title="Switch back to the collection stored in this app. Your workspace file stays unchanged." aria-describedby="workspace-menu-return-description" style="display: none;">Return to local notes</button>
+                <p id="workspace-menu-return-description" hidden>Switch back to the collection stored in this app. Your workspace file stays unchanged.</p>
                 <div class="dropdown-divider"></div>
-                <p class="dropdown-description" id="collection-menu-scope">Backup and restore apply to Local notes.</p>
+                <p id="collection-menu-scope" hidden>Backup and restore apply to Local notes.</p>
                 <button class="dropdown-item" id="collection-backup-btn" aria-describedby="workspace-menu-storage workspace-menu-value collection-menu-scope">Back Up Collection…</button>
                 <button class="dropdown-item" id="collection-restore-btn" aria-haspopup="dialog" aria-describedby="workspace-menu-storage workspace-menu-value collection-menu-scope">Restore Collection…</button>
                 <button class="dropdown-item" id="local-clear-btn" aria-haspopup="dialog" aria-describedby="local-clear-menu-scope">Clear Local Collection…</button>
-                <p class="dropdown-description" id="local-clear-menu-scope">Clears only local notes, folders, and trash.</p>
+                <p id="local-clear-menu-scope" hidden>Clears only local notes, folders, and trash.</p>
               </div>
               <div class="dropdown-divider"></div>
               <div class="dropdown-section" id="note-menu-section">
@@ -660,7 +661,7 @@
         <div class="help-pane active" id="pane-shortcuts" role="tabpanel" aria-labelledby="tab-shortcuts-btn">
           <div class="shortcuts-section">
             <h4 class="shortcuts-heading">Collections, Workspaces & Notes</h4>
-            <p class="shortcuts-note">A <strong>collection</strong> is your notes, folders, and trash. <strong>Local notes</strong> stores one collection in this app; a <strong>workspace file</strong> stores a separate, portable collection. The menu’s <strong>Collection</strong> section shows which storage location is active. Choose <strong>Open or create workspace…</strong> to switch to a workspace, or <strong>Return to local notes</strong> to switch back. Switching does not merge collections or remove your local notes. An empty, not-yet-initialized workspace starts with your local notes and folders; local trash stays local.</p>
+            <p class="shortcuts-note">A <strong>collection</strong> is your notes, folders, and trash. <strong>Local notes</strong> stores one collection in this app; a <strong>workspace file</strong> stores a separate, portable collection. The menu section is labeled <strong>Collection</strong> for local notes, or <strong>Workspace</strong> when a workspace file is active. Hover over actions for descriptions and storage scope; the same information is available to screen readers. Choose <strong>Open or create workspace…</strong> to switch to a workspace, or <strong>Return to local notes</strong> to switch back. Switching does not merge collections or remove your local notes. An empty, not-yet-initialized workspace starts with your local notes and folders; local trash stays local. Backup and restore remain available in both modes; <strong>Clear Local Collection…</strong> is hidden while a workspace is open.</p>
             <p class="shortcuts-note">In the desktop app, return to <strong>Local notes</strong> and choose <strong>Clear Local Collection…</strong> to remove local notes, folders, and trash. Review the counts and type the exact word <strong>DELETE</strong> to enable clearing. A verified safety backup is retained first; use <strong>Restore Collection…</strong> to recover it. Preferences, themes, workspace files, and existing backup/recovery copies stay untouched. Cancel/Escape changes nothing. This is not secure erasure; safety copies are unencrypted. Recover unreadable data before clearing and close other instances using the local collection.</p>
             <p class="shortcuts-note">Use the menu’s <strong>Back Up Collection…</strong> and <strong>Restore Collection…</strong> actions to save or replace the open local/workspace collection, including folders, order, pins, and trash. Restore validates the backup and retains a verified safety copy before replacement; it does not merge. Preferences and themes are excluded. Backups are unencrypted; keep them private. If a local restore is interrupted, Scratchpad recovers its checkpoint at startup; if recovery fails, local data stays read-only and <strong>Retry reading</strong> retries recovery.</p>
             <p class="shortcuts-note">Double-click the empty space below the scratchpad list to create a new scratchpad. Use the folder button in the sidebar to create collapsible folders. Pinned notes stay at the very top as ordinary notes, while unpinned notes without a folder remain below the folders. Drag notes onto folders to move them, or right-click a folder to add a note, rename, reorder, or safely remove it. Deleting a folder from the sidebar returns its notes to the top level.</p>
