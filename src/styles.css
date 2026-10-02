@@ -2364,8 +2364,13 @@ html:not(.editor-line-numbers-enabled) .app-container.compare-mode .editor-line-
 }
 
 #collection-backup-modal p {
+  margin: 0 0 1.5em;
   line-height: 1.5;
   overflow-wrap: anywhere;
+}
+
+#collection-backup-status {
+  white-space: pre-line;
 }
 
 #collection-backup-modal button:disabled {
