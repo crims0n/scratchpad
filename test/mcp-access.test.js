@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { bootApp, settle } from "./helpers/app-harness.js";
+import { getAppElement, bootApp, settle } from "./helpers/app-harness.js";
 
 test("agent access shares the live collection and can be turned off", async () => {
   const app = await bootApp({
@@ -78,7 +78,7 @@ test("agent access shares the live collection and can be turned off", async () =
   assert.equal(document.getElementById("mcp-config-args").value, "");
   assert.equal(document.getElementById("mcp-config-example-code").textContent, "");
 
-  const editor = document.getElementById("editor-textarea");
+  const editor = getAppElement("editor");
   editor.value = "Unsaved agent-visible body";
   editor.dispatchEvent(new app.dom.window.Event("input"));
   await settle(100);

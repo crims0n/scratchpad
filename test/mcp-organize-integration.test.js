@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bootApp, settle } from "./helpers/app-harness.js";
+import { getAppElement, bootApp, settle } from "./helpers/app-harness.js";
 
 for (const database of [false, true]) {
   test(`MCP organization persists in ${database ? "SQLite workspaces" : "local storage"} and keeps the editor synchronized`, async () => {
@@ -43,7 +43,7 @@ for (const database of [false, true]) {
     const args = (operation, requestId, extra) => ({ collectionId: snapshot().collectionId, requestId,
       ...(operation === "rename_folder" ? { folderId: "f", expectedRevision: snapshot().folderRevisions.f }
         : { noteId: "n", expectedRevision: snapshot().noteRevisions.n }), ...extra });
-    const editor = document.getElementById("editor-textarea");
+    const editor = getAppElement("editor");
     for (const [operation, extra] of [["rename_note", { title: "Agent title" }], ["move_note", { folderId: "f" }], ["rename_folder", { name: "Projects" }]]) {
       assert.equal((await send(operation, args(operation, `denied-${operation}`, extra))).ok, false);
       app.click(`mcp-permission-${operation}`);
@@ -52,7 +52,7 @@ for (const database of [false, true]) {
       const request = args(operation, operation, extra);
       const result = await send(operation, request);
       assert.equal(result.ok, true, result.error);
-      assert.equal(document.activeElement, editor);
+      assert.equal(document.activeElement, editor.contentDOM);
       assert.equal(editor.selectionStart, 2);
       assert.equal(editor.selectionEnd, 6);
       assert.equal(editor.value, "Original body");

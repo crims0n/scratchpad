@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createEditorRenderScheduler } from "../src/editor-render-scheduler.js";
-import { bootApp } from "./helpers/app-harness.js";
+import { getAppElement, editorContent, bootApp } from "./helpers/app-harness.js";
 
 test("editor render scheduler coalesces work and supports cancellation", () => {
   const frames = new Map();
@@ -40,7 +40,7 @@ test("editor render scheduler coalesces work and supports cancellation", () => {
   assert.equal(renderCount, 1);
 });
 
-test("editor input defers backdrop rendering and uses the latest value", async () => {
+test("editor input defers syntax decoration and uses the latest value", async () => {
   const app = await bootApp({
     storage: {
       scratchpad_notes: [{
@@ -58,32 +58,32 @@ test("editor input defers backdrop rendering and uses the latest value", async (
       }]
     }
   });
-  const editor = document.getElementById("editor-textarea");
-  const backdrop = document.getElementById("editor-backdrop");
-  const initialBackdrop = backdrop.innerHTML;
+  const editor = getAppElement("editor");
+  const backdrop = editorContent("editor");
+
 
   for (const value of ["first", "second", "# final"]) {
     editor.value = value;
     editor.dispatchEvent(new app.dom.window.Event("input", { bubbles: true }));
   }
 
-  assert.equal(backdrop.innerHTML, initialBackdrop);
+  assert.equal(backdrop.querySelector(".syntax-heading"), null);
   await app.settle(30);
-  assert.equal(backdrop.textContent, "# final\n");
+  assert.equal(editor.value, "# final");
   assert.equal(backdrop.querySelector(".syntax-heading").textContent, "final");
 
   document.getElementById("split-note-btn").click();
-  const secondaryEditor = document.getElementById("secondary-editor-textarea");
-  const secondaryBackdrop = document.getElementById("secondary-editor-backdrop");
-  const initialSecondaryBackdrop = secondaryBackdrop.innerHTML;
+  const secondaryEditor = getAppElement("secondary-editor");
+  const secondaryBackdrop = editorContent("secondary-editor");
+
 
   for (const value of ["secondary first", "secondary second", "## secondary final"]) {
     secondaryEditor.value = value;
     secondaryEditor.dispatchEvent(new app.dom.window.Event("input", { bubbles: true }));
   }
 
-  assert.equal(secondaryBackdrop.innerHTML, initialSecondaryBackdrop);
+  assert.equal(secondaryBackdrop.querySelector(".syntax-heading"), null);
   await app.settle(30);
-  assert.equal(secondaryBackdrop.textContent, "## secondary final\n");
+  assert.equal(secondaryEditor.value, "## secondary final");
   assert.equal(secondaryBackdrop.querySelector(".syntax-heading").textContent, "secondary final");
 });

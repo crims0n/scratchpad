@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { bootApp } from "./helpers/app-harness.js";
+import { getAppElement, bootApp } from "./helpers/app-harness.js";
 
 function pressEnter(dom, editor) {
   const event = new dom.window.KeyboardEvent("keydown", {
@@ -27,7 +27,7 @@ test("an inserted task list continues once and exits from its empty task", async
       }]
     }
   });
-  const editor = document.getElementById("editor-textarea");
+  const editor = getAppElement("editor");
 
   editor.dispatchEvent(new dom.window.MouseEvent("contextmenu", {
     bubbles: true,
@@ -39,8 +39,10 @@ test("an inserted task list continues once and exits from its empty task", async
   assert.equal(editor.value, "- [ ] Task");
   assert.equal(editor.value.slice(editor.selectionStart, editor.selectionEnd), "Task");
 
-  editor.setRangeText("Buy milk", editor.selectionStart, editor.selectionEnd, "end");
-  editor.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  editor.applyEdit({
+    value: editor.value.slice(0, editor.selectionStart) + "Buy milk" + editor.value.slice(editor.selectionEnd),
+    selectionStart: editor.selectionStart + 8, selectionEnd: editor.selectionStart + 8
+  });
   assert.equal(pressEnter(dom, editor).defaultPrevented, true);
   assert.equal(editor.value, "- [ ] Buy milk\n- [ ] ");
 
@@ -48,7 +50,9 @@ test("an inserted task list continues once and exits from its empty task", async
   assert.equal(editor.value, "- [ ] Buy milk\n\n");
   assert.equal(editor.selectionStart, editor.value.length - 1);
 
-  editor.setRangeText("Notes", editor.selectionStart, editor.selectionEnd, "end");
-  editor.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  editor.applyEdit({
+    value: editor.value.slice(0, editor.selectionStart) + "Notes" + editor.value.slice(editor.selectionEnd),
+    selectionStart: editor.selectionStart + 5, selectionEnd: editor.selectionStart + 5
+  });
   assert.equal(editor.value, "- [ ] Buy milk\nNotes\n");
 });

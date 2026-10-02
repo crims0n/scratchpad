@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bootApp } from "./helpers/app-harness.js";
+import { getAppElement, bootApp } from "./helpers/app-harness.js";
 
 const FOLDERS = [{ id: "work", name: "Work" }];
 
@@ -34,7 +34,7 @@ test("double-clicking the empty space below the list creates a scratchpad", () =
   assert.ok(created, "a blank scratchpad was stored");
   assert.equal(document.querySelector(".note-item.active").dataset.id, created.id);
   assert.equal(document.getElementById("note-title").value, "Untitled Scratchpad");
-  assert.equal(document.getElementById("editor-textarea").value, "");
+  assert.equal(getAppElement("editor").value, "");
 });
 
 test("gaps between rows count as empty space", () => {

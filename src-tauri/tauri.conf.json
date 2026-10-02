@@ -4,8 +4,8 @@
   "version": "0.8.0",
   "identifier": "io.github.crims0n.scratchpad",
   "build": {
-    "beforeBuildCommand": "npm run vendor:marked",
-    "beforeDevCommand": "npm run vendor:marked",
+    "beforeBuildCommand": "npm run vendor",
+    "beforeDevCommand": "npm run vendor",
     "frontendDist": "../src"
   },
   "app": {

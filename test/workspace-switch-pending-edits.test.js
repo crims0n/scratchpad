@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bootApp } from "./helpers/app-harness.js";
+import { getAppElement, bootApp } from "./helpers/app-harness.js";
 
 const LOCAL_NOTES = [
   { id: "local", title: "Local", content: "Original local body", updatedAt: 1, isTitleLocked: true }
@@ -20,7 +20,7 @@ const app = await bootApp({
 });
 
 test("connecting and disconnecting flush edits that are still inside the debounce window", async () => {
-  const editor = document.getElementById("editor-textarea");
+  const editor = getAppElement("editor");
   editor.value = "Latest local body";
   editor.dispatchEvent(new app.dom.window.Event("input", { bubbles: true }));
 
@@ -35,5 +35,5 @@ test("connecting and disconnecting flush edits that are still inside the debounc
   await app.settle(100);
 
   assert.equal(workspaceNotes[0].content, "Latest workspace body");
-  assert.equal(document.getElementById("editor-textarea").value, "Latest local body");
+  assert.equal(getAppElement("editor").value, "Latest local body");
 });

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-function getChangedRange(previousValue, nextValue) {
+export function getChangedRange(previousValue, nextValue) {
   let start = 0;
   while (
     start < previousValue.length &&
@@ -27,6 +27,10 @@ function getChangedRange(previousValue, nextValue) {
 }
 
 export function applyEditorEdit(textarea, edit) {
+  if (typeof textarea.applyEdit === "function") {
+    textarea.applyEdit(edit);
+    return;
+  }
   const selectionDirection = textarea.selectionDirection;
   const change = getChangedRange(textarea.value, edit.value);
 

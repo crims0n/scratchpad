@@ -29,8 +29,8 @@ import { handleMarkdownAutocomplete } from "./editor-autocomplete.js";
 import { handleEditorSmartKeydown, handleMarkdownPaste } from "./editor-smart.js";
 import { applyEditorEdit } from "./editor-edit.js";
 import { getMarkdownTemplateEdit } from "./markdown-insert.js";
-import { highlightPreviewCode, createEditorBackdropRenderer } from "./syntax-highlighting.js";
-import { renderEditorLineNumbers } from "./editor-line-numbers.js";
+import { highlightPreviewCode } from "./syntax-highlighting.js";
+import { createNoteEditor, getNoteEditor } from "./note-editor.js";
 import { createEditorRenderScheduler } from "./editor-render-scheduler.js";
 import { WELCOME_NOTE_CONTENT, WELCOME_NOTE_TITLE } from "./welcome-note.js";
 import {
@@ -112,8 +112,7 @@ const noteListContainer = document.getElementById("note-list-container");
 const noteList = document.getElementById("note-list");
 const noteTitleInput = document.getElementById("note-title");
 const editorWrapper = document.getElementById("editor-wrapper");
-const editorTextarea = document.getElementById("editor-textarea");
-const editorLineNumbers = document.getElementById("editor-line-numbers");
+const primaryEditor = createNoteEditor(document.getElementById("editor"), { label: "Scratchpad content" });
 const previewWrapper = document.getElementById("preview-wrapper");
 const markdownPreview = document.getElementById("markdown-preview");
 const wordCharCount = document.getElementById("word-char-count");
@@ -173,9 +172,7 @@ const secondaryNoteTitle = document.getElementById("secondary-note-title");
 const closeSecondaryBtn = document.getElementById("close-secondary-btn");
 const secondaryEditorPane = document.getElementById("secondary-editor-pane");
 const secondaryEditorWrapper = document.getElementById("secondary-editor-wrapper");
-const secondaryEditorTextarea = document.getElementById("secondary-editor-textarea");
-const secondaryEditorLineNumbers = document.getElementById("secondary-editor-line-numbers");
-const secondaryEditorBackdrop = document.getElementById("secondary-editor-backdrop");
+const secondaryEditor = createNoteEditor(document.getElementById("secondary-editor"), { label: "Secondary scratchpad content" });
 const secondaryEditorDivider = document.getElementById("secondary-editor-divider");
 const secondaryPreviewWrapper = document.getElementById("secondary-preview-wrapper");
 const secondaryMarkdownPreview = document.getElementById("secondary-markdown-preview");
@@ -200,7 +197,6 @@ const replaceRow = document.getElementById("replace-row");
 const replaceInput = document.getElementById("replace-input");
 const replaceOneBtn = document.getElementById("replace-one-btn");
 const replaceAllBtn = document.getElementById("replace-all-btn");
-const editorBackdrop = document.getElementById("editor-backdrop");
 
 const customContextMenu = document.getElementById("custom-context-menu");
 const ctxCutBtn = document.getElementById("ctx-cut");
@@ -328,8 +324,6 @@ let currentEditorZoom = DEFAULT_EDITOR_ZOOM;
 let editorLineSpacing = DEFAULT_EDITOR_LINE_SPACING;
 let notePreviewLines = DEFAULT_NOTE_PREVIEW_LINES;
 let syntaxHighlightingEnabled = DEFAULT_SYNTAX_HIGHLIGHTING;
-const renderPrimaryBackdrop = createEditorBackdropRenderer();
-const renderSecondaryBackdrop = createEditorBackdropRenderer();
 let editorLineNumbersEnabled = DEFAULT_EDITOR_LINE_NUMBERS;
 let previewHighlightsRendered = false;
 let isMcpEnabled = false;
@@ -372,13 +366,13 @@ const mcpWriter = createMcpWriter({
     triggerSavingState();
     scheduleMcpNoteUpdate(note.id);
     try {
-      for (const [id, textarea] of [[activeNoteId, editorTextarea], [secondaryNoteId, secondaryEditorTextarea]]) {
+      for (const [id, editor] of [[activeNoteId, primaryEditor], [secondaryNoteId, secondaryEditor]]) {
         if (id !== note.id || operation !== "append_to_note") continue;
-        const { selectionStart, selectionEnd, selectionDirection, scrollTop, scrollLeft } = textarea;
-        textarea.value = note.content;
-        textarea.setSelectionRange(selectionStart, selectionEnd, selectionDirection);
-        textarea.scrollTop = scrollTop;
-        textarea.scrollLeft = scrollLeft;
+        const { selectionStart, selectionEnd, selectionDirection, scrollTop, scrollLeft } = editor;
+        editor.value = note.content;
+        editor.setSelectionRange(selectionStart, selectionEnd, selectionDirection);
+        editor.scrollTop = scrollTop;
+        editor.scrollLeft = scrollLeft;
       }
       if (activeNoteId === note.id) {
         if (operation === "rename_note") noteTitleInput.value = note.title;
@@ -581,7 +575,7 @@ const primaryEditorRenderScheduler = createEditorRenderScheduler(
   editorRenderFrameOptions
 );
 const secondaryEditorRenderScheduler = createEditorRenderScheduler(
-  () => updateSecondaryEditorBackdrop(),
+  () => updateSecondaryEditor(),
   editorRenderFrameOptions
 );
 
@@ -810,7 +804,7 @@ function createNote(title = "Untitled Scratchpad", content = "", folderId = unde
   // the user: Split still shows an editor, and an import or the welcome note
   // arrives with content worth previewing, so both are left as they are.
   if (!content && currentLayoutMode === "preview") setLayoutMode("edit");
-  editorTextarea.focus();
+  primaryEditor.focus();
   return saved;
 }
 
@@ -842,15 +836,13 @@ function loadActiveNote() {
   cancelScheduledNoteComparison();
 
   noteTitleInput.value = activeNote.title;
-  editorTextarea.value = activeNote.content;
+  primaryEditor.value = activeNote.content;
   
   updateWordCharCount();
   updateMarkdownPreview();
   
   // Reset scrolling of editor & preview
-  editorTextarea.scrollTop = 0;
-  editorBackdrop.scrollTop = 0;
-  editorLineNumbers.scrollTop = 0;
+  primaryEditor.scrollTop = 0;
   markdownPreview.scrollTop = 0;
   const compareStopped = syncCompareControl();
   if (isFindBarOpen) {
@@ -858,7 +850,7 @@ function loadActiveNote() {
   } else {
     updateHighlights();
   }
-  if (compareStopped) renderSecondaryEditorBackdrop();
+  if (compareStopped) renderSecondaryEditor();
 }
 
 function clearEmptyCollectionUi() {
@@ -867,16 +859,14 @@ function clearEmptyCollectionUi() {
   secondaryEditorRenderScheduler.cancel();
   cancelScheduledNoteComparison();
   resetNoteComparison();
-  for (const element of [editorTextarea, noteTitleInput, secondaryEditorTextarea, secondaryNoteTitle]) element.value = "";
+  for (const element of [primaryEditor, noteTitleInput, secondaryEditor, secondaryNoteTitle]) element.value = "";
   findMatches = [];
   activeMatchIndex = -1;
   if (isFindBarOpen) runFind({ selectActive: false });
   updateWordCharCount();
   syncCompareControl();
-  // Find refresh can render an empty-line sentinel; leave no collection view
-  // behind, even when Find or comparison was open in the departed workspace.
-  for (const element of [markdownPreview, secondaryMarkdownPreview, editorBackdrop, secondaryEditorBackdrop,
-    editorLineNumbers, secondaryEditorLineNumbers]) element.replaceChildren();
+  // Leave no collection preview behind after leaving a workspace.
+  for (const element of [markdownPreview, secondaryMarkdownPreview]) element.replaceChildren();
   previewHighlightsRendered = false;
 }
 
@@ -1640,10 +1630,10 @@ function handleEditorInput() {
   const activeNote = notes.find(n => n.id === activeNoteId);
   if (!activeNote) { loadActiveNote(); return; }
 
-  activeNote.content = editorTextarea.value;
+  activeNote.content = primaryEditor.value;
   activeNote.updatedAt = Date.now();
   scheduleMcpNoteUpdate(activeNote.id);
-  updateCursorPositionForText(editorTextarea);
+  updateCursorPositionForText(primaryEditor);
   scheduleNoteComparisonRefresh();
   if (isFindBarOpen) {
     runFind({ preserveActive: true, selectActive: false });
@@ -1653,7 +1643,7 @@ function handleEditorInput() {
 
   // Auto-rename the title from the first line until the user edits it manually.
   if (!activeNote.isTitleLocked) {
-    const lines = editorTextarea.value.trim().split("\n");
+    const lines = primaryEditor.value.trim().split("\n");
     let firstLine = lines[0] || "";
     // Clean markdown headings out of title
     firstLine = firstLine.replace(/^#+\s+/, "").trim();
@@ -1722,16 +1712,16 @@ function setSavedState() {
 }
 
 function updateWordCharCount() {
-  const text = editorTextarea.value;
+  const text = primaryEditor.value;
   const totalWords = text.trim() ? text.trim().split(/\s+/).filter(Boolean).length : 0;
   const totalChars = text.length;
   
   // Always update global count on the left
   wordCharCount.textContent = `${totalWords} word${totalWords !== 1 ? 's' : ''} • ${totalChars} character${totalChars !== 1 ? 's' : ''}`;
-  updateCursorPositionForText(editorTextarea);
+  updateCursorPositionForText(primaryEditor);
 
-  const start = editorTextarea.selectionStart;
-  const end = editorTextarea.selectionEnd;
+  const start = primaryEditor.selectionStart;
+  const end = primaryEditor.selectionEnd;
   
   if (start !== end && start !== undefined && end !== undefined) {
     const selectedText = text.substring(start, end);
@@ -1750,7 +1740,7 @@ function updateWordCharCount() {
 function updateMarkdownPreview() {
   if (currentLayoutMode === "edit" || isSplitNoteMode) return; // don't render if not visible or in dual-note split mode
 
-  const rawText = editorTextarea.value;
+  const rawText = primaryEditor.value;
   
   if (window.marked) {
     try {
@@ -1853,45 +1843,28 @@ function applyNotePreviewLines(value, { persist = true, render = true } = {}) {
   }
 }
 
-function updateSecondaryEditorBackdrop() {
+function updateSecondaryEditor() {
   if (isCompareMode) {
-    redrawComparisonBackdrops();
+    redrawComparisonEditors();
     return;
   }
 
-  renderSecondaryEditorBackdrop();
+  renderSecondaryEditor();
 }
 
-function renderSecondaryEditorBackdrop() {
+function renderSecondaryEditor() {
   secondaryEditorRenderScheduler.cancel();
   const comparison = visibleNoteComparison();
   const note = notes.find(note => note.id === secondaryNoteId);
-  secondaryEditorBackdrop.innerHTML = renderSecondaryBackdrop(secondaryEditorTextarea.value, {
+  secondaryEditor.setPresentation({
     format: note ? getNoteFormat(note) : "TXT",
     syntaxEnabled: syntaxHighlightingEnabled,
-    decorations: isCompareMode ? comparison.rightDecorations : []
+    lineNumbers: editorLineNumbersEnabled,
+    compare: isCompareMode,
+    decorations: isCompareMode ? comparison.rightDecorations : [],
+    changedLines: isCompareMode ? comparison.rightChangedLines : [],
+    changeType: "added"
   });
-  updateEditorLineNumberGutter(
-    secondaryEditorTextarea,
-    secondaryEditorLineNumbers,
-    secondaryEditorWrapper,
-    {
-      changedLines: isCompareMode ? comparison.rightChangedLines : [],
-      changeType: "added"
-    }
-  );
-}
-
-function updateEditorLineNumberGutter(textarea, gutter, wrapper, comparison = {}) {
-  if (!editorLineNumbersEnabled && !isCompareMode) {
-    if (gutter.childNodes.length > 0) gutter.replaceChildren();
-    return;
-  }
-
-  const lineCount = textarea.value.split("\n").length;
-  const digitCount = String(lineCount).length;
-  wrapper.style.setProperty("--editor-line-number-gutter", `calc(${digitCount}ch + 1.5em)`);
-  gutter.innerHTML = renderEditorLineNumbers(textarea.value, comparison);
 }
 
 function applyEditorLineNumbers(value, { persist = true, render = true } = {}) {
@@ -1904,23 +1877,8 @@ function applyEditorLineNumbers(value, { persist = true, render = true } = {}) {
     localStorage.setItem("scratchpad_editor_line_numbers", String(editorLineNumbersEnabled));
   }
   if (render) {
-    const comparison = visibleNoteComparison();
-    updateEditorLineNumberGutter(editorTextarea, editorLineNumbers, editorWrapper);
-    updateEditorLineNumberGutter(
-      secondaryEditorTextarea,
-      secondaryEditorLineNumbers,
-      secondaryEditorWrapper,
-      {
-        changedLines: isCompareMode ? comparison.rightChangedLines : [],
-        changeType: "added"
-      }
-    );
-    if (isCompareMode) {
-      updateEditorLineNumberGutter(editorTextarea, editorLineNumbers, editorWrapper, {
-        changedLines: comparison.leftChangedLines,
-        changeType: "removed"
-      });
-    }
+    renderPrimaryEditor();
+    renderSecondaryEditor();
   }
 }
 
@@ -1935,7 +1893,7 @@ function applySyntaxHighlighting(value, { persist = true, render = true } = {}) 
   }
   if (render) {
     updateHighlights();
-    updateSecondaryEditorBackdrop();
+    updateSecondaryEditor();
     updateMarkdownPreview();
     updateSecondaryMarkdownPreview();
   }
@@ -2226,7 +2184,7 @@ function copyMcpConfigValue(value, label) {
 }
 
 function copyMarkdownToClipboard() {
-  const text = editorTextarea.value;
+  const text = primaryEditor.value;
   navigator.clipboard.writeText(text).then(() => {
     showNotification("Markdown copied to clipboard!");
   }).catch(err => {
@@ -2238,7 +2196,7 @@ function copyHtmlToClipboard() {
   // Render temporary markdown if in full edit mode
   let html = markdownPreview.innerHTML;
   if (currentLayoutMode === "edit" && window.marked) {
-    html = renderMarkdown(editorTextarea.value);
+    html = renderMarkdown(primaryEditor.value);
   }
   
   navigator.clipboard.writeText(html).then(() => {
@@ -2317,7 +2275,7 @@ async function collectionBackupAction(restoring) {
   document.getElementById("collection-restore-confirm").hidden = true;
   status.textContent = restoring ? "Choose a collection backup…" : "Saving pending edits…";
   app.inert = true;
-  for (const element of [editorTextarea, noteTitleInput, secondaryEditorTextarea, secondaryNoteTitle]) element.readOnly = true;
+  for (const element of [primaryEditor, noteTitleInput, secondaryEditor, secondaryNoteTitle]) element.readOnly = true;
   modal.focus();
   clearPendingSaveTimers();
   trashUi.close();
@@ -2571,7 +2529,7 @@ async function clearLocalCollectionAction() {
 function selectedNoteSnapshot() {
   const secondary = isSplitNoteMode && activePane === "secondary";
   const note = notes.find(n => n.id === (secondary ? secondaryNoteId : activeNoteId));
-  return note ? { title: note.title, content: (secondary ? secondaryEditorTextarea : editorTextarea).value } : null;
+  return note ? { title: note.title, content: (secondary ? secondaryEditor : primaryEditor).value } : null;
 }
 
 async function printNote() {
@@ -2762,14 +2720,14 @@ function attachEventListeners() {
   document.getElementById("local-recovery-confirm-btn").addEventListener("click", () => recoverLocalCollection(true));
 
   // Editor and Title inputs
-  editorTextarea.addEventListener("input", handleEditorInput);
-  editorTextarea.addEventListener("keydown", event => { if (!editorTextarea.readOnly) handleEditorTab(event); });
-  editorTextarea.addEventListener("keydown", event => { if (!editorTextarea.readOnly) handleMarkdownAutocomplete(event); });
-  editorTextarea.addEventListener("keydown", event => { if (!editorTextarea.readOnly) handleEditorSmartKeydown(event); });
-  editorTextarea.addEventListener("paste", event => { if (!editorTextarea.readOnly) handleMarkdownPaste(event); });
-  editorTextarea.addEventListener("select", updateWordCharCount);
-  editorTextarea.addEventListener("mouseup", updateWordCharCount);
-  editorTextarea.addEventListener("keyup", updateWordCharCount);
+  primaryEditor.addEventListener("input", handleEditorInput);
+  primaryEditor.addEventListener("keydown", event => { if (!primaryEditor.readOnly) handleEditorTab(event, primaryEditor); });
+  primaryEditor.addEventListener("keydown", event => { if (!primaryEditor.readOnly) handleMarkdownAutocomplete(event, primaryEditor); });
+  primaryEditor.addEventListener("keydown", event => { if (!primaryEditor.readOnly) handleEditorSmartKeydown(event, primaryEditor); });
+  primaryEditor.addEventListener("paste", event => { if (!primaryEditor.readOnly) handleMarkdownPaste(event, primaryEditor); });
+  primaryEditor.addEventListener("select", updateWordCharCount);
+  primaryEditor.addEventListener("mouseup", updateWordCharCount);
+  primaryEditor.addEventListener("keyup", updateWordCharCount);
   noteTitleInput.addEventListener("input", handleTitleInput);
 
   window.addEventListener("resize", () => scheduleFindHighlightRedraw(80));
@@ -2879,16 +2837,16 @@ function attachEventListeners() {
     secondaryNoteId = e.target.value;
     loadSecondaryNote();
   });
-  secondaryEditorTextarea.addEventListener("input", handleSecondaryEditorInput);
-  secondaryEditorTextarea.addEventListener("keydown", event => { if (!secondaryEditorTextarea.readOnly) handleEditorTab(event); });
-  secondaryEditorTextarea.addEventListener("keydown", event => { if (!secondaryEditorTextarea.readOnly) handleMarkdownAutocomplete(event); });
-  secondaryEditorTextarea.addEventListener("keydown", event => { if (!secondaryEditorTextarea.readOnly) handleEditorSmartKeydown(event); });
-  secondaryEditorTextarea.addEventListener("paste", event => { if (!secondaryEditorTextarea.readOnly) handleMarkdownPaste(event); });
-  secondaryEditorTextarea.addEventListener("select", () => updateWordCharCountForText(secondaryEditorTextarea));
-  secondaryEditorTextarea.addEventListener("mouseup", () => updateWordCharCountForText(secondaryEditorTextarea));
-  secondaryEditorTextarea.addEventListener("keyup", () => updateWordCharCountForText(secondaryEditorTextarea));
-  secondaryEditorTextarea.addEventListener("focus", () => setActivePane("secondary"));
-  editorTextarea.addEventListener("focus", () => setActivePane("primary"));
+  secondaryEditor.addEventListener("input", handleSecondaryEditorInput);
+  secondaryEditor.addEventListener("keydown", event => { if (!secondaryEditor.readOnly) handleEditorTab(event, secondaryEditor); });
+  secondaryEditor.addEventListener("keydown", event => { if (!secondaryEditor.readOnly) handleMarkdownAutocomplete(event, secondaryEditor); });
+  secondaryEditor.addEventListener("keydown", event => { if (!secondaryEditor.readOnly) handleEditorSmartKeydown(event, secondaryEditor); });
+  secondaryEditor.addEventListener("paste", event => { if (!secondaryEditor.readOnly) handleMarkdownPaste(event, secondaryEditor); });
+  secondaryEditor.addEventListener("select", () => updateWordCharCountForText(secondaryEditor));
+  secondaryEditor.addEventListener("mouseup", () => updateWordCharCountForText(secondaryEditor));
+  secondaryEditor.addEventListener("keyup", () => updateWordCharCountForText(secondaryEditor));
+  secondaryEditor.addEventListener("focus", () => setActivePane("secondary"));
+  primaryEditor.addEventListener("focus", () => setActivePane("primary"));
   secondaryNoteTitle.addEventListener("focus", () => setActivePane("secondary"));
   noteTitleInput.addEventListener("focus", () => setActivePane("primary"));
   secondaryNoteTitle.addEventListener("input", handleSecondaryTitleInput);
@@ -3262,32 +3220,28 @@ function attachEventListeners() {
     }
   });
 
-  // Sync scrolling of Edit & Preview in Split mode + Backdrop scroll always
-  editorTextarea.addEventListener("scroll", () => {
-    editorBackdrop.scrollTop = editorTextarea.scrollTop;
-    editorLineNumbers.scrollTop = editorTextarea.scrollTop;
+  // Sync scrolling of Edit & Preview in Split mode
+  primaryEditor.addEventListener("scroll", () => {
 
     if (currentLayoutMode !== "split") return;
     
-    const editScrollHeight = editorTextarea.scrollHeight - editorTextarea.clientHeight;
+    const editScrollHeight = primaryEditor.scrollHeight - primaryEditor.clientHeight;
     if (editScrollHeight <= 0) return;
     
-    const percentage = editorTextarea.scrollTop / editScrollHeight;
+    const percentage = primaryEditor.scrollTop / editScrollHeight;
     const previewScrollHeight = markdownPreview.scrollHeight - markdownPreview.clientHeight;
     
     markdownPreview.scrollTop = percentage * previewScrollHeight;
   });
 
-  secondaryEditorTextarea.addEventListener("scroll", () => {
-    secondaryEditorBackdrop.scrollTop = secondaryEditorTextarea.scrollTop;
-    secondaryEditorLineNumbers.scrollTop = secondaryEditorTextarea.scrollTop;
+  secondaryEditor.addEventListener("scroll", () => {
 
     if (currentLayoutMode !== "split") return;
     
-    const editScrollHeight = secondaryEditorTextarea.scrollHeight - secondaryEditorTextarea.clientHeight;
+    const editScrollHeight = secondaryEditor.scrollHeight - secondaryEditor.clientHeight;
     if (editScrollHeight <= 0) return;
     
-    const percentage = secondaryEditorTextarea.scrollTop / editScrollHeight;
+    const percentage = secondaryEditor.scrollTop / editScrollHeight;
     const previewScrollHeight = secondaryMarkdownPreview.scrollHeight - secondaryMarkdownPreview.clientHeight;
     
     secondaryMarkdownPreview.scrollTop = percentage * previewScrollHeight;
@@ -3353,12 +3307,12 @@ function refreshEditorAvailability() {
   const locked = isLocalRecoveryBlocked() || isCollectionBackupBusy;
   const hasPrimaryNote = notes.some(note => note.id === activeNoteId);
   const hasSecondaryNote = notes.some(note => note.id === secondaryNoteId);
-  editorTextarea.readOnly = noteTitleInput.readOnly = locked || !hasPrimaryNote;
-  secondaryEditorTextarea.readOnly = secondaryNoteTitle.readOnly = locked || !hasSecondaryNote;
-  editorTextarea.placeholder = hasPrimaryNote ? "Type something here... Supports Markdown formatting."
+  primaryEditor.readOnly = noteTitleInput.readOnly = locked || !hasPrimaryNote;
+  secondaryEditor.readOnly = secondaryNoteTitle.readOnly = locked || !hasSecondaryNote;
+  primaryEditor.placeholder = hasPrimaryNote ? "Type something here... Supports Markdown formatting."
     : "Create or select a note to start writing.";
   noteTitleInput.placeholder = hasPrimaryNote ? "Untitled Scratchpad" : "No note selected";
-  secondaryEditorTextarea.placeholder = hasSecondaryNote ? "Type something here... Supports Markdown formatting."
+  secondaryEditor.placeholder = hasSecondaryNote ? "Type something here... Supports Markdown formatting."
     : "Create or select a note to start writing.";
   secondaryNoteTitle.placeholder = hasSecondaryNote ? "Untitled Scratchpad" : "No note selected";
   document.getElementById("empty-collection-prompt").hidden = hasPrimaryNote || isLocalRecoveryBlocked();
@@ -3476,7 +3430,7 @@ async function recoverLocalCollection(replace = false) {
       }
       activeNoteId = notes[0]?.id ?? null;
       secondaryNoteId = null;
-      editorTextarea.value = "";
+      primaryEditor.value = "";
       noteTitleInput.value = "";
       let initializedSaved = true;
       if (!notes.length && !localCollection.blocked()) {
@@ -3740,7 +3694,7 @@ async function disconnectDatabaseImpl() {
     createNote();
   } else {
     activeNoteId = notes[0]?.id ?? null;
-    editorTextarea.value = "";
+    primaryEditor.value = "";
     noteTitleInput.value = "";
     renderNoteList();
     loadActiveNote();
@@ -3776,8 +3730,8 @@ function toggleFindBar(openReplace = false) {
       toggleReplace(true);
     }
     
-    // Check if there is selected text in the textarea, prefill the find input
-    const selection = editorTextarea.value.substring(editorTextarea.selectionStart, editorTextarea.selectionEnd);
+    // Check if there is selected text in the editor, prefill the find input
+    const selection = primaryEditor.value.substring(primaryEditor.selectionStart, primaryEditor.selectionEnd);
     if (selection) {
       findInput.value = selection;
     }
@@ -3809,7 +3763,7 @@ function hideFindBar() {
   toggleReplace(false);
   updateFindCount();
   updateHighlights();
-  editorTextarea.focus();
+  primaryEditor.focus();
 }
 
 function toggleReplace(forceState) {
@@ -3856,7 +3810,7 @@ function runFind({ preserveActive = false, selectActive = true } = {}) {
   const previousActiveIndex = activeMatchIndex;
   findInput.classList.remove("invalid-regex");
 
-  const result = findTextMatches(editorTextarea.value, query, getFindOptions());
+  const result = findTextMatches(primaryEditor.value, query, getFindOptions());
   findMatches = result.matches;
   hasInvalidFindPattern = result.invalidPattern;
 
@@ -3899,10 +3853,10 @@ function selectMatch(index, focusEditor = false) {
   
   const editorIsVisible = currentLayoutMode !== "preview" || isSplitNoteMode;
   if (focusEditor && editorIsVisible) {
-    editorTextarea.focus();
+    primaryEditor.focus();
   }
-  editorTextarea.setSelectionRange(match.start, match.end);
-  updateCursorPositionForText(editorTextarea);
+  primaryEditor.setSelectionRange(match.start, match.end);
+  updateCursorPositionForText(primaryEditor);
 
   updateFindCount();
   updateHighlights();
@@ -3911,22 +3865,7 @@ function selectMatch(index, focusEditor = false) {
 }
 
 function scrollActiveMatchIntoView(match) {
-  // The backdrop has the same typography, padding, wrapping, and width as the
-  // textarea, so its active mark gives us the real visual position. Counting
-  // newline characters is not enough when a long Markdown line wraps.
-  const activeHighlight = editorBackdrop.querySelector("mark.active-match");
-
-  if (activeHighlight) {
-    const viewportOffset = Math.min(editorTextarea.clientHeight * 0.3, 160);
-    editorTextarea.scrollTop = Math.max(0, activeHighlight.offsetTop - viewportOffset);
-  } else {
-    const textBefore = editorTextarea.value.slice(0, match.start);
-    const lineCountBefore = textBefore.split("\n").length;
-    const lineHeight = parseFloat(window.getComputedStyle(editorTextarea).lineHeight) || 20;
-    editorTextarea.scrollTop = Math.max(0, (lineCountBefore - 3) * lineHeight);
-  }
-
-  editorBackdrop.scrollTop = editorTextarea.scrollTop;
+  primaryEditor.scrollToRange(match.start, match.end);
 
   if (currentLayoutMode !== "edit" && !isSplitNoteMode) {
     const previewHighlight = markdownPreview.querySelector("mark.active-match");
@@ -3949,10 +3888,10 @@ function findPrev() {
 function applyFindReplacement(edit) {
   if (isLocalRecoveryBlocked()) return;
   const previouslyFocused = document.activeElement;
-  editorTextarea.focus({ preventScroll: true });
-  applyEditorEdit(editorTextarea, edit);
+  primaryEditor.focus({ preventScroll: true });
+  applyEditorEdit(primaryEditor, edit);
 
-  if (previouslyFocused && previouslyFocused !== editorTextarea) {
+  if (previouslyFocused && previouslyFocused !== primaryEditor.contentDOM) {
     previouslyFocused.focus?.({ preventScroll: true });
   }
 }
@@ -3961,7 +3900,7 @@ function replaceOne() {
   if (findMatches.length === 0 || activeMatchIndex < 0) return;
   const match = findMatches[activeMatchIndex];
   const replaceText = replaceInput.value;
-  const text = editorTextarea.value;
+  const text = primaryEditor.value;
   
   let replacement = replaceText;
   if (isRegexMode) {
@@ -3991,7 +3930,7 @@ function replaceAll() {
   if (findMatches.length === 0) return;
   const query = findInput.value;
   const replaceText = replaceInput.value;
-  const text = editorTextarea.value;
+  const text = primaryEditor.value;
   const totalMatches = findMatches.length;
   
   let newContent = text;
@@ -4331,43 +4270,28 @@ function redrawFindHighlights() {
 
 function updateHighlights() {
   if (isCompareMode) {
-    redrawComparisonBackdrops();
+    redrawComparisonEditors();
     return;
   }
 
-  renderPrimaryEditorBackdrop();
+  renderPrimaryEditor();
 }
 
-function renderPrimaryEditorBackdrop() {
+function renderPrimaryEditor() {
   primaryEditorRenderScheduler.cancel();
-  const text = editorTextarea.value;
-  const query = findInput.value;
   const comparison = visibleNoteComparison();
   const note = notes.find(note => note.id === activeNoteId);
-  const format = note ? getNoteFormat(note) : "TXT";
-
-  updateEditorLineNumberGutter(editorTextarea, editorLineNumbers, editorWrapper, {
+  updatePreviewHighlights();
+  primaryEditor.setPresentation({
+    format: note ? getNoteFormat(note) : "TXT",
+    syntaxEnabled: syntaxHighlightingEnabled,
+    lineNumbers: editorLineNumbersEnabled,
+    compare: isCompareMode,
+    matches: isFindBarOpen && findInput.value ? findMatches : [],
+    activeMatchIndex,
+    decorations: isCompareMode ? comparison.leftDecorations : [],
     changedLines: isCompareMode ? comparison.leftChangedLines : [],
     changeType: "removed"
-  });
-
-  updatePreviewHighlights();
-  
-  if (!isFindBarOpen || !query || findMatches.length === 0) {
-    editorBackdrop.innerHTML = renderPrimaryBackdrop(text, {
-      format,
-      syntaxEnabled: syntaxHighlightingEnabled,
-      decorations: isCompareMode ? comparison.leftDecorations : []
-    });
-    return;
-  }
-
-  editorBackdrop.innerHTML = renderPrimaryBackdrop(text, {
-    format,
-    syntaxEnabled: syntaxHighlightingEnabled,
-    matches: findMatches,
-    activeMatchIndex,
-    decorations: isCompareMode ? comparison.leftDecorations : []
   });
 }
 
@@ -4470,19 +4394,20 @@ function showContextMenu(e, noteId = null, folderId = null) {
     ctxSelectAllBtn.style.display = "flex";
     ctxFindBtn.style.display = "flex";
     
-    const target = e.target.closest("textarea, input[type='text'], .markdown-preview");
+    const element = e.target.closest(".note-editor, input[type='text'], .markdown-preview");
+    const target = getNoteEditor(element) ?? element;
     if (!target) {
       hideContextMenu();
       return;
     }
     
     contextMenuTarget = target;
-    hasInsertMenu = target === editorTextarea || target === secondaryEditorTextarea;
+    hasInsertMenu = target === primaryEditor || target === secondaryEditor;
     ctxInsertDivider.style.display = hasInsertMenu ? "block" : "none";
     ctxInsertGroup.style.display = hasInsertMenu ? "block" : "none";
     
     let hasSelection = false;
-    if (target.tagName === "TEXTAREA" || target.tagName === "INPUT") {
+    if (target === primaryEditor || target === secondaryEditor || target.tagName === "INPUT") {
       hasSelection = target.selectionStart !== target.selectionEnd;
     } else {
       hasSelection = Boolean(window.getSelection().toString());
@@ -4527,7 +4452,7 @@ function hideContextMenu() {
 function handleContextInsert(templateName) {
   if (isLocalRecoveryBlocked()) return;
   const target = contextMenuTarget;
-  if (target !== editorTextarea && target !== secondaryEditorTextarea) return;
+  if (target !== primaryEditor && target !== secondaryEditor) return;
 
   const edit = getMarkdownTemplateEdit(
     target.value,
@@ -4542,21 +4467,35 @@ function handleContextInsert(templateName) {
   applyEditorEdit(target, edit);
 }
 
+function applyContextEdit(target, edit) {
+  target.focus({ preventScroll: true });
+  if (target === primaryEditor || target === secondaryEditor) {
+    applyEditorEdit(target, edit);
+  } else {
+    target.value = edit.value;
+    target.setSelectionRange(edit.selectionStart, edit.selectionEnd);
+    target.dispatchEvent(new Event("input"));
+  }
+}
+
 async function handleContextCut() {
-  if (!contextMenuTarget) return;
-  if (contextMenuTarget.readOnly) return;
+  const target = contextMenuTarget;
+  if (!target || target.readOnly) return;
   hideContextMenu();
   
-  if (contextMenuTarget.tagName === "TEXTAREA" || contextMenuTarget.tagName === "INPUT") {
-    const start = contextMenuTarget.selectionStart;
-    const end = contextMenuTarget.selectionEnd;
-    const text = contextMenuTarget.value.substring(start, end);
+  if (target === primaryEditor || target === secondaryEditor || target.tagName === "INPUT") {
+    const start = target.selectionStart;
+    const end = target.selectionEnd;
+    const source = target.value;
+    const version = target.documentVersion;
+    const text = source.substring(start, end);
     if (text) {
       await navigator.clipboard.writeText(text);
-      if (contextMenuTarget.readOnly) return;
-      contextMenuTarget.value = contextMenuTarget.value.substring(0, start) + contextMenuTarget.value.substring(end);
-      contextMenuTarget.selectionStart = contextMenuTarget.selectionEnd = start;
-      contextMenuTarget.dispatchEvent(new Event("input"));
+      if (target.readOnly || target.value !== source || target.documentVersion !== version) return;
+      applyContextEdit(target, {
+        value: source.substring(0, start) + source.substring(end),
+        selectionStart: start, selectionEnd: start
+      });
     }
   }
 }
@@ -4566,7 +4505,7 @@ async function handleContextCopy() {
   hideContextMenu();
   
   let text = "";
-  if (contextMenuTarget.tagName === "TEXTAREA" || contextMenuTarget.tagName === "INPUT") {
+  if (contextMenuTarget === primaryEditor || contextMenuTarget === secondaryEditor || contextMenuTarget.tagName === "INPUT") {
     text = contextMenuTarget.value.substring(contextMenuTarget.selectionStart, contextMenuTarget.selectionEnd);
   } else {
     text = window.getSelection().toString();
@@ -4578,19 +4517,22 @@ async function handleContextCopy() {
 }
 
 async function handleContextPaste() {
-  if (!contextMenuTarget) return;
-  if (contextMenuTarget.readOnly) return;
+  const target = contextMenuTarget;
+  if (!target || target.readOnly) return;
+  const source = target.value;
+  const version = target.documentVersion;
+  const start = target.selectionStart;
+  const end = target.selectionEnd;
   hideContextMenu();
   
   try {
     const text = await navigator.clipboard.readText();
-    if (contextMenuTarget.readOnly) return;
-    if (text && (contextMenuTarget.tagName === "TEXTAREA" || contextMenuTarget.tagName === "INPUT")) {
-      const start = contextMenuTarget.selectionStart;
-      const end = contextMenuTarget.selectionEnd;
-      contextMenuTarget.value = contextMenuTarget.value.substring(0, start) + text + contextMenuTarget.value.substring(end);
-      contextMenuTarget.selectionStart = contextMenuTarget.selectionEnd = start + text.length;
-      contextMenuTarget.dispatchEvent(new Event("input"));
+    if (target.readOnly || target.value !== source || target.documentVersion !== version) return;
+    if (text && (target === primaryEditor || target === secondaryEditor || target.tagName === "INPUT")) {
+      applyContextEdit(target, {
+        value: source.substring(0, start) + text + source.substring(end),
+        selectionStart: start + text.length, selectionEnd: start + text.length
+      });
     }
   } catch (err) {
     console.error("Paste failed", err);
@@ -4601,7 +4543,7 @@ function handleContextSelectAll() {
   if (!contextMenuTarget) return;
   hideContextMenu();
   
-  if (contextMenuTarget.tagName === "TEXTAREA" || contextMenuTarget.tagName === "INPUT") {
+  if (contextMenuTarget === primaryEditor || contextMenuTarget === secondaryEditor || contextMenuTarget.tagName === "INPUT") {
     contextMenuTarget.select();
   }
 }
@@ -4698,8 +4640,8 @@ function resetNoteComparison() {
 function scheduleNoteComparisonRefresh() {
   if (!isCompareMode) return;
 
-  const leftText = editorTextarea.value;
-  const rightText = secondaryEditorTextarea.value;
+  const leftText = primaryEditor.value;
+  const rightText = secondaryEditor.value;
   if (noteComparisonMatches(leftText, rightText)) {
     cancelScheduledNoteComparison();
     syncCompareControl();
@@ -4714,15 +4656,15 @@ function scheduleNoteComparisonRefresh() {
   noteComparisonRefreshTimer = setTimeout(() => {
     noteComparisonRefreshTimer = null;
     isNoteComparisonPending = false;
-    if (isCompareMode) redrawComparisonBackdrops({ forceComparison: true });
+    if (isCompareMode) redrawComparisonEditors({ forceComparison: true });
   }, NOTE_COMPARISON_DEBOUNCE_MS);
 }
 
-function redrawComparisonBackdrops({ forceComparison = false } = {}) {
+function redrawComparisonEditors({ forceComparison = false } = {}) {
   syncCompareControl();
   if (isCompareMode) {
-    const leftText = editorTextarea.value;
-    const rightText = secondaryEditorTextarea.value;
+    const leftText = primaryEditor.value;
+    const rightText = secondaryEditor.value;
     if (noteComparisonMatches(leftText, rightText)) {
       cancelScheduledNoteComparison();
     } else if (forceComparison || !isNoteComparisonPending) {
@@ -4733,8 +4675,8 @@ function redrawComparisonBackdrops({ forceComparison = false } = {}) {
     syncCompareControl();
   }
 
-  renderPrimaryEditorBackdrop();
-  renderSecondaryEditorBackdrop();
+  renderPrimaryEditor();
+  renderSecondaryEditor();
 }
 
 function setCompareMode(forceState, { render = true } = {}) {
@@ -4748,7 +4690,7 @@ function setCompareMode(forceState, { render = true } = {}) {
   if (!isCompareMode) resetNoteComparison();
   syncCompareControl();
 
-  if (render) redrawComparisonBackdrops();
+  if (render) redrawComparisonEditors();
 }
 
 function setDualPaneHeaderLayout(enabled) {
@@ -4798,7 +4740,7 @@ function toggleSplitNoteMode(forceState) {
     splitNoteBtn.classList.remove("active");
     compareNotesBtn.hidden = true;
     activePane = "primary";
-    editorTextarea.focus();
+    primaryEditor.focus();
   }
 
   scheduleFindHighlightRedraw(220);
@@ -4815,7 +4757,7 @@ function openNoteInSecondaryPane(noteId) {
   }
   activePane = "secondary";
   setActivePane("secondary");
-  secondaryEditorTextarea.focus();
+  secondaryEditor.focus();
 }
 
 function populateSecondaryNoteSelect() {
@@ -4866,19 +4808,19 @@ function loadSecondaryNote() {
   refreshEditorAvailability();
   const note = notes.find(n => n.id === secondaryNoteId);
   if (!note) {
-    secondaryEditorTextarea.value = secondaryNoteTitle.value = "";
-    for (const element of [secondaryMarkdownPreview, secondaryEditorBackdrop, secondaryEditorLineNumbers]) element.replaceChildren();
+    secondaryEditor.value = secondaryNoteTitle.value = "";
+    secondaryMarkdownPreview.replaceChildren();
     return;
   }
 
   cancelScheduledNoteComparison();
 
   secondaryNoteTitle.value = note.title;
-  secondaryEditorTextarea.value = note.content;
+  secondaryEditor.value = note.content;
 
   const compareStopped = syncCompareControl();
-  updateSecondaryEditorBackdrop();
-  if (compareStopped) renderPrimaryEditorBackdrop();
+  updateSecondaryEditor();
+  if (compareStopped) renderPrimaryEditor();
   updateSecondaryMarkdownPreview();
   if (secondaryNoteSelect.value !== note.id) {
     secondaryNoteSelect.value = note.id;
@@ -4890,10 +4832,10 @@ function handleSecondaryEditorInput() {
   const note = notes.find(n => n.id === secondaryNoteId);
   if (!note) { loadSecondaryNote(); return; }
 
-  note.content = secondaryEditorTextarea.value;
+  note.content = secondaryEditor.value;
   note.updatedAt = Date.now();
   scheduleMcpNoteUpdate(note.id);
-  updateCursorPositionForText(secondaryEditorTextarea);
+  updateCursorPositionForText(secondaryEditor);
   scheduleNoteComparisonRefresh();
   secondaryEditorRenderScheduler.schedule();
 
@@ -4920,7 +4862,7 @@ function handleSecondaryEditorInput() {
   previewDebounceTimer = setTimeout(() => {
     updateSecondaryMarkdownPreview();
     if (activePane === "secondary") {
-      updateWordCharCountForText(secondaryEditorTextarea);
+      updateWordCharCountForText(secondaryEditor);
     }
   }, 150);
 }
@@ -4946,7 +4888,7 @@ function handleSecondaryTitleInput() {
 function updateSecondaryMarkdownPreview() {
   if (currentLayoutMode === "edit") return;
   if (window.marked) {
-    secondaryMarkdownPreview.innerHTML = renderMarkdown(secondaryEditorTextarea.value);
+    secondaryMarkdownPreview.innerHTML = renderMarkdown(secondaryEditor.value);
     highlightPreviewCode(secondaryMarkdownPreview, window.hljs, syntaxHighlightingEnabled);
   }
 }
@@ -4956,11 +4898,11 @@ function setActivePane(pane) {
   if (pane === "secondary") {
     primaryPaneWrapper.classList.remove("active-pane");
     secondaryPaneWrapper.classList.add("active-pane");
-    updateWordCharCountForText(secondaryEditorTextarea);
+    updateWordCharCountForText(secondaryEditor);
   } else {
     primaryPaneWrapper.classList.add("active-pane");
     secondaryPaneWrapper.classList.remove("active-pane");
-    updateWordCharCountForText(editorTextarea);
+    updateWordCharCountForText(primaryEditor);
   }
 }
 

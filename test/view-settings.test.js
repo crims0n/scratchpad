@@ -56,10 +56,7 @@ test("editor and sidebar view settings are adjustable and persistent", async () 
     ["Sidebar preview lines", "Editor zoom", "Line spacing", "Syntax highlighting", "Line numbers"]
   );
   assert.equal(root.style.getPropertyValue("zoom"), "", "the application UI is not scaled");
-  assert.match(
-    styles,
-    /\.editor-textarea,\s*\.editor-backdrop,\s*\.editor-line-numbers\s*\{[^}]*font-size:\s*var\(--editor-font-size\)/s
-  );
+  assert.match(styles, /\.note-editor \.cm-editor\s*\{[^}]*font-size:\s*var\(--editor-font-size\)/s);
   assert.equal(root.style.getPropertyValue("--editor-font-size"), "1.2rem");
   assert.equal(root.style.getPropertyValue("--editor-line-height"), "1.8");
   assert.equal(root.style.getPropertyValue("--note-preview-lines"), "2");
@@ -73,8 +70,8 @@ test("editor and sidebar view settings are adjustable and persistent", async () 
   assert.equal(document.getElementById("line-numbers-toggle").getAttribute("aria-pressed"), "true");
   assert.equal(root.classList.contains("editor-line-numbers-enabled"), true);
   assert.deepEqual(
-    [...document.querySelectorAll("#editor-line-numbers .editor-line-number-row")]
-      .map(row => row.dataset.lineNumber),
+    [...document.querySelectorAll("#editor .cm-lineNumbers .cm-gutterElement:not(:first-child)")]
+      .map(row => row.textContent),
     ["1", "2", "3"]
   );
   assert.equal(document.querySelector(".note-item-snippet").textContent, "First detail\nSecond detail");

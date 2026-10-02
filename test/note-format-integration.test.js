@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { bootApp } from './helpers/app-harness.js';
+import { getAppElement, bootApp } from './helpers/app-harness.js';
 
 test('sidebar badges work across folders, imports, both editors, and collection replacement', async () => {
   const notes = [
@@ -41,7 +41,7 @@ test('sidebar badges work across folders, imports, both editors, and collection 
   assert.equal(badge('json').textContent, 'JSON');
   app.click('split-note-btn');
   const secondaryId = document.getElementById('secondary-note-select').value;
-  const secondary = document.getElementById('secondary-editor-textarea');
+  const secondary = getAppElement("secondary-editor");
   secondary.value = 'name,age\nAlice,30';
   secondary.dispatchEvent(new app.dom.window.Event('input', { bubbles: true }));
   await app.settle(500);

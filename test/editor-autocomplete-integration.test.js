@@ -3,11 +3,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { bootApp } from "./helpers/app-harness.js";
+import { getAppElement, bootApp } from "./helpers/app-harness.js";
 
-test("list autocomplete edits the textarea and follows the normal input path", async () => {
+test("list autocomplete edits the editor and follows the normal input path", async () => {
   const { dom, type } = await bootApp();
-  const editor = document.getElementById("editor-textarea");
+  const editor = getAppElement("editor");
   await type("- first");
   editor.setSelectionRange(editor.value.length, editor.value.length);
 

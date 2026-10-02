@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { bootApp } from "./helpers/app-harness.js";
+import { getAppElement, bootApp } from "./helpers/app-harness.js";
 
 function pressKey(dom, editor, key) {
   const event = new dom.window.KeyboardEvent("keydown", {
@@ -17,7 +17,7 @@ function pressKey(dom, editor, key) {
 
 test("an empty generated table row can be exited with Enter or Backspace", async () => {
   const { dom, type } = await bootApp();
-  const editor = document.getElementById("editor-textarea");
+  const editor = getAppElement("editor");
   const populated = "| A | B |\n| --- | --- |\n| 1 | 2 |";
 
   await type(populated);

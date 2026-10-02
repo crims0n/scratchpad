@@ -250,6 +250,7 @@ Production distribution will also require platform signing and, on macOS, notari
 | --- | --- |
 | Desktop runtime | Tauri v2 and Rust |
 | Frontend | Vanilla HTML, CSS, and JavaScript |
+| Editor | Offline-bundled CodeMirror 6 behind a note-editor adapter; selection, undo, wrapping, and gutters in both panes |
 | Markdown | Bundled Marked parser with an allowlist sanitizer |
 | Syntax highlighting | Bundled Highlight.js for JSON/XML/YAML editors and labeled preview fences; local Markdown and CSV tokenizers |
 | Note comparison | Bundled jsdiff with line and word-level source comparison |
@@ -266,4 +267,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow. Please repo
 
 ## License
 
-Scratchpad is free software licensed under [GPL-3.0-or-later](LICENSE). The bundled Marked parser is provided under the MIT License; Highlight.js and jsdiff are provided under the BSD 3-Clause License. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Scratchpad is free software licensed under [GPL-3.0-or-later](LICENSE). The bundled CodeMirror editor and Marked parser are provided under the MIT License; Highlight.js and jsdiff are provided under the BSD 3-Clause License. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

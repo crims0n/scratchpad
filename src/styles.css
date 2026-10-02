@@ -1249,232 +1249,144 @@ button.view-setting-value:hover {
   flex-direction: column;
 }
 
-/* Editor Specifics */
-.editor-textarea,
-.editor-backdrop,
-.editor-line-numbers {
+/* CodeMirror owns text, selection, wrapping, scrolling, and aligned gutters. */
+.note-editor {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
+  inset: 0;
+  color: var(--editor-text);
+  background: var(--editor-bg);
+}
+
+.note-editor .cm-editor {
   height: 100%;
-  padding: 24px;
-  font-family: var(--font-mono);
   font-size: var(--editor-font-size);
+}
+
+.note-editor .cm-editor.cm-focused { outline: none; }
+
+.note-editor .cm-scroller {
+  overflow: auto;
+  font-family: var(--font-mono);
   line-height: var(--editor-line-height);
-  tab-size: 4;
-  border: none;
-  box-sizing: border-box;
-  margin: 0;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  /* Keep both text layers the same width when wrapping creates a scrollbar. */
   scrollbar-gutter: stable;
 }
 
-.editor-line-numbers {
-  display: none;
-  color: transparent;
-  overflow-y: hidden;
-  pointer-events: none;
-  user-select: none;
-  z-index: 3;
-}
-
-.editor-line-numbers-enabled .editor-line-numbers {
-  display: block;
-}
-
-/* Compare reuses the aligned gutter mirror as a marker rail without exposing
-   line numbers or changing editor padding when the line-number setting is off. */
-.app-container.compare-mode .editor-line-numbers {
-  display: block;
-}
-
-html:not(.editor-line-numbers-enabled) .app-container.compare-mode .editor-line-number-row::before {
-  display: none;
-}
-
-.editor-line-numbers-enabled .editor-wrapper::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: var(--editor-line-number-gutter);
-  background-color: color-mix(in srgb, var(--bg-input) 55%, var(--editor-bg));
-  border-right: 1px solid color-mix(in srgb, var(--border-color) 65%, transparent);
-  box-sizing: border-box;
-  pointer-events: none;
-  z-index: 2;
-}
-
-.editor-line-numbers-enabled .editor-textarea,
-.editor-line-numbers-enabled .editor-backdrop,
-.editor-line-numbers-enabled .editor-line-numbers {
-  padding-left: calc(24px + var(--editor-line-number-gutter));
-}
-
-.editor-line-number-row {
-  position: relative;
-  min-height: 1lh;
-}
-
-.editor-line-number-row::before {
-  content: attr(data-line-number);
-  position: absolute;
-  top: 0;
-  left: calc(0px - var(--editor-line-number-gutter) - 24px);
-  width: calc(var(--editor-line-number-gutter) - 0.7em);
-  color: var(--text-muted);
-  text-align: right;
-  opacity: 0.42;
-}
-
-.editor-line-number-row.editor-line-number-diff-added::after,
-.editor-line-number-row.editor-line-number-diff-removed::after {
-  content: "";
-  position: absolute;
-  top: 0.15lh;
-  bottom: 0.15lh;
-  left: -20px;
-  width: 3px;
-  border-radius: 2px;
-}
-
-.editor-line-numbers-enabled .editor-line-number-row.editor-line-number-diff-added::after,
-.editor-line-numbers-enabled .editor-line-number-row.editor-line-number-diff-removed::after {
-  left: calc(0px - var(--editor-line-number-gutter) - 20px);
-}
-
-.editor-line-number-row.editor-line-number-diff-added::after {
-  background-color: #22a559;
-}
-
-.editor-line-number-row.editor-line-number-diff-removed::after {
-  background-color: #e05263;
-}
-
-.editor-textarea {
-  background: transparent;
-  color: var(--editor-text);
-  z-index: 2;
-  outline: none;
-  resize: none;
-  overflow-y: auto;
-}
-
-.editor-backdrop {
-  background-color: var(--editor-bg);
-  color: transparent; /* hide duplicate text, show mark highlights only */
-  z-index: 1;
-  overflow-y: hidden; /* scroll synced via JS */
-  pointer-events: none; /* passes all pointer interactions to textarea */
-}
-
-.editor-backdrop mark {
-  background-color: rgba(139, 92, 246, 0.3); /* Purple for general matches */
-  color: transparent;
-  border-radius: 2px;
-}
-
-.editor-backdrop mark.active-match {
-  background-color: rgba(234, 179, 8, 0.5) !important; /* Yellow for active match */
-}
-
-.editor-textarea::selection {
-  background-color: rgba(139, 92, 246, 0.35) !important;
-}
-
-/* The textarea remains the editable surface; its color-only backdrop supplies
-   syntax colors without changing selection, caret, wrapping, or undo behavior. */
-.syntax-highlighting-enabled .editor-textarea {
-  color: transparent;
+.note-editor .cm-content {
+  padding: 24px 0;
   caret-color: var(--editor-text);
 }
 
-.syntax-highlighting-enabled .editor-textarea::placeholder {
+.note-editor .cm-cursor,
+.note-editor .cm-dropCursor { border-left-color: var(--editor-text); }
+
+.note-editor .cm-line { padding: 0 24px; }
+
+.note-editor .cm-placeholder { color: var(--text-muted); }
+
+.note-editor .cm-gutters {
+  background: color-mix(in srgb, var(--bg-input) 55%, var(--editor-bg));
   color: var(--text-muted);
+  border-right: 1px solid color-mix(in srgb, var(--border-color) 65%, transparent);
 }
 
-.syntax-highlighting-enabled .editor-backdrop {
-  color: var(--editor-text);
+.note-editor .cm-lineNumbers .cm-gutterElement {
+  padding: 0 8px 0 12px;
+  opacity: 0.42;
 }
 
-.syntax-highlighting-enabled .editor-backdrop mark {
+.note-editor .note-editor-diff-gutter { width: 7px; }
+.note-editor .note-editor-diff-gutter .cm-gutterElement {
+  border-left: 3px solid transparent;
+  margin-left: 2px;
+}
+.note-editor .editor-line-number-diff-added { border-left-color: #22a559 !important; }
+.note-editor .editor-line-number-diff-removed { border-left-color: #e05263 !important; }
+
+.note-editor .cm-selectionBackground,
+.note-editor .cm-focused .cm-selectionBackground {
+  background: rgba(139, 92, 246, 0.35);
+}
+
+.note-editor mark.find-match {
+  background: rgba(139, 92, 246, 0.3);
   color: inherit;
+  border-radius: 2px;
 }
 
-.editor-backdrop .syntax-punctuation {
+.note-editor mark.active-match { background: rgba(234, 179, 8, 0.5); }
+
+.note-editor .syntax-punctuation {
   color: var(--syntax-muted);
 }
 
-.editor-backdrop .syntax-heading {
+.note-editor .syntax-heading {
   color: var(--accent-color);
 }
 
-.editor-backdrop .syntax-emphasis {
+.note-editor .syntax-emphasis {
   color: var(--accent-hover);
 }
 
-.editor-backdrop .syntax-link {
+.note-editor .syntax-link {
   color: var(--accent-hover);
 }
 
-.editor-backdrop .syntax-code,
-.editor-backdrop .syntax-code-block {
+.note-editor .syntax-code,
+.note-editor .syntax-code-block {
   color: var(--syntax-code);
 }
 
-.editor-backdrop .syntax-key,
-.editor-backdrop .syntax-tag,
-.editor-backdrop .syntax-literal {
+.note-editor .syntax-key,
+.note-editor .syntax-tag,
+.note-editor .syntax-literal {
   color: var(--accent-color);
 }
 
-.editor-backdrop .syntax-string,
-.editor-backdrop .syntax-csv-1 {
+.note-editor .syntax-string,
+.note-editor .syntax-csv-1 {
   color: var(--syntax-string);
 }
 
-.editor-backdrop .syntax-number,
-.editor-backdrop .syntax-csv-2 {
+.note-editor .syntax-number,
+.note-editor .syntax-csv-2 {
   color: var(--syntax-number);
 }
 
-.editor-backdrop .syntax-comment {
+.note-editor .syntax-comment {
   color: var(--syntax-muted);
 }
 
-.editor-backdrop .syntax-meta {
+.note-editor .syntax-meta {
   color: var(--syntax-danger);
 }
 
-.editor-backdrop .syntax-csv-0 {
+.note-editor .syntax-csv-0 {
   color: var(--syntax-code);
 }
 
-.editor-backdrop .diff-line-added,
-.editor-backdrop .diff-line-removed,
-.editor-backdrop .diff-text-added,
-.editor-backdrop .diff-text-removed {
+.note-editor .diff-line-added,
+.note-editor .diff-line-removed,
+.note-editor .diff-text-added,
+.note-editor .diff-text-removed {
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
   border-radius: 2px;
 }
 
-.editor-backdrop .diff-line-added {
+.note-editor .diff-line-added {
   background-color: color-mix(in srgb, #22a559 14%, transparent);
 }
 
-.editor-backdrop .diff-line-removed {
+.note-editor .diff-line-removed {
   background-color: color-mix(in srgb, #e05263 14%, transparent);
 }
 
-.editor-backdrop .diff-text-added {
+.note-editor .diff-text-added {
   background-color: color-mix(in srgb, #22a559 30%, transparent);
   box-shadow: inset 0 -1px color-mix(in srgb, #22a559 70%, transparent);
 }
 
-.editor-backdrop .diff-text-removed {
+.note-editor .diff-text-removed {
   background-color: color-mix(in srgb, #e05263 30%, transparent);
   box-shadow: inset 0 -1px color-mix(in srgb, #e05263 70%, transparent);
 }

@@ -2,11 +2,11 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bootApp } from "./helpers/app-harness.js";
+import { getAppElement, bootApp } from "./helpers/app-harness.js";
 
 test("the native About menu opens the existing in-app About panel", async () => {
   const app = await bootApp();
-  const editor = document.getElementById("editor-textarea");
+  const editor = getAppElement("editor");
   const backdrop = document.getElementById("about-modal-backdrop");
   editor.focus();
 
@@ -22,5 +22,5 @@ test("the native About menu opens the existing in-app About panel", async () => 
   await app.emit("scratchpad-open-about");
   document.getElementById("close-about-btn").click();
   assert.equal(backdrop.style.display, "none");
-  assert.equal(document.activeElement, editor);
+  assert.equal(document.activeElement, editor.contentDOM);
 });

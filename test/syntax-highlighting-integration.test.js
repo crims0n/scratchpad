@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
-import { bootApp } from "./helpers/app-harness.js";
+import { getAppElement, editorContent, bootApp } from "./helpers/app-harness.js";
 
 test("both editors follow detected formats through edits, Find, Compare, toggles, and collection switching", async () => {
   const context = vm.createContext({});
@@ -29,25 +29,25 @@ test("both editors follow detected formats through edits, Find, Compare, toggles
     }
   });
   const { document, Event, KeyboardEvent } = app.dom.window;
-  const editor = document.getElementById("editor-textarea");
-  const backdrop = document.getElementById("editor-backdrop");
+  const editor = getAppElement("editor");
+  const backdrop = editorContent("editor");
   for (const [format, content, selector] of fixtures) {
     document.querySelector(`.note-item[data-id="${format}"]`).click();
     assert.equal(editor.value, content);
-    assert.equal(backdrop.textContent, `${content}\n`);
+    assert.equal([...backdrop.querySelectorAll(".cm-line")].map(line => line.textContent).join("\n"), content);
     if (selector) assert.ok(backdrop.querySelector(selector), `${format} receives its syntax`);
     else assert.equal(backdrop.querySelector('[class^="syntax-"]'), null);
   }
   document.querySelector('.note-item[data-id="JSON"]').click();
   app.click("split-note-btn");
-  const secondary = document.getElementById("secondary-editor-textarea");
-  const secondaryBackdrop = document.getElementById("secondary-editor-backdrop");
+  const secondary = getAppElement("secondary-editor");
+  const secondaryBackdrop = editorContent("secondary-editor");
   const secondarySelect = document.getElementById("secondary-note-select");
   for (const [format, content, selector] of fixtures.filter(([format]) => format !== "JSON")) {
     secondarySelect.value = format;
     secondarySelect.dispatchEvent(new Event("change", { bubbles: true }));
     assert.equal(secondary.value, content);
-    assert.equal(secondaryBackdrop.textContent, `${content}\n`);
+    assert.equal([...secondaryBackdrop.querySelectorAll(".cm-line")].map(line => line.textContent).join("\n"), content);
     if (selector) assert.ok(secondaryBackdrop.querySelector(selector));
     else assert.equal(secondaryBackdrop.querySelector('[class^="syntax-"]'), null);
   }
@@ -57,8 +57,8 @@ test("both editors follow detected formats through edits, Find, Compare, toggles
   assert.equal(secondaryBackdrop.querySelector(".syntax-number").textContent, "43");
   app.click("compare-notes-btn");
   await app.settle(100);
-  assert.ok(backdrop.querySelector(".diff-text-removed .syntax-number"));
-  assert.ok(secondaryBackdrop.querySelector(".diff-text-added .syntax-number"));
+  assert.ok(backdrop.querySelector(".syntax-number .diff-text-removed, .diff-text-removed .syntax-number"));
+  assert.ok(secondaryBackdrop.querySelector(".syntax-number .diff-text-added, .diff-text-added .syntax-number"));
   app.click("syntax-highlighting-toggle");
   assert.equal(backdrop.querySelector('[class^="syntax-"]'), null);
   assert.equal(secondaryBackdrop.querySelector('[class^="syntax-"]'), null);
@@ -70,7 +70,9 @@ test("both editors follow detected formats through edits, Find, Compare, toggles
   const find = document.getElementById("find-input");
   find.value = "Scratchpad";
   find.dispatchEvent(new Event("input", { bubbles: true }));
-  assert.equal(backdrop.querySelector("mark.active-match .syntax-string").textContent, "Scratchpad");
+  const activeMatch = backdrop.querySelector("mark.active-match");
+  assert.equal(activeMatch.textContent, "Scratchpad");
+  assert.ok(activeMatch.closest(".syntax-string") || activeMatch.querySelector(".syntax-string"));
   const selection = [editor.selectionStart, editor.selectionEnd];
   app.click("syntax-highlighting-toggle");
   assert.equal(backdrop.querySelector("mark.active-match").textContent, "Scratchpad");

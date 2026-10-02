@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bootApp, settle } from "./helpers/app-harness.js";
+import { getAppElement, bootApp, settle } from "./helpers/app-harness.js";
 
 const seed = { id: "original", title: "Original", content: "Original body", updatedAt: 1, isTitleLocked: true, folderId: null };
 
@@ -53,7 +53,7 @@ test("MCP creations persist, preserve editor work, and cannot cross workspace sw
   assert.equal(app.read("scratchpad_notes").filter(n => n.id === localNote.note.id).length, 1);
   assert.equal((await send("create_note", localNoteArgs)).note.id, localNote.note.id);
   assert.equal(document.getElementById("note-title").value, "Original");
-  assert.equal(document.getElementById("editor-textarea").value, "Original body");
+  assert.equal(getAppElement("editor").value, "Original body");
 
   const storagePrototype = app.dom.window.Storage.prototype;
   const originalSetItem = storagePrototype.setItem;
@@ -86,7 +86,7 @@ test("MCP creations persist, preserve editor work, and cannot cross workspace sw
   holdSave = {};
   const created = send("create_note", noteArgs);
   await settle(20);
-  const editor = document.getElementById("editor-textarea");
+  const editor = getAppElement("editor");
   editor.focus();
   editor.value = "Typed while MCP was saving";
   editor.dispatchEvent(new app.dom.window.Event("input"));

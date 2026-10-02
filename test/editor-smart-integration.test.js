@@ -3,11 +3,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { bootApp } from "./helpers/app-harness.js";
+import { getAppElement, bootApp } from "./helpers/app-harness.js";
 
 test("smart editing uses the normal editor input path", async () => {
   const { dom, type } = await bootApp();
-  const editor = document.getElementById("editor-textarea");
+  const editor = getAppElement("editor");
   await type("");
   editor.setSelectionRange(0, 0);
 
