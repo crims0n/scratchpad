@@ -48,16 +48,6 @@ const DECORATION_CLASSES = new Set([
   "diff-text-removed"
 ]);
 
-function escapeHTML(value) {
-  return String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\r/g, "&#13;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
 function isEscaped(text, index) {
   let slashCount = 0;
   for (let cursor = index - 1; cursor >= 0 && text[cursor] === "\\"; cursor -= 1) {
@@ -239,31 +229,33 @@ function syntaxSettings(options) {
   };
 }
 
-export function renderEditorBackdrop(text, options = {}) {
-  const source = String(text ?? "");
-  const { enabled, format, highlighter } = syntaxSettings(options);
-  const classes = enabled ? buildFormatClasses(source, format, highlighter) : [];
-  return composeEditorBackdrop(source, classes, options);
-}
-
-// Each pane holds just its latest tokenization. Find, comparison, and resize
-// redraws can reuse it; edits, format changes, and toggles invalidate it.
-export function createEditorBackdropRenderer() {
+// Native editor decorations use the detected format colors.
+// Cache token ranges separately so Find/Compare never retokenize unchanged text.
+export function createEditorDecorationBuilder() {
   let previous = null;
   return (text, options = {}) => {
     const source = String(text ?? "");
     const settings = syntaxSettings(options);
     if (!previous || previous.source !== source || Object.keys(settings).some(key => previous[key] !== settings[key])) {
-      previous = {
-        source, ...settings,
-        classes: settings.enabled ? buildFormatClasses(source, settings.format, settings.highlighter) : []
-      };
+      const classes = settings.enabled ? buildFormatClasses(source, settings.format, settings.highlighter) : [];
+      const ranges = [];
+      for (let start = 0; start < classes.length;) {
+        let end = start + 1;
+        while (end < classes.length && classes[end] === classes[start]) end += 1;
+        if (classes[start]) ranges.push({ start, end, className: classes[start] });
+        start = end;
+      }
+      previous = { source, ...settings, ranges };
     }
-    if (!options.matches?.length && !options.decorations?.length) {
-      previous.html ??= composeEditorBackdrop(source, previous.classes, options);
-      return previous.html;
-    }
-    return composeEditorBackdrop(source, previous.classes, options);
+    return [
+      ...previous.ranges,
+      ...normalizeMatches(options.matches, source.length).map(match => ({
+        ...match,
+        className: match.originalIndex === options.activeMatchIndex ? "find-match active-match" : "find-match",
+        tagName: "mark"
+      })),
+      ...normalizeDecorations(options.decorations, source.length)
+    ];
   };
 }
 
@@ -292,67 +284,6 @@ function normalizeDecorations(decorations, textLength) {
       DECORATION_CLASSES.has(item.className)
     ))
     .sort((left, right) => left.start - right.start || left.end - right.end);
-}
-
-function composeEditorBackdrop(
-  source,
-  syntaxClasses,
-  { matches = [], activeMatchIndex = -1, decorations = [] } = {}
-) {
-  const normalizedMatches = normalizeMatches(matches, source.length);
-  const normalizedDecorations = normalizeDecorations(decorations, source.length);
-  const boundaries = new Set([0, source.length]);
-  const decorationStarts = new Map();
-  const decorationEnds = new Map();
-
-  for (let index = 1; index < syntaxClasses.length; index += 1) {
-    if (syntaxClasses[index] !== syntaxClasses[index - 1]) boundaries.add(index);
-  }
-  normalizedMatches.forEach((match) => {
-    boundaries.add(match.start);
-    boundaries.add(match.end);
-  });
-  normalizedDecorations.forEach((item) => {
-    boundaries.add(item.start);
-    boundaries.add(item.end);
-    decorationStarts.set(item.start, [...(decorationStarts.get(item.start) ?? []), item]);
-    decorationEnds.set(item.end, [...(decorationEnds.get(item.end) ?? []), item]);
-  });
-
-  const orderedBoundaries = [...boundaries].sort((left, right) => left - right);
-  const activeDecorations = new Set();
-  let matchIndex = 0;
-  let html = "";
-
-  for (let boundaryIndex = 0; boundaryIndex < orderedBoundaries.length - 1; boundaryIndex += 1) {
-    const start = orderedBoundaries[boundaryIndex];
-    const end = orderedBoundaries[boundaryIndex + 1];
-    decorationEnds.get(start)?.forEach((item) => activeDecorations.delete(item));
-    decorationStarts.get(start)?.forEach((item) => activeDecorations.add(item));
-
-    while (matchIndex < normalizedMatches.length && normalizedMatches[matchIndex].end <= start) {
-      matchIndex += 1;
-    }
-
-    const match = normalizedMatches[matchIndex];
-    const insideMatch = match && match.start <= start && start < match.end;
-    const syntaxClass = syntaxClasses[start];
-
-    let fragment = escapeHTML(source.slice(start, end));
-    if (syntaxClass) fragment = `<span class="${syntaxClass}">${fragment}</span>`;
-    if (insideMatch) {
-      const activeClass = match.originalIndex === activeMatchIndex ? ' class="active-match"' : "";
-      fragment = `<mark${activeClass}>${fragment}</mark>`;
-    }
-    if (activeDecorations.size > 0) {
-      const classNames = [...new Set([...activeDecorations].map((item) => item.className))].join(" ");
-      fragment = `<span class="${classNames}">${fragment}</span>`;
-    }
-    html += fragment;
-  }
-
-  // The extra line keeps the backdrop's final empty line aligned with a textarea.
-  return `${html}\n`;
 }
 
 export function highlightPreviewCode(container, highlighter, enabled = true) {

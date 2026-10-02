@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bootApp } from "./helpers/app-harness.js";
+import { getAppElement, bootApp } from "./helpers/app-harness.js";
 import { parseBackup, serializeBackup } from "../src/collection-backup.js";
 
 const note = id => ({ id, title: id, content: id, updatedAt: 100, isTitleLocked: true, isPinned: false, folderId: null });
@@ -73,8 +73,8 @@ test("clear saves both pending panes, preserves a complete backup and all settin
   const select = document.getElementById("secondary-note-select");
   select.value = "two";
   select.dispatchEvent(new window.Event("change"));
-  for (const [id, text] of [["editor-textarea", "pending primary"], ["secondary-editor-textarea", "pending secondary"]]) {
-    const field = document.getElementById(id);
+  for (const [id, text] of [["editor", "pending primary"], ["secondary-editor", "pending secondary"]]) {
+    const field = getAppElement(id);
     field.value = text;
     field.dispatchEvent(new window.Event("input"));
   }
@@ -97,9 +97,9 @@ test("clear saves both pending panes, preserves a complete backup and all settin
   const restarted = await boot(bridge, { storage: disk });
   assert.deepEqual(local(restarted), empty);
   assert.deepEqual(restarted.sidebarTitles(), []);
-  for (const id of ["editor-textarea", "note-title", "secondary-editor-textarea", "secondary-note-title"]) {
-    assert.equal(document.getElementById(id).readOnly, true);
-    assert.equal(document.getElementById(id).value, "");
+  for (const id of ["editor", "note-title", "secondary-editor", "secondary-note-title"]) {
+    assert.equal(getAppElement(id).readOnly, true);
+    assert.equal(getAppElement(id).value, "");
   }
   assert.equal(document.getElementById("empty-collection-prompt").hidden, false);
   restarted.dom.window.close();
@@ -107,7 +107,7 @@ test("clear saves both pending panes, preserves a complete backup and all settin
 
 test("cancel resumes only the edits already pending without creating a safety backup", async () => {
   const bridge = native(), app = await boot(bridge);
-  const editor = document.getElementById("editor-textarea");
+  const editor = getAppElement("editor");
   editor.value = "pending edit";
   editor.dispatchEvent(new window.Event("input"));
   await open(app);
@@ -203,7 +203,7 @@ test("failed rollback quarantines local data, and restart recovers the pre-clear
     assert.match(document.getElementById("local-clear-status").textContent, /read-only until checkpoint recovery/);
     disk = app.dumpStorage();
     app.click("local-clear-cancel"); await app.settle();
-    assert.equal(document.getElementById("editor-textarea").readOnly, true);
+    assert.equal(getAppElement("editor").readOnly, true);
     app.dom.window.close();
   } finally { proto.setItem = originalSet; }
   const restarted = await boot(bridge, { storage: disk });
@@ -238,7 +238,7 @@ test("clear preview and pending writes block background edits, switching, MCP wr
   await open(app);
   for (const phase of ["preview", "pending write"]) {
     assert.equal(document.getElementById("app").inert, true);
-    assert.equal(document.getElementById("editor-textarea").readOnly, true);
+    assert.equal(getAppElement("editor").readOnly, true);
     app.click("new-note-btn"); app.click("db-connect-btn"); app.click("collection-restore-btn");
     document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "n", metaKey: true, bubbles: true, cancelable: true }));
     await onClose({ preventDefault() {} });

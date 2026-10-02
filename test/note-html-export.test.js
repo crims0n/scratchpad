@@ -74,7 +74,7 @@ test("export retains resolved theme colours, but not app CSS or find decorations
   } })).window.document;
   assert.match(doc.querySelector("style").textContent, /--preview-bg: rgba\(9, 13, 22, 1\)/);
   assert.match(doc.querySelector("style").textContent, /--preview-text: rgba\(229, 231, 235, 0\.8\)/);
-  assert.doesNotMatch(doc.querySelector("style").textContent, /find-preview|sidebar|editor-textarea/);
+  assert.doesNotMatch(doc.querySelector("style").textContent, /find-preview|sidebar|note-editor/);
 });
 
 test("empty notes stay empty, highlighting follows the setting, and missing parser is an error", () => {

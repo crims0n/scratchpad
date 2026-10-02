@@ -302,9 +302,8 @@ export function getMarkdownPasteEdit(value, selectionStart, selectionEnd, text) 
   return null;
 }
 
-export function handleEditorSmartKeydown(event) {
+export function handleEditorSmartKeydown(event, textarea = event.currentTarget) {
   if (event.isComposing || event.metaKey || event.ctrlKey) return;
-  const textarea = event.currentTarget;
 
   if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
     const edit = getListMoveEdit(
@@ -349,11 +348,10 @@ export function handleEditorSmartKeydown(event) {
   }
 }
 
-export function handleMarkdownPaste(event) {
+export function handleMarkdownPaste(event, textarea = event.currentTarget) {
   const text = event.clipboardData?.getData("text/plain");
   if (!text) return;
 
-  const textarea = event.currentTarget;
   const edit = getMarkdownPasteEdit(
     textarea.value,
     textarea.selectionStart,

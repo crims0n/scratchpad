@@ -9,6 +9,16 @@
 import { readFile } from "node:fs/promises";
 import { JSDOM } from "jsdom";
 import * as Diff from "diff";
+import { after } from "node:test";
+import { getNoteEditor } from "../../src/note-editor.js";
+
+export function getAppElement(id, doc = document) {
+  const element = doc.getElementById(id);
+  return getNoteEditor(element) ?? element;
+}
+export const editorContent = (id = "editor") => getAppElement(id).contentDOM;
+let previousEditors = [];
+after(() => previousEditors.forEach(editor => editor.destroy()));
 
 export const settle = (ms = 50) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -20,6 +30,8 @@ export const settle = (ms = 50) => new Promise((resolve) => setTimeout(resolve, 
 // validate imported theme colours.
 export async function bootApp({ storage = {}, handlers = {}, instance = 1, windowApi = {}, globals = {}, beforeBoot,
   recoveryCopies = [], storageQuota = 5000000 } = {}) {
+  previousEditors.forEach(editor => editor.destroy());
+  previousEditors = [];
   const html = await readFile(new URL("../../src/index.html", import.meta.url), "utf8");
   const dom = new JSDOM(html, { url: "http://localhost/", pretendToBeVisual: true, storageQuota });
 
@@ -49,6 +61,13 @@ export async function bootApp({ storage = {}, handlers = {}, instance = 1, windo
   dom.window.Diff = Diff;
   globalThis.window = dom.window;
   globalThis.document = dom.window.document;
+  globalThis.Window = dom.window.Window;
+  globalThis.MutationObserver = dom.window.MutationObserver;
+  globalThis.requestAnimationFrame = dom.window.requestAnimationFrame.bind(dom.window);
+  globalThis.cancelAnimationFrame = dom.window.cancelAnimationFrame.bind(dom.window);
+  globalThis.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
+  if (!dom.window.Range.prototype.getClientRects) dom.window.Range.prototype.getClientRects = () => [];
+  if (!dom.window.Range.prototype.getBoundingClientRect) dom.window.Range.prototype.getBoundingClientRect = () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 });
   globalThis.localStorage = dom.window.localStorage;
   Object.defineProperty(globalThis, "navigator", {
     value: dom.window.navigator,
@@ -73,6 +92,14 @@ export async function bootApp({ storage = {}, handlers = {}, instance = 1, windo
   await beforeBoot?.(dom.window);
 
   await import(`${new URL("../../src/main.js", import.meta.url).href}?boot=${instance}`);
+  previousEditors = [getAppElement("editor"), getAppElement("secondary-editor")];
+  const closeWindow = dom.window.close.bind(dom.window);
+  dom.window.close = () => {
+    const ownedEditors = [getAppElement("editor", dom.window.document), getAppElement("secondary-editor", dom.window.document)];
+    ownedEditors.forEach(editor => editor?.destroy());
+    previousEditors = previousEditors.filter(editor => !ownedEditors.includes(editor));
+    closeWindow();
+  };
   await settle();
 
   return {
@@ -92,7 +119,7 @@ export async function bootApp({ storage = {}, handlers = {}, instance = 1, windo
       return contents;
     },
     type: async (text) => {
-      const editor = dom.window.document.getElementById("editor-textarea");
+      const editor = getAppElement("editor", dom.window.document);
       editor.value = text;
       editor.dispatchEvent(new dom.window.Event("input"));
       await settle(600);

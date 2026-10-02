@@ -167,10 +167,9 @@ export function getIndentEdit(value, selectionStart, selectionEnd, outdent = fal
   };
 }
 
-export function handleEditorTab(event) {
+export function handleEditorTab(event, textarea = event.currentTarget) {
   if (event.key !== "Tab" || event.metaKey || event.ctrlKey || event.altKey) return;
 
-  const textarea = event.currentTarget;
   const edit = getIndentEdit(
     textarea.value,
     textarea.selectionStart,

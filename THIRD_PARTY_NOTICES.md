@@ -127,3 +127,13 @@ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
 ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+## CodeMirror 6
+
+Scratchpad bundles [CodeMirror 6](https://codemirror.net/) for its note editors.
+CodeMirror and the packages included in the editor bundle use the MIT License.
+The full copyright and license notices for each bundled package are retained in
+[src/vendor/codemirror.LICENSE.txt](src/vendor/codemirror.LICENSE.txt), distributed
+alongside the offline editor bundle. The bundle and notices are generated from
+the locked dependencies by `npm run vendor:codemirror`; `npm run vendor` refreshes
+all frontend bundles before desktop development and release builds.

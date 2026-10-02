@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { marked } from "marked";
-import { bootApp } from "./helpers/app-harness.js";
+import { getAppElement, bootApp } from "./helpers/app-harness.js";
 
 const note = { id: "valuable", title: "Kept note", content: "valuable body", updatedAt: 1, isTitleLocked: true, folderId: "work" };
 const folders = [{ id: "work", name: "Work" }];
@@ -53,7 +53,7 @@ test("bad folders keep valid notes read-only, reject MCP mutations, and isolate 
       select_db_file: () => "/tmp/local-recovery.db", load_db_notes: () => [{ ...note, id: "workspace", title: "Workspace" }] } });
   const document = app.dom.window.document;
   assert.deepEqual(app.sidebarTitles(), ["Kept note"]);
-  assert.equal(document.getElementById("editor-textarea").readOnly, true);
+  assert.equal(getAppElement("editor").readOnly, true);
   assert.equal(document.querySelector(".note-item-delete").disabled, true);
   await app.type("Must not overwrite");
   document.dispatchEvent(new app.dom.window.KeyboardEvent("keydown", { key: "ArrowUp", altKey: true, bubbles: true }));
@@ -72,13 +72,13 @@ test("bad folders keep valid notes read-only, reject MCP mutations, and isolate 
   app.click("db-connect-btn");
   await app.settle(100);
   assert.deepEqual(app.sidebarTitles(), ["Workspace"]);
-  assert.equal(document.getElementById("editor-textarea").readOnly, false);
+  assert.equal(getAppElement("editor").readOnly, false);
   await app.type("Healthy workspace edit");
   assert.ok(app.invocations.some(i => i.command === "save_note_db" && i.args.note.content === "Healthy workspace edit"));
   app.click("db-disconnect-btn");
   await app.settle(100);
   assert.deepEqual(app.sidebarTitles(), ["Kept note"]);
-  assert.equal(document.getElementById("editor-textarea").readOnly, true);
+  assert.equal(getAppElement("editor").readOnly, true);
   assert.equal(app.storage.getItem("scratchpad_notes"), originalNotes);
   assert.equal(app.storage.getItem("scratchpad_folders"), rawFolders);
   assert.deepEqual(app.read("scratchpad_trash"), [deleted]);
@@ -87,7 +87,7 @@ test("bad folders keep valid notes read-only, reject MCP mutations, and isolate 
   const next = await boot({ storage: saved });
   assert.equal(next.storage.getItem("scratchpad_folders"), rawFolders);
   assert.equal(next.storage.getItem("scratchpad_notes"), originalNotes);
-  assert.equal(next.dom.window.document.getElementById("editor-textarea").readOnly, true);
+  assert.equal(getAppElement("editor").readOnly, true);
   dispose(next);
 });
 
@@ -126,7 +126,7 @@ test("explicit replacement keeps trash, archives raw data across launches, and r
   assert.equal(app.storage.getItem("scratchpad_local_recovery"), null);
   assert.deepEqual(app.read("scratchpad_folders"), folders);
   assert.deepEqual(app.read("scratchpad_trash"), [deleted]);
-  assert.equal(app.dom.window.document.getElementById("editor-textarea").readOnly, false);
+  assert.equal(getAppElement("editor").readOnly, false);
   await app.type("New collection text");
   const saved = app.dumpStorage();
   dispose(app);
@@ -151,7 +151,7 @@ test("invalid parsed note shapes and records are preserved on a second launch", 
     dispose(app);
     const next = await boot({ storage: saved });
     assert.equal(next.storage.getItem("scratchpad_notes"), original);
-    assert.equal(next.dom.window.document.getElementById("editor-textarea").readOnly, true);
+    assert.equal(getAppElement("editor").readOnly, true);
     dispose(next);
   }
 });
@@ -178,7 +178,7 @@ test("storage read errors surface recovery and can be retried without replacemen
   await app.settle();
   assert.deepEqual(app.sidebarTitles(), ["Kept note"]);
   assert.equal(app.dom.window.document.getElementById("local-recovery-banner").hidden, true);
-  assert.equal(app.dom.window.document.getElementById("editor-textarea").readOnly, false);
+  assert.equal(getAppElement("editor").readOnly, false);
   assert.equal(app.storage.getItem("scratchpad_local_recovery"), null);
   dispose(app);
 });
@@ -199,7 +199,7 @@ test("replacement write failures show errors and retain the original across rela
     app.click("local-recovery-confirm-btn");
     await app.settle();
     assert.match(app.dom.window.document.getElementById("local-recovery-action-status").textContent, /Could not recover.*Storage full/);
-    assert.equal(app.dom.window.document.getElementById("editor-textarea").readOnly, true);
+    assert.equal(getAppElement("editor").readOnly, true);
     assert.equal(app.storage.getItem("scratchpad_notes"), raw);
     const saved = app.dumpStorage();
     dispose(app);
@@ -222,7 +222,7 @@ test("empty remembered workspaces do not seed from a damaged local collection", 
     assert.deepEqual(seed.args.folders, []);
     assert.equal(seed.args.notes.some(n => n.id === note.id), false);
     assert.deepEqual(app.sidebarTitles(), failSeed ? ["Kept note"] : ["Welcome to Scratchpad!"]);
-    assert.equal(app.dom.window.document.getElementById("editor-textarea").readOnly, failSeed);
+    assert.equal(getAppElement("editor").readOnly, failSeed);
     assert.deepEqual(app.read("scratchpad_notes"), [note]);
     assert.equal(app.storage.getItem("scratchpad_folders"), raw);
     dispose(app);
@@ -280,11 +280,11 @@ test("disconnecting to quarantined empty notes clears previews, backdrops, and c
     await app.settle(100);
     const assertEmpty = () => {
       assert.deepEqual(app.sidebarTitles(), []);
-      for (const id of ["markdown-preview", "editor-backdrop", "secondary-markdown-preview", "secondary-editor-backdrop"]) {
-        assert.equal(document.getElementById(id).textContent, "", id);
+      for (const id of ["markdown-preview", "secondary-markdown-preview"]) {
+        assert.equal(getAppElement(id).textContent, "", id);
       }
-      for (const id of ["editor-textarea", "secondary-editor-textarea", "note-title", "secondary-note-title"]) {
-        assert.equal(document.getElementById(id).value, "", id);
+      for (const id of ["editor", "secondary-editor", "note-title", "secondary-note-title"]) {
+        assert.equal(getAppElement(id).value, "", id);
       }
       assert.equal(document.getElementById("word-char-count").textContent, "0 words • 0 characters");
       assert.equal(document.getElementById("find-count").textContent, "0 of 0");
@@ -342,7 +342,7 @@ test("large quarantined sources recover through native archives and export after
   app.click("local-recovery-replace-btn");
   app.click("local-recovery-confirm-btn");
   await app.settle(100);
-  assert.equal(app.dom.window.document.getElementById("editor-textarea").readOnly, false);
+  assert.equal(getAppElement("editor").readOnly, false);
   assert.deepEqual(app.sidebarTitles(), ["Welcome to Scratchpad!"]);
   assert.equal(JSON.parse(app.recoveryCopies[0]).values.scratchpad_notes, raw);
   const saved = app.dumpStorage();
@@ -364,7 +364,7 @@ test("archive discovery failure is visible and export can retry reading preserve
   const document = app.dom.window.document;
   assert.equal(document.getElementById("local-recovery-banner").hidden, false);
   assert.match(document.getElementById("local-recovery-action-status").textContent, /Could not check/);
-  assert.equal(document.getElementById("editor-textarea").readOnly, false);
+  assert.equal(getAppElement("editor").readOnly, false);
   app.click("local-recovery-export-btn");
   await app.settle();
   assert.match(document.getElementById("local-recovery-action-status").textContent, /exported/);

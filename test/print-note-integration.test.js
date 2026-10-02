@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { marked } from "marked";
 import { buildNoteHtml } from "../src/note-html-export.js";
-import { bootApp } from "./helpers/app-harness.js";
+import { getAppElement, bootApp } from "./helpers/app-harness.js";
 
 const notes = [
   { id: "one", title: "Primary", content: "# Original", updatedAt: 1, isTitleLocked: true },
@@ -27,7 +27,7 @@ const app = await bootApp({ globals: { marked }, storage: { scratchpad_notes: no
   }, select_db_file: () => "/tmp/print-workspace.sqlite", load_db_notes: () => [
     { id: "workspace", title: "Workspace note", content: "# Workspace", updatedAt: 1 }
   ] } });
-const element = id => document.getElementById(id);
+const element = id => getAppElement(id);
 const input = (id, value) => {
   element(id).value = value;
   element(id).dispatchEvent(new window.Event("input"));
@@ -35,7 +35,7 @@ const input = (id, value) => {
 
 test("Print Note captures immediate edits and excludes stale previews, search highlights, and app chrome", async () => {
   element("markdown-preview").innerHTML = '<mark class="find-preview-match">STALE</mark>';
-  input("editor-textarea", "# Latest\n\n**fresh**<script>alert(1)</script>");
+  input("editor", "# Latest\n\n**fresh**<script>alert(1)</script>");
   const before = app.dumpStorage();
   element("save-status").textContent = "Unsaved sentinel";
   app.click("print-note-btn");
@@ -52,7 +52,7 @@ test("Print Note captures immediate edits and excludes stale previews, search hi
 test("print selection follows the active split pane and title focus, just like HTML export", async () => {
   app.click("split-note-btn");
   element("secondary-note-title").focus();
-  input("secondary-editor-textarea", "# Secondary latest");
+  input("secondary-editor", "# Secondary latest");
   app.click("print-note-btn");
   await app.settle();
   assert.equal(jobs.at(-1).title, "Secondary");
@@ -89,7 +89,7 @@ test("printing is single-flight, snapshots do not change during preparation, and
   app.click("print-note-btn");
   app.click("print-note-btn");
   assert.equal(element("print-note-btn").disabled, true);
-  input("editor-textarea", "# Later edit");
+  input("editor", "# Later edit");
   fontsReady();
   await app.settle();
   assert.equal(jobs.length, count + 1);

@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bootApp } from "./helpers/app-harness.js";
+import { getAppElement, bootApp } from "./helpers/app-harness.js";
 
 const app = await bootApp({
   handlers: {
@@ -54,7 +54,7 @@ test("a scratchpad created with content keeps preview", async () => {
   document.getElementById("import-btn").click();
   await app.settle();
 
-  assert.equal(document.getElementById("editor-textarea").value, "# Imported heading");
+  assert.equal(getAppElement("editor").value, "# Imported heading");
   assert.equal(mode(), "preview");
   assert.equal(app.storage.getItem("scratchpad_layout_mode"), "preview");
 });

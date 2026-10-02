@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bootApp, settle } from "./helpers/app-harness.js";
+import { getAppElement, bootApp, settle } from "./helpers/app-harness.js";
 
 test("appending uses live revisions, preserves selection, and retries failed saves without duplication", async () => {
   const seed = { id: "n", title: "Original", content: "Original text", updatedAt: 1, isTitleLocked: true, folderId: null };
@@ -27,7 +27,7 @@ test("appending uses live revisions, preserves selection, and retries failed sav
       }
     }
   });
-  const editor = document.getElementById("editor-textarea");
+  const editor = getAppElement("editor");
   const snapshot = () => app.invocations.findLast(i => i.command === "update_mcp_snapshot").args;
   let ticket = 0;
   const send = async args => {
@@ -51,7 +51,7 @@ test("appending uses live revisions, preserves selection, and retries failed sav
   const result = await send(args);
   assert.equal(result.ok, true);
   assert.equal(editor.value, "Original text\n\nAppended 📝");
-  assert.equal(document.activeElement, editor);
+  assert.equal(document.activeElement, editor.contentDOM);
   assert.equal(editor.selectionStart, 2);
   assert.equal(editor.selectionEnd, 5);
   assert.equal(document.getElementById("note-title").value, "Original");

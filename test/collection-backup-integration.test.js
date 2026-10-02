@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { bootApp } from "./helpers/app-harness.js";
+import { getAppElement, bootApp } from "./helpers/app-harness.js";
 import { parseBackup, serializeBackup } from "../src/collection-backup.js";
 
 const note = (id, content = id) => ({ id, title: id, content, updatedAt: 100, isTitleLocked: true, isPinned: false, folderId: null });
@@ -50,7 +50,7 @@ async function close(app) { app.click("collection-restore-cancel"); await app.se
 
 test("backup captures immediately pending edits and all metadata, verified file completion is shown", async () => {
   const bridge = native(), app = await boot(bridge);
-  const editor = document.getElementById("editor-textarea");
+  const editor = getAppElement("editor");
   editor.value = "unsaved edit";
   editor.dispatchEvent(new window.Event("input"));
   app.click("collection-backup-btn");
@@ -159,8 +159,8 @@ test("empty and trash-only local restore survive restart without a welcome note"
     const restarted = await boot(bridge, { storage });
     assert.deepEqual(local(restarted), candidate);
     assert.deepEqual(restarted.sidebarTitles(), []);
-    for (const id of ["editor-textarea", "note-title", "secondary-editor-textarea", "secondary-note-title"]) {
-      assert.equal(document.getElementById(id).readOnly, true);
+    for (const id of ["editor", "note-title", "secondary-editor", "secondary-note-title"]) {
+      assert.equal(getAppElement(id).readOnly, true);
     }
     assert.equal(document.getElementById("empty-collection-prompt").hidden, false);
     restarted.dom.window.close();
@@ -169,7 +169,7 @@ test("empty and trash-only local restore survive restart without a welcome note"
 
 test("cancelled restore resumes previously pending edits without taking a safety copy", async () => {
   const bridge = native(), app = await boot(bridge);
-  const editor = document.getElementById("editor-textarea");
+  const editor = getAppElement("editor");
   editor.value = "pending before cancel";
   editor.dispatchEvent(new window.Event("input"));
   await restore(app, false);
@@ -187,8 +187,8 @@ test("empty local editors reject unattached input and unlock when a note is crea
   assert.match(prompt.textContent, /Create a new scratchpad or select a note/);
   // Read-only attributes prevent actual typing; even synthetic input cannot
   // leave unattached text on screen that looks as if it was saved.
-  for (const id of ["editor-textarea", "note-title", "secondary-editor-textarea", "secondary-note-title"]) {
-    const field = document.getElementById(id);
+  for (const id of ["editor", "note-title", "secondary-editor", "secondary-note-title"]) {
+    const field = getAppElement(id);
     assert.equal(field.readOnly, true);
     field.value = "must not look saved";
     field.dispatchEvent(new window.Event("input"));
@@ -196,7 +196,7 @@ test("empty local editors reject unattached input and unlock when a note is crea
   }
   assert.deepEqual(local(app), empty);
   app.click("new-note-btn"); await app.settle();
-  assert.equal(document.getElementById("editor-textarea").readOnly, false);
+  assert.equal(getAppElement("editor").readOnly, false);
   assert.equal(document.getElementById("note-title").readOnly, false);
   assert.equal(prompt.hidden, true);
   const title = document.getElementById("note-title");
@@ -222,16 +222,16 @@ test("connecting folders-only, trash-only, and new empty workspaces protects emp
     app.click("db-connect-btn"); await app.settle();
     assert.equal(document.getElementById("workspace-menu-value").textContent, "empty-connect.db");
     assert.equal(document.getElementById("empty-collection-prompt").hidden, false);
-    assert.equal(document.getElementById("editor-textarea").readOnly, true);
+    assert.equal(getAppElement("editor").readOnly, true);
     assert.equal(document.getElementById("note-title").readOnly, true);
     assert.deepEqual(bridge.workspace(), scenario.workspace);
     app.click("split-note-btn");
-    assert.equal(document.getElementById("secondary-editor-textarea").readOnly, true);
+    assert.equal(getAppElement("secondary-editor").readOnly, true);
     assert.equal(document.getElementById("secondary-note-title").readOnly, true);
     app.click("new-note-btn"); await app.settle();
     assert.equal(document.getElementById("empty-collection-prompt").hidden, true);
-    assert.equal(document.getElementById("editor-textarea").readOnly, false);
-    assert.equal(document.getElementById("secondary-editor-textarea").readOnly, false);
+    assert.equal(getAppElement("editor").readOnly, false);
+    assert.equal(getAppElement("secondary-editor").readOnly, false);
     await app.type("Saved in workspace");
     // The incremental save command is mocked separately from full saves.
     const saved = app.invocations.findLast(call => call.command === "save_note_db");
@@ -254,7 +254,7 @@ test("checkpoint staging failure keeps local data editable and a later restore c
   assert.deepEqual(local(app), original);
   assert.equal(bridge.pending(), null);
   app.click("collection-restore-cancel"); await app.settle();
-  assert.equal(document.getElementById("editor-textarea").readOnly, false);
+  assert.equal(getAppElement("editor").readOnly, false);
   assert.equal(document.getElementById("local-recovery-banner").hidden, true);
   fail = false;
   await restore(app);
@@ -264,7 +264,7 @@ test("checkpoint staging failure keeps local data editable and a later restore c
 
 test("restore safety copy includes edits pending at confirmation", async () => {
   const bridge = native(), app = await boot(bridge);
-  const editor = document.getElementById("editor-textarea");
+  const editor = getAppElement("editor");
   editor.value = "preserve this edit";
   editor.dispatchEvent(new window.Event("input"));
   await restore(app);
@@ -353,13 +353,13 @@ test("failed local replacement and rollback remain read-only until checkpoint re
     assert.match(document.getElementById("collection-backup-status").textContent, /Restore failed/);
     assert.ok(bridge.pending());
     app.click("collection-restore-cancel"); await app.settle();
-    assert.equal(document.getElementById("editor-textarea").readOnly, true);
+    assert.equal(getAppElement("editor").readOnly, true);
     assert.equal(document.getElementById("local-recovery-replace-btn").disabled, true);
     unavailable = false;
     app.click("local-recovery-retry-btn"); await app.settle();
     assert.deepEqual(local(app), original);
     assert.deepEqual(app.sidebarTitles(), ["original"]);
-    assert.equal(document.getElementById("editor-textarea").readOnly, false);
+    assert.equal(getAppElement("editor").readOnly, false);
     assert.equal(bridge.pending(), null);
   } finally { prototype.setItem = originalSet; app.dom.window.close(); }
 });
@@ -386,7 +386,7 @@ test("restore preview blocks shortcuts, background buttons, MCP writes, switchin
   const collectionId = app.invocations.findLast(call => call.command === "update_mcp_snapshot").args.collectionId;
   app.click("collection-restore-btn"); await app.settle();
   assert.equal(document.getElementById("app").inert, true);
-  assert.equal(document.getElementById("editor-textarea").readOnly, true);
+  assert.equal(getAppElement("editor").readOnly, true);
   app.click("new-note-btn"); app.click("db-connect-btn");
   document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "n", metaKey: true, bubbles: true, cancelable: true }));
   await onClose({ preventDefault() {} });
@@ -404,7 +404,7 @@ test("restore preview blocks shortcuts, background buttons, MCP writes, switchin
   document.activeElement.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
   await app.settle();
   assert.equal(document.getElementById("app").inert, false);
-  assert.equal(document.getElementById("editor-textarea").readOnly, false);
+  assert.equal(getAppElement("editor").readOnly, false);
   assert.equal(document.activeElement.id, "actions-btn");
   app.dom.window.close();
 });
@@ -428,7 +428,7 @@ test("unreadable checkpoints quarantine local data and Retry reading recovers it
     read_local_restore: () => { if (unavailable) throw new Error("checkpoint unreadable"); return bridge.pending(); }
   } });
   assert.deepEqual(local(app), incoming);
-  assert.equal(document.getElementById("editor-textarea").readOnly, true);
+  assert.equal(getAppElement("editor").readOnly, true);
   assert.equal(document.getElementById("local-recovery-replace-btn").disabled, true);
   assert.match(document.getElementById("local-recovery-message").textContent, /Interrupted collection restore/);
   app.click("collection-restore-btn"); await app.settle();
@@ -436,7 +436,7 @@ test("unreadable checkpoints quarantine local data and Retry reading recovers it
   unavailable = false;
   app.click("local-recovery-retry-btn"); await app.settle();
   assert.deepEqual(local(app), original);
-  assert.equal(document.getElementById("editor-textarea").readOnly, false);
+  assert.equal(getAppElement("editor").readOnly, false);
   assert.equal(bridge.pending(), null);
   app.dom.window.close();
 });

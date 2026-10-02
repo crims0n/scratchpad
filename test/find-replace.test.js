@@ -2,11 +2,11 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bootApp } from "./helpers/app-harness.js";
+import { getAppElement, bootApp } from "./helpers/app-harness.js";
 
 const ORIGINAL_CONTENT = "İstanbul trip. Book a hotel, then book a flight.";
 
-test("Replace and Replace All preserve offsets and use one native edit transaction", async () => {
+test("Replace and Replace All preserve offsets and use one undoable editor transaction", async () => {
   const app = await bootApp({
     storage: {
       scratchpad_notes: [{
@@ -20,21 +20,13 @@ test("Replace and Replace All preserve offsets and use one native edit transacti
     handlers: { load_workspace_preference: () => null }
   });
   const { document, Event, KeyboardEvent } = app.dom.window;
-  const editor = document.getElementById("editor-textarea");
+  const editor = getAppElement("editor");
   const transactions = [];
 
-  document.execCommand = (command, _showUi, replacement) => {
-    assert.equal(command, "insertText");
-    assert.equal(document.activeElement, editor);
-    transactions.push({
-      previousValue: editor.value,
-      start: editor.selectionStart,
-      end: editor.selectionEnd,
-      replacement
-    });
-    editor.setRangeText(replacement, editor.selectionStart, editor.selectionEnd, "end");
-    editor.dispatchEvent(new Event("input", { bubbles: true }));
-    return true;
+  const applyEdit = editor.applyEdit.bind(editor);
+  editor.applyEdit = edit => {
+    transactions.push({ previousValue: editor.value });
+    applyEdit(edit);
   };
 
   document.dispatchEvent(new KeyboardEvent("keydown", {
@@ -62,7 +54,7 @@ test("Replace and Replace All preserve offsets and use one native edit transacti
   assert.equal(editor.value.slice(editor.selectionStart, editor.selectionEnd), "book");
 
   // Restore the two-match fixture so Replace All proves that separated edits
-  // are still grouped into one native undo transaction.
+  // are still grouped into one undo transaction.
   editor.value = ORIGINAL_CONTENT;
   editor.dispatchEvent(new Event("input", { bubbles: true }));
 
@@ -78,6 +70,10 @@ test("Replace and Replace All preserve offsets and use one native edit transacti
     "İstanbul trip. reserve a hotel, then reserve a flight."
   );
   assert.equal(document.getElementById("find-count").textContent, "0 of 0");
+  assert.equal(editor.undo(), true);
+  assert.equal(editor.value, ORIGINAL_CONTENT);
+  assert.equal(editor.redo(), true);
+  assert.equal(editor.value, "İstanbul trip. reserve a hotel, then reserve a flight.");
 
   await app.settle(600);
   assert.equal(

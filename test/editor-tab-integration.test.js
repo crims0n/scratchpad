@@ -3,11 +3,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { bootApp } from "./helpers/app-harness.js";
+import { getAppElement, bootApp } from "./helpers/app-harness.js";
 
-test("Tab edits the primary textarea and follows the normal input path", async () => {
+test("Tab edits the primary editor and follows the normal input path", async () => {
   const { dom, type } = await bootApp();
-  const editor = document.getElementById("editor-textarea");
+  const editor = getAppElement("editor");
   await type("alphaomega");
   editor.setSelectionRange(5, 5);
 

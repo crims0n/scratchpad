@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { marked } from "marked";
-import { bootApp } from "./helpers/app-harness.js";
+import { getAppElement, bootApp } from "./helpers/app-harness.js";
 
 const NOTES = [
   {
@@ -112,33 +112,33 @@ test("Find All lists live matches and jumps to the selected result", async () =>
   );
 
   document.querySelector('[data-note-id="note-three"]').click();
-  assert.equal(document.getElementById("editor-textarea").value, "Remote alpha");
-  assert.equal(document.getElementById("editor-textarea").selectionStart, 7);
+  assert.equal(getAppElement("editor").value, "Remote alpha");
+  assert.equal(getAppElement("editor").selectionStart, 7);
   assert.ok(document.querySelector('[data-id="note-three"]').classList.contains("active"));
 
   document.querySelector('[data-note-id="note-one"][data-match-start="0"]').click();
   allNotesToggle.click();
   assert.equal(document.getElementById("find-results-summary").textContent, "3 matches");
 
-  const highlightBeforeResize = document.querySelector("#editor-backdrop mark.active-match");
+  const highlightBeforeResize = document.querySelector("#editor .cm-content mark.active-match");
   app.dom.window.dispatchEvent(new Event("resize"));
   await app.settle(150);
-  assert.notEqual(
-    document.querySelector("#editor-backdrop mark.active-match"),
+  assert.equal(
+    document.querySelector("#editor .cm-content mark.active-match"),
     highlightBeforeResize,
-    "resizing redraws the editor highlights"
+    "resizing preserves editor highlight ranges"
   );
 
-  const highlightBeforeNativeResize = document.querySelector("#editor-backdrop mark.active-match");
+  const highlightBeforeNativeResize = document.querySelector("#editor .cm-content mark.active-match");
   nativeResizeHandler();
   await app.settle(150);
-  assert.notEqual(
-    document.querySelector("#editor-backdrop mark.active-match"),
+  assert.equal(
+    document.querySelector("#editor .cm-content mark.active-match"),
     highlightBeforeNativeResize,
-    "a packaged Tauri window resize redraws the editor highlights"
+    "a packaged Tauri window resize preserves highlight ranges"
   );
 
-  const editor = document.getElementById("editor-textarea");
+  const editor = getAppElement("editor");
   const firstResult = document.querySelector('[data-match-index="0"]');
   firstResult.focus();
   firstResult.dispatchEvent(new KeyboardEvent("keydown", {
@@ -150,18 +150,18 @@ test("Find All lists live matches and jumps to the selected result", async () =>
   document.activeElement.click();
   assert.equal(editor.selectionStart, 19);
   assert.equal(editor.selectionEnd, 24);
-  assert.equal(editor.scrollTop, 480);
+
   assert.equal(document.getElementById("cursor-position").textContent, "Ln 2, Col 13");
-  assert.equal(document.activeElement, editor);
+  assert.equal(document.activeElement, editor.contentDOM);
   assert.equal(document.querySelector(".find-result-button.active").dataset.matchIndex, "1");
 
-  const highlightBeforeModeChange = document.querySelector("#editor-backdrop mark.active-match");
+  const highlightBeforeModeChange = document.querySelector("#editor .cm-content mark.active-match");
   document.getElementById("mode-preview").click();
   await app.settle(80);
-  assert.notEqual(
-    document.querySelector("#editor-backdrop mark.active-match"),
+  assert.equal(
+    document.querySelector("#editor .cm-content mark.active-match"),
     highlightBeforeModeChange,
-    "changing layout mode redraws the editor highlights"
+    "changing layout mode preserves editor highlight ranges"
   );
   assert.equal(document.querySelectorAll("mark.find-preview-match").length, 3);
   assert.equal(

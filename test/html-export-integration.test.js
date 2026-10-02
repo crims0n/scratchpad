@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { JSDOM } from "jsdom";
 import { marked } from "marked";
-import { bootApp } from "./helpers/app-harness.js";
+import { getAppElement, bootApp } from "./helpers/app-harness.js";
 
 const localNotes = [
   { id: "one", title: "Primary", content: "# Original", updatedAt: 1, isTitleLocked: true },
@@ -21,7 +21,7 @@ const app = await bootApp({ storage: { scratchpad_notes: localNotes }, globals: 
   select_db_file: () => "/tmp/export-workspace.sqlite",
   load_db_notes: () => [{ id: "workspace", title: "Workspace", content: "# Workspace body", updatedAt: 1 }]
 } });
-const element = id => document.getElementById(id);
+const element = id => getAppElement(id);
 const exports = () => app.invocations.filter(item => item.command === "save_html_file_native");
 const parsed = () => new JSDOM(exports().at(-1).args.content).window.document;
 const input = (id, value) => {
@@ -31,7 +31,7 @@ const input = (id, value) => {
 
 test("export renders immediate edits rather than a stale or search-decorated preview", async () => {
   element("markdown-preview").innerHTML = '<p><mark class="find-preview-match">STALE</mark></p>';
-  input("editor-textarea", "# Immediate edit\n\n**fresh**");
+  input("editor", "# Immediate edit\n\n**fresh**");
   const before = app.dumpStorage();
   app.click("export-html-btn");
   await app.settle();
@@ -46,8 +46,8 @@ test("export renders immediate edits rather than a stale or search-decorated pre
 
 test("dual-note export follows the active pane, including its latest edits", async () => {
   app.click("split-note-btn");
-  element("secondary-editor-textarea").focus();
-  input("secondary-editor-textarea", "# Secondary latest");
+  element("secondary-editor").focus();
+  input("secondary-editor", "# Secondary latest");
   app.click("export-html-btn");
   await app.settle();
   assert.equal(parsed().querySelector("h1").textContent, "Secondary latest");

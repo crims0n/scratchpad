@@ -198,7 +198,7 @@ export function getMarkdownAutocompleteEdit(value, selectionStart, selectionEnd)
     getTableEnterEdit(value, selectionStart, selectionEnd);
 }
 
-export function handleMarkdownAutocomplete(event) {
+export function handleMarkdownAutocomplete(event, textarea = event.currentTarget) {
   if (
     event.key !== "Enter" ||
     event.shiftKey ||
@@ -208,7 +208,6 @@ export function handleMarkdownAutocomplete(event) {
     event.isComposing
   ) return;
 
-  const textarea = event.currentTarget;
   const edit = getMarkdownAutocompleteEdit(
     textarea.value,
     textarea.selectionStart,
