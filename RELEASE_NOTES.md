@@ -11,6 +11,7 @@
 
 - Choose **Back Up Collection…** in the desktop app to save the currently open collection as a versioned JSON file. Pending edits are saved first; the backup is staged, synced, and verified before replacing an existing backup file.
 - Choose **Restore Collection…** to validate a backup and preview its destination and note, folder, and trash counts before confirming **Replace collection**. Restore replaces the current collection; it does not merge collections. Invalid, truncated, or unsupported files are rejected before replacement.
+- Backup/restore dialogs separate paragraphs for readability and remove pre-operation reminders from completion and failure messages.
 - Backups preserve supported note and folder metadata, including IDs, titles, bodies, timestamps, title locks, folder assignments, pins, ordering, empty folders, and deleted-note metadata. They can be restored into local-only or workspace collections; restoring a workspace keeps its file and connection.
 - Before replacement, Scratchpad saves and verifies a restorable safety backup in the app data directory's `collection-backups` folder and shows its path. Keep this file until you have checked the restored data; restore it through the same menu action to undo a replacement.
 - Workspace replacement uses a SQLite transaction. Local replacement uses a durable checkpoint to recover the previous values after failed or interrupted writes, including on the next launch. If recovery cannot complete, local data stays read-only and **Retry reading** retries recovery.
