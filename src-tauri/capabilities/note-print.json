@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "note-print",
+  "description": "Allow the note-only print window to close itself; no opener or editor window access.",
+  "windows": ["note-print"],
+  "permissions": ["core:default", "core:window:allow-close"]
+}

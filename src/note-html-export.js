@@ -93,11 +93,24 @@ td[align="center"], th[align="center"] { text-align: center; }
 td[align="right"], th[align="right"] { text-align: right; }
 img { max-width: 100%; border-radius: 6px; margin-bottom: 1em; }
 @media print {
-  body { background: white; color: black; }
+  :root {
+    --preview-bg: white; --preview-text: black; --text-primary: black; --text-secondary: #333;
+    --preview-code-bg: #f1f5f9; --preview-quote-bg: #f8fafc; --preview-hr: #cbd5e1;
+    --border-color: #cbd5e1; --preview-quote-border: #7e22ce;
+    --accent-color: #7e22ce; --accent-hover: #581c87;
+    --syntax-muted: #475569; --syntax-string: #166534; --syntax-number: #92400e; --syntax-danger: #9f1239;
+  }
+  body { background: white; color: black; font-size: 11pt; }
   .markdown-preview { max-width: none; padding: 0; }
   h1, h2, h3, h4, h5, h6 { color: black; break-after: avoid; }
   pre { white-space: pre-wrap; overflow-wrap: anywhere; }
-  blockquote { color: black; }
+  pre, code { font-size: 9pt; }
+  blockquote { color: #333; }
+  table { table-layout: fixed; }
+  thead { display: table-header-group; }
+  tr, img { break-inside: avoid; }
+  img { max-height: 240mm; object-fit: contain; }
+  p { orphans: 3; widows: 3; }
 }
 `;
 

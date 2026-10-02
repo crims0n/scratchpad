@@ -15,6 +15,7 @@ import { createUpdateUi } from "./updates.js";
 import { createMcpWriter, createNoteRevisionTracker, createFolderRevisionTracker } from "./mcp-writes.js";
 import { renderMarkdown, resolveLinkAction, sanitizeMarkdownHtml } from "./markdown.js";
 import { buildNoteHtml, htmlExportFilename, HTML_EXPORT_COLORS } from "./note-html-export.js";
+import { printNoteDocument } from "./note-print.js";
 import { getNotePreview } from "./note-preview.js";
 import { ACTIVE_TEXT_PROPERTIES, DERIVED_THEME_PROPERTIES, deriveThemeSurfaceColors } from "./theme-colors.js";
 import { createCssColorResolver, createOpaqueColorParser, isColorDark } from "./css-color.js";
@@ -137,6 +138,7 @@ const copyHtmlBtn = document.getElementById("copy-html");
 const importBtn = document.getElementById("import-btn");
 const exportBtn = document.getElementById("export-btn");
 const exportHtmlBtn = document.getElementById("export-html-btn");
+const printNoteBtn = document.getElementById("print-note-btn");
 const dbConnectBtn = document.getElementById("db-connect-btn");
 const dbDisconnectBtn = document.getElementById("db-disconnect-btn");
 const workspaceMenuValue = document.getElementById("workspace-menu-value");
@@ -2556,15 +2558,41 @@ async function clearLocalCollectionAction() {
   }
 }
 
-async function exportAsHtmlFile() {
-  if (exportHtmlBtn.disabled) return;
+function selectedNoteSnapshot() {
   const secondary = isSplitNoteMode && activePane === "secondary";
   const note = notes.find(n => n.id === (secondary ? secondaryNoteId : activeNoteId));
-  if (!note) { showNotification("Select a note to export"); return; }
+  return note ? { title: note.title, content: (secondary ? secondaryEditorTextarea : editorTextarea).value } : null;
+}
+
+async function printNote() {
+  if (printNoteBtn.disabled || isCollectionBackupBusy || isWorkspaceSwitching) return;
+  const snapshot = selectedNoteSnapshot();
+  if (!snapshot) { showNotification("Select a note to print"); return; }
+  printNoteBtn.disabled = true;
+  try {
+    // Print with the document's light defaults even when the app theme is dark.
+    if (window.__TAURI__) {
+      await invoke("open_note_print", { ...snapshot, syntaxHighlighting: syntaxHighlightingEnabled });
+    } else {
+      const html = buildNoteHtml({ ...snapshot, syntaxHighlighting: syntaxHighlightingEnabled });
+      await printNoteDocument(html);
+    }
+    // The system dialog does not tell us whether paper was printed. Cancel is
+    // quiet, and the note's saved/unsaved status is never changed by printing.
+  } catch (error) {
+    showNotification("Could not print note: " + error);
+  } finally {
+    printNoteBtn.disabled = false;
+  }
+}
+
+async function exportAsHtmlFile() {
+  if (exportHtmlBtn.disabled) return;
+  const snapshot = selectedNoteSnapshot();
+  if (!snapshot) { showNotification("Select a note to export"); return; }
   // Capture the note before opening a picker; no persistence or preview timing
   // is required, and switching/editing later cannot change this export.
-  const title = note.title;
-  const content = (secondary ? secondaryEditorTextarea : editorTextarea).value;
+  const { title, content } = snapshot;
   const dbPath = activeDbPath;
   exportHtmlBtn.disabled = true;
   try {
@@ -2914,6 +2942,7 @@ function attachEventListeners() {
   importBtn.addEventListener("click", importFile);
   exportBtn.addEventListener("click", exportAsMarkdownFile);
   exportHtmlBtn.addEventListener("click", exportAsHtmlFile);
+  printNoteBtn.addEventListener("click", printNote);
   document.getElementById("collection-backup-btn").addEventListener("click", () => collectionBackupAction(false));
   document.getElementById("collection-restore-btn").addEventListener("click", () => collectionBackupAction(true));
   document.getElementById("local-clear-btn").addEventListener("click", clearLocalCollectionAction);
@@ -3090,6 +3119,13 @@ function attachEventListeners() {
   document.addEventListener("keydown", (e) => {
     const isMeta = e.metaKey || e.ctrlKey;
     const isShift = e.shiftKey;
+
+    if (isMeta && !isShift && !e.altKey && e.key.toLowerCase() === "p") {
+      e.preventDefault(); // Never let the webview print the app chrome.
+      if (!isThemeModalOpen && !isHelpModalOpen && !isAboutModalOpen && !isMcpConfigModalOpen &&
+          !document.querySelector('[role="dialog"][aria-hidden="false"]')) printNote();
+      return;
+    }
 
     if (isThemeModalOpen && e.key === "Tab" && !isMeta && !e.altKey) {
       const focusable = [...themeModal.querySelectorAll("button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])")]

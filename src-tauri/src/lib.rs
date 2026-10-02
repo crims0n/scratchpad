@@ -12,6 +12,7 @@ use tauri::{
 
 mod backup;
 mod mcp;
+mod note_print;
 mod recovery;
 mod updates;
 pub use mcp::run_mcp_stdio;
@@ -797,7 +798,9 @@ fn handle_macos_menu_event<R: Runtime>(app: &AppHandle<R>, event: tauri::menu::M
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run(context: tauri::Context<tauri::Wry>) {
-    let builder = tauri::Builder::default().manage(mcp::McpState::default());
+    let builder = tauri::Builder::default()
+        .manage(mcp::McpState::default())
+        .manage(note_print::PrintState::default());
     #[cfg(target_os = "macos")]
     let builder = builder
         .menu(macos_menu)
@@ -816,6 +819,9 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             set_last_workspace,
             save_file_native,
             save_html_file_native,
+            note_print::open_note_print,
+            note_print::get_print_note,
+            note_print::print_note_native,
             save_recovery_file_native,
             save_collection_backup,
             read_collection_backup,
