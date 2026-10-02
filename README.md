@@ -40,6 +40,7 @@ See [release notes](RELEASE_NOTES.md) for highlights, compatibility details, and
 - Top-level pinned notes, collapsible sidebar folders with drag-and-drop organization, search, configurable note previews, manual ordering, word counts, and distraction-free Focus Mode
 - Find and replace with case-sensitive, exact-match, and regular-expression modes, live highlighting, and results across one or every scratchpad
 - Native text-file import and Markdown/standalone HTML export
+- Formatted, note-only printing through the system print dialog (Cmd/Ctrl+P)
 - Copy as Markdown or sanitized rendered HTML
 - Optional portable workspace files that reopen automatically
 - Recoverable note deletion with persistent trash, Restore actions, and user-confirmed Empty Trash
@@ -92,6 +93,12 @@ Backups and safety copies are unencrypted and contain active **and trashed** not
 Choose **Scratchpad menu → Note → Export HTML file** to save the selected note as a standalone `.html` document. In Dual-Note Split View, it exports the active editor pane. The export includes your latest edits, Markdown formatting, the current preview colours, and code highlighting when enabled; it does not change your note or collection. Styles are embedded, with system font fallbacks, so the file opens offline without Scratchpad or external assets. Search highlights and app controls are excluded.
 
 HTML export uses the same sanitization as Preview: scripts and unsafe links are removed, internet/local-file images are blocked, and supported embedded raster images are retained. Safe external links remain clickable and go online only when opened. The HTML file contains readable, unencrypted note content; store and share it accordingly. HTML exports are for reading/sharing, not collection backups or a round-trip import format. PDF export is not included.
+
+### Printing a note
+
+Choose **Scratchpad menu → Note → Print Note…**, or press **Cmd+P** on macOS / **Ctrl+P** on Windows and Linux. The desktop app opens a separate, note-only preview and its system print dialog, using a fresh snapshot of the selected note, including current edits; in Dual-Note Split View it uses the active pane. Only formatted note content is printed, not the sidebar, editor controls, other notes, search highlights, or preview toolbar. Printing uses a light, paper-friendly palette regardless of the app theme, with wrapped code blocks, table headers, and page-break guidance. The same Preview/HTML sanitization and image restrictions apply.
+
+Use the system dialog for printers, paper, margins, page ranges, and any available print-to-PDF destination. Cancel leaves your notes unchanged. The desktop preview stays open so an asynchronous print operation retains its document; use **Print…** to retry, then **Close** when finished, before preparing another note. Its snapshot is kept only in memory and released when that window closes, with no temporary note file. Browser-only use prints an offscreen note document and removes it after the dialog closes. Scratchpad does not report printing as a successful save and cannot tell whether paper was actually printed. Printing/sharing can expose note content to your chosen printer or destination. A dedicated PDF export remains separate from this feature.
 
 ### Clearing the local collection
 

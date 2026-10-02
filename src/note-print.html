@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Print Note</title>
+  <link rel="stylesheet" href="note-print-window.css">
+  <script src="vendor/marked.umd.js"></script>
+  <script src="vendor/highlight.min.js"></script>
+  <script type="module" src="note-print-window.js"></script>
+</head>
+<body>
+  <header class="print-toolbar">
+    <button id="print-btn" type="button" disabled>Print…</button>
+    <button id="close-btn" type="button">Close</button>
+    <p id="print-status" role="status" aria-live="polite">Preparing note…</p>
+  </header>
+  <main id="print-content"></main>
+</body>
+</html>

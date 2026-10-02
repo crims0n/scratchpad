@@ -41,6 +41,10 @@ test("HTML is a standalone styled document with preview formatting and real synt
   assert.equal(doc.querySelectorAll("script, link, iframe, mark, #app").length, 0);
   assert.match(doc.querySelector("style").textContent, /li\.task-list-item/);
   assert.match(doc.querySelector("style").textContent, /\.hljs-keyword/);
+  assert.match(doc.querySelector("style").textContent, /@media print/);
+  assert.match(doc.querySelector("style").textContent, /--preview-code-bg: #f1f5f9/);
+  assert.match(doc.querySelector("style").textContent, /thead \{ display: table-header-group/);
+  assert.match(doc.querySelector("style").textContent, /white-space: pre-wrap/);
   assert.doesNotMatch(doc.querySelector("style").textContent, /url\(|@import/);
   assert.match(doc.querySelector('meta[http-equiv="Content-Security-Policy"]').content, /default-src 'none'/);
 });

@@ -148,6 +148,7 @@
                 <button class="dropdown-item" id="import-btn">Import text file</button>
                 <button class="dropdown-item" id="export-btn">Export Markdown file</button>
                 <button class="dropdown-item" id="export-html-btn" title="Save the selected note as a standalone HTML document, with Markdown formatting and embedded styles. In split view, exports the active pane.">Export HTML file</button>
+                <button class="dropdown-item" id="print-note-btn" title="Print the selected note with Markdown formatting, using the system print dialog. In split view, prints the active pane (Cmd+P)." aria-keyshortcuts="Control+P Meta+P">Print Note…</button>
               </div>
               <div class="dropdown-divider"></div>
               <div class="dropdown-section" id="appearance-menu-section">
@@ -669,6 +670,11 @@
             <p class="shortcuts-note">Right-click a note and choose <strong>Delete Note</strong> to move it to trash. Click the <strong>trash icon at the bottom right</strong> and choose <strong>Restore</strong> to recover it. Restored notes return to their original folder, or the top level if it no longer exists. Right-click the trash icon (or focus it and press Shift+F10), choose <strong>Empty Trash…</strong>, and confirm to permanently remove recovery copies. Each local collection or workspace has its own trash, which survives restarts and never expires automatically.</p>
             <p class="shortcuts-note">If local notes or folder metadata cannot be read, the <strong>Local data recovery</strong> banner keeps the collection read-only and preserves the original values. <strong>Export preserved data…</strong> saves raw recovery JSON for manual repair (not a Markdown import or full backup); keep it private. <strong>Retry reading</strong> leaves the source unchanged. In the desktop app, <strong>Replace unreadable data…</strong> requires confirmation and a verified recovery file in app data, outside localStorage, before replacing unreadable values; readable data and trash are retained. Export for safekeeping because deleting app data deletes recovery files too. Healthy workspaces remain usable, and closing does not overwrite unreadable local data.</p>
             <p class="shortcuts-note"><strong>Scratchpad menu → Note → Export HTML file</strong> saves the selected note with Markdown formatting, preview colours, and embedded styles for offline reading. In split view, it exports the active pane, including your latest edits. Search highlights and app controls are excluded; the same Preview restrictions block scripts and internet/local-file images. HTML exports contain unencrypted note content and are for sharing, not collection backups.</p>
+            <p class="shortcuts-note"><strong>Print Note…</strong> opens a note-only desktop preview and system print dialog for the selected note, including current edits. In split view, it prints the active pane. Output uses a paper-friendly light palette and excludes app controls, other notes, search highlights, and the preview toolbar, with the same Preview image restrictions. Choose paper, margins, page ranges, and any available print-to-PDF destination in the system dialog; Cancel changes nothing. Use <strong>Print…</strong> to retry, then <strong>Close</strong> the preview before preparing another note; its snapshot is held only in memory. Scratchpad cannot tell whether paper was actually printed.</p>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Print Active Note</span>
+              <div class="shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>P</kbd></div>
+            </div>
             <div class="shortcut-row">
               <span class="shortcut-desc">New Scratchpad</span>
               <div class="shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>N</kbd></div>

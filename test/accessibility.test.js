@@ -39,6 +39,8 @@ test("help and reference documents current Markdown editing behavior", () => {
 
   assert.match(shortcuts, /F1/);
   assert.match(shortcuts, /A collection is your notes, folders, and trash/);
+  assert.match(shortcuts, /Print Note.*system print dialog.*paper-friendly light palette/);
+  assert.match(shortcuts, /Print Active Note/);
   assert.match(shortcuts, /Open or create workspace….*Return to local notes.*does not merge collections/);
   assert.match(shortcuts, /Clear Local Collection.*exact word DELETE.*verified safety backup/);
   assert.match(shortcuts, /Deleting a folder from the sidebar returns its notes to the top level/);

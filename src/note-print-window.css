@@ -1,0 +1,16 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+body { margin: 0; background: white; color: #1e293b; font-family: system-ui, sans-serif; }
+.print-toolbar {
+  position: sticky; top: 0; padding: 12px 20px; background: #f1f5f9;
+  border-bottom: 1px solid #cbd5e1; display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+}
+.print-toolbar button {
+  padding: 8px 16px; border: 1px solid #94a3b8; border-radius: 6px;
+  background: white; color: #0f172a; font: inherit; cursor: pointer;
+}
+.print-toolbar button:disabled { opacity: .5; cursor: default; }
+.print-toolbar button:focus-visible { outline: 3px solid #7e22ce; outline-offset: 2px; }
+.print-toolbar p { margin: 0; font-size: .9rem; flex: 1 1 240px; }
+@media print {
+  .print-toolbar { display: none !important; }
+}
