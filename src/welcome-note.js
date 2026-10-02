@@ -50,7 +50,7 @@ Scratchpad is a fast, local-first place for notes, snippets, and Markdown. Every
 ## Make it yours
 - Choose a built-in theme from the bottom of the sidebar, or import your own.
 - Open the Scratchpad menu to adjust sidebar previews, editor zoom, line spacing, syntax highlighting, and optional line numbers.
-- The Scratchpad menu also imports and exports files, copies Markdown or rendered HTML, and opens portable workspace files.
+- The Scratchpad menu also imports text files, exports Markdown or standalone HTML, copies Markdown or rendered HTML, and opens portable workspace files. **Export HTML file** saves one note with preview formatting and embedded styles for offline reading; in split view, it exports the active pane.
 
 ## Check for updates (optional)
 - Open **Scratchpad menu → About Scratchpad**, then **Check for Updates…**, to look for a newer version on your release channel.
