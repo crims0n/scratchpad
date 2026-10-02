@@ -1424,6 +1424,34 @@ html:not(.editor-line-numbers-enabled) .app-container.compare-mode .editor-line-
   color: var(--syntax-code);
 }
 
+.editor-backdrop .syntax-key,
+.editor-backdrop .syntax-tag,
+.editor-backdrop .syntax-literal {
+  color: var(--accent-color);
+}
+
+.editor-backdrop .syntax-string,
+.editor-backdrop .syntax-csv-1 {
+  color: var(--syntax-string);
+}
+
+.editor-backdrop .syntax-number,
+.editor-backdrop .syntax-csv-2 {
+  color: var(--syntax-number);
+}
+
+.editor-backdrop .syntax-comment {
+  color: var(--syntax-muted);
+}
+
+.editor-backdrop .syntax-meta {
+  color: var(--syntax-danger);
+}
+
+.editor-backdrop .syntax-csv-0 {
+  color: var(--syntax-code);
+}
+
 .editor-backdrop .diff-line-added,
 .editor-backdrop .diff-line-removed,
 .editor-backdrop .diff-text-added,

@@ -29,7 +29,7 @@ import { handleMarkdownAutocomplete } from "./editor-autocomplete.js";
 import { handleEditorSmartKeydown, handleMarkdownPaste } from "./editor-smart.js";
 import { applyEditorEdit } from "./editor-edit.js";
 import { getMarkdownTemplateEdit } from "./markdown-insert.js";
-import { highlightPreviewCode, renderEditorBackdrop } from "./syntax-highlighting.js";
+import { highlightPreviewCode, createEditorBackdropRenderer } from "./syntax-highlighting.js";
 import { renderEditorLineNumbers } from "./editor-line-numbers.js";
 import { createEditorRenderScheduler } from "./editor-render-scheduler.js";
 import { WELCOME_NOTE_CONTENT, WELCOME_NOTE_TITLE } from "./welcome-note.js";
@@ -328,6 +328,8 @@ let currentEditorZoom = DEFAULT_EDITOR_ZOOM;
 let editorLineSpacing = DEFAULT_EDITOR_LINE_SPACING;
 let notePreviewLines = DEFAULT_NOTE_PREVIEW_LINES;
 let syntaxHighlightingEnabled = DEFAULT_SYNTAX_HIGHLIGHTING;
+const renderPrimaryBackdrop = createEditorBackdropRenderer();
+const renderSecondaryBackdrop = createEditorBackdropRenderer();
 let editorLineNumbersEnabled = DEFAULT_EDITOR_LINE_NUMBERS;
 let previewHighlightsRendered = false;
 let isMcpEnabled = false;
@@ -1863,7 +1865,9 @@ function updateSecondaryEditorBackdrop() {
 function renderSecondaryEditorBackdrop() {
   secondaryEditorRenderScheduler.cancel();
   const comparison = visibleNoteComparison();
-  secondaryEditorBackdrop.innerHTML = renderEditorBackdrop(secondaryEditorTextarea.value, {
+  const note = notes.find(note => note.id === secondaryNoteId);
+  secondaryEditorBackdrop.innerHTML = renderSecondaryBackdrop(secondaryEditorTextarea.value, {
+    format: note ? getNoteFormat(note) : "TXT",
     syntaxEnabled: syntaxHighlightingEnabled,
     decorations: isCompareMode ? comparison.rightDecorations : []
   });
@@ -4339,6 +4343,8 @@ function renderPrimaryEditorBackdrop() {
   const text = editorTextarea.value;
   const query = findInput.value;
   const comparison = visibleNoteComparison();
+  const note = notes.find(note => note.id === activeNoteId);
+  const format = note ? getNoteFormat(note) : "TXT";
 
   updateEditorLineNumberGutter(editorTextarea, editorLineNumbers, editorWrapper, {
     changedLines: isCompareMode ? comparison.leftChangedLines : [],
@@ -4348,14 +4354,16 @@ function renderPrimaryEditorBackdrop() {
   updatePreviewHighlights();
   
   if (!isFindBarOpen || !query || findMatches.length === 0) {
-    editorBackdrop.innerHTML = renderEditorBackdrop(text, {
+    editorBackdrop.innerHTML = renderPrimaryBackdrop(text, {
+      format,
       syntaxEnabled: syntaxHighlightingEnabled,
       decorations: isCompareMode ? comparison.leftDecorations : []
     });
     return;
   }
 
-  editorBackdrop.innerHTML = renderEditorBackdrop(text, {
+  editorBackdrop.innerHTML = renderPrimaryBackdrop(text, {
+    format,
     syntaxEnabled: syntaxHighlightingEnabled,
     matches: findMatches,
     activeMatchIndex,

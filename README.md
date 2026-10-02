@@ -31,7 +31,7 @@ See [release notes](RELEASE_NOTES.md) for highlights, compatibility details, and
 
 - Multiple scratchpads with automatic saving, titles derived from the first line, and quick creation by double-clicking empty sidebar space
 - Edit, synchronized edit/preview, and full Markdown preview layouts
-- Optional Markdown editor coloring and language-aware fenced-code highlighting in previews
+- Optional format-aware editor coloring for Markdown, JSON, XML, YAML, and CSV, plus language-aware fenced-code highlighting in previews
 - Optional, theme-aware source line numbers in either editor pane
 - Markdown-aware continuation for lists, task lists, blockquotes, code fences, and tables
 - Pair completion, selection wrapping, and smart URL or spreadsheet paste
@@ -174,7 +174,7 @@ Scratchpad keeps its Markdown assistance lightweight and works directly in the n
 - Pasting a URL over selected text makes a Markdown link. Pasting a rectangular tab-separated spreadsheet range makes a Markdown table; ragged or uniformly indented tab-separated text stays literal.
 - Right-click in either editor and choose **Insert** for a starter table, task list, fenced code block, inline link, or reference-style link. The first useful placeholder is selected so typing replaces it immediately.
 
-Syntax highlighting is enabled by default. Open **Scratchpad menu → Appearance → Syntax highlighting** to toggle both the editor’s Markdown coloring and language-aware Preview highlighting. Preview code highlighting requires a supported language after the opening fence, such as <code>```javascript</code>; unknown and unlabeled fences remain plain code.
+Syntax highlighting is enabled by default. Open **Scratchpad menu → Appearance → Syntax highlighting** to toggle coloring in both editor panes and language-aware Preview highlighting. Editor colors follow the detected sidebar format: Markdown syntax, JSON keys and values, XML tags and attributes, YAML keys and values, and repeating CSV column colors. TXT stays plain; incomplete or unrecognized documents stay plain until a format is detected. Preview code highlighting requires a supported language after the opening fence, such as <code>```javascript</code>; unknown and unlabeled fences remain plain code.
 
 Source line numbers are off by default. Open **Scratchpad menu → Appearance → Line numbers** to show a subtle, theme-aware gutter in both editor panes; the preference is remembered between launches.
 
@@ -251,7 +251,7 @@ Production distribution will also require platform signing and, on macOS, notari
 | Desktop runtime | Tauri v2 and Rust |
 | Frontend | Vanilla HTML, CSS, and JavaScript |
 | Markdown | Bundled Marked parser with an allowlist sanitizer |
-| Syntax highlighting | Bundled Highlight.js for explicitly labeled fenced code blocks |
+| Syntax highlighting | Bundled Highlight.js for JSON/XML/YAML editors and labeled preview fences; local Markdown and CSV tokenizers |
 | Note comparison | Bundled jsdiff with line and word-level source comparison |
 | External links | `tauri-plugin-opener`, scoped to `http`, `https`, and `mailto` |
 | Local persistence | Desktop webview local storage |
