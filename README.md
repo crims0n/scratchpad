@@ -39,7 +39,7 @@ See [release notes](RELEASE_NOTES.md) for highlights, compatibility details, and
 - Two-note side-by-side editing with drag-to-split and live source comparison
 - Top-level pinned notes, collapsible sidebar folders with drag-and-drop organization, search, configurable note previews, manual ordering, word counts, and distraction-free Focus Mode
 - Find and replace with case-sensitive, exact-match, and regular-expression modes, live highlighting, and results across one or every scratchpad
-- Native text-file import and Markdown export
+- Native text-file import and Markdown/standalone HTML export
 - Copy as Markdown or sanitized rendered HTML
 - Optional portable workspace files that reopen automatically
 - Recoverable note deletion with persistent trash, Restore actions, and user-confirmed Empty Trash
@@ -85,7 +85,13 @@ Empty collections remain empty after reopening. With no note selected, the title
 
 Before replacement, Scratchpad saves and verifies an independent, restorable safety backup in the app data directory's `collection-backups` folder and shows its path. Keep that file until you have checked your restored data; you can restore it through the same action to undo a replacement. Workspace replacement uses one SQLite transaction. Local replacement uses a durable native checkpoint: a failed or interrupted write rolls back to the prior local values, including on the next launch. If recovery cannot complete, local data remains read-only; **Retry reading** retries checkpoint recovery. Do not delete app data while recovery is pending. The safety copies are retained and have no automatic expiry.
 
-Backups and safety copies are unencrypted and contain active **and trashed** note content; store them privately and copy important backups somewhere outside the app data directory. Clearing app data also deletes local notes and automatic safety copies. Collection backups are distinct from Markdown exports (one note) and preserved-data recovery exports (raw damaged data for manual recovery).
+Backups and safety copies are unencrypted and contain active **and trashed** note content; store them privately and copy important backups somewhere outside the app data directory. Clearing app data also deletes local notes and automatic safety copies. Collection backups are distinct from Markdown/HTML exports (one note) and preserved-data recovery exports (raw damaged data for manual recovery).
+
+### HTML export
+
+Choose **Scratchpad menu → Note → Export HTML file** to save the selected note as a standalone `.html` document. In Dual-Note Split View, it exports the active editor pane. The export includes your latest edits, Markdown formatting, the current preview colours, and code highlighting when enabled; it does not change your note or collection. Styles are embedded, with system font fallbacks, so the file opens offline without Scratchpad or external assets. Search highlights and app controls are excluded.
+
+HTML export uses the same sanitization as Preview: scripts and unsafe links are removed, internet/local-file images are blocked, and supported embedded raster images are retained. Safe external links remain clickable and go online only when opened. The HTML file contains readable, unencrypted note content; store and share it accordingly. HTML exports are for reading/sharing, not collection backups or a round-trip import format. PDF export is not included.
 
 ### Clearing the local collection
 

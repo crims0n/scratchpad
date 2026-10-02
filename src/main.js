@@ -14,6 +14,7 @@ import { parseBackup, serializeBackup, replaceLocalCollection, recoverLocalResto
 import { createUpdateUi } from "./updates.js";
 import { createMcpWriter, createNoteRevisionTracker, createFolderRevisionTracker } from "./mcp-writes.js";
 import { renderMarkdown, resolveLinkAction, sanitizeMarkdownHtml } from "./markdown.js";
+import { buildNoteHtml, htmlExportFilename, HTML_EXPORT_COLORS } from "./note-html-export.js";
 import { getNotePreview } from "./note-preview.js";
 import { ACTIVE_TEXT_PROPERTIES, DERIVED_THEME_PROPERTIES, deriveThemeSurfaceColors } from "./theme-colors.js";
 import { createCssColorResolver, createOpaqueColorParser, isColorDark } from "./css-color.js";
@@ -135,6 +136,7 @@ const copyMarkdownBtn = document.getElementById("copy-markdown");
 const copyHtmlBtn = document.getElementById("copy-html");
 const importBtn = document.getElementById("import-btn");
 const exportBtn = document.getElementById("export-btn");
+const exportHtmlBtn = document.getElementById("export-html-btn");
 const dbConnectBtn = document.getElementById("db-connect-btn");
 const dbDisconnectBtn = document.getElementById("db-disconnect-btn");
 const workspaceMenuValue = document.getElementById("workspace-menu-value");
@@ -2554,6 +2556,47 @@ async function clearLocalCollectionAction() {
   }
 }
 
+async function exportAsHtmlFile() {
+  if (exportHtmlBtn.disabled) return;
+  const secondary = isSplitNoteMode && activePane === "secondary";
+  const note = notes.find(n => n.id === (secondary ? secondaryNoteId : activeNoteId));
+  if (!note) { showNotification("Select a note to export"); return; }
+  // Capture the note before opening a picker; no persistence or preview timing
+  // is required, and switching/editing later cannot change this export.
+  const title = note.title;
+  const content = (secondary ? secondaryEditorTextarea : editorTextarea).value;
+  const dbPath = activeDbPath;
+  exportHtmlBtn.disabled = true;
+  try {
+    const style = window.getComputedStyle(document.documentElement);
+    const colors = Object.fromEntries(Object.keys(HTML_EXPORT_COLORS)
+      .map(property => [property, resolveCssColor(style.getPropertyValue(property))]));
+    const html = buildNoteHtml({ title, content, colors, syntaxHighlighting: syntaxHighlightingEnabled });
+    const defaultName = htmlExportFilename(title);
+    if (window.__TAURI__) {
+      await invoke("save_html_file_native", { content: html, defaultName, dbPath });
+      showNotification("HTML file saved successfully");
+    } else {
+      const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = defaultName;
+      link.hidden = true;
+      document.body.appendChild(link);
+      try { link.click(); } finally {
+        link.remove();
+        // Give the browser time to consume the download before releasing it.
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+      showNotification(`Exported as ${defaultName}`);
+    }
+  } catch (error) {
+    if (String(error) !== "Cancelled") showNotification("HTML export failed: " + error);
+  } finally {
+    exportHtmlBtn.disabled = false;
+  }
+}
+
 function exportAsMarkdownFile() {
   const activeNote = notes.find(n => n.id === activeNoteId);
   if (!activeNote) return;
@@ -2808,6 +2851,8 @@ function attachEventListeners() {
   secondaryEditorTextarea.addEventListener("keyup", () => updateWordCharCountForText(secondaryEditorTextarea));
   secondaryEditorTextarea.addEventListener("focus", () => setActivePane("secondary"));
   editorTextarea.addEventListener("focus", () => setActivePane("primary"));
+  secondaryNoteTitle.addEventListener("focus", () => setActivePane("secondary"));
+  noteTitleInput.addEventListener("focus", () => setActivePane("primary"));
   secondaryNoteTitle.addEventListener("input", handleSecondaryTitleInput);
 
   // Theme selector button in sidebar footer
@@ -2868,6 +2913,7 @@ function attachEventListeners() {
   copyHtmlBtn.addEventListener("click", copyHtmlToClipboard);
   importBtn.addEventListener("click", importFile);
   exportBtn.addEventListener("click", exportAsMarkdownFile);
+  exportHtmlBtn.addEventListener("click", exportAsHtmlFile);
   document.getElementById("collection-backup-btn").addEventListener("click", () => collectionBackupAction(false));
   document.getElementById("collection-restore-btn").addEventListener("click", () => collectionBackupAction(true));
   document.getElementById("local-clear-btn").addEventListener("click", clearLocalCollectionAction);
