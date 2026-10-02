@@ -62,3 +62,16 @@ test("limits preview context to ten lines", () => {
   const content = Array.from({ length: 12 }, (_, index) => `Line ${index + 1}`).join("\n");
   assert.equal(getNotePreview({ title: "Different", content, isTitleLocked: true }, 99).split("\n").length, 10);
 });
+
+test("non-Markdown previews preserve literal characters and skip automatic titles", () => {
+  for (const [format, content] of [
+    ["TXT", 'file_name\nLiteral < and > characters'],
+    ["JSON", '{"order_id":"*value*"}'], ["XML", '<order_id>*value*</order_id>'],
+    ["YAML", 'name: note_name\nvalue: "*literal*"'], ["CSV", 'name,value\nnote_name,`literal`']
+  ]) {
+    assert.equal(getNotePreview({ title: "Custom", content, isTitleLocked: true }, 2, format), content);
+    const [firstLine] = content.split("\n");
+    assert.equal(getNotePreview({ title: firstLine.slice(0, 10), content, isTitleLocked: false }, 2, format),
+      content.split("\n").slice(1).join("\n") || "No additional content...");
+  }
+});

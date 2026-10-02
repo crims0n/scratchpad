@@ -23,7 +23,7 @@ Scratchpad is a fast, local-first place for notes, snippets, and Markdown. Every
 - Paste a URL over selected text to make a link, or paste a rectangular spreadsheet range to make a table. Tab-indented text stays literal.
 
 ## Find and organize
-- Search scratchpad titles and content from the sidebar.
+- Search scratchpad titles and content from the sidebar. Each note shows a detected TXT, MD, JSON, XML, YAML, or CSV badge; uncertain content falls back to TXT.
 - Use the folder button in the sidebar to group related scratchpads. Folders collapse to keep the sidebar compact; notes without a folder remain at the top level.
 - Drag a note onto a folder to move it, or right-click a folder for note and folder actions.
 - Pin important scratchpads to keep them at the very top of the sidebar without placing them inside a folder. Unpinning returns a scratchpad to its folder.

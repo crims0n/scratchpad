@@ -2,6 +2,7 @@
 
 ## Highlights
 
+- Sidebar badges distinguish detected TXT, MD, JSON, XML, YAML, and CSV notes, updating after edits; non-Markdown snippets preserve literal characters.
 - Back up and restore a complete local-only or workspace collection, including folders, ordering, pins, and trash.
 - Preserve unreadable local notes and folders instead of overwriting them, with read-only protection and a recovery/export path.
 - Clear only the local notes, folders, and trash through an explicit **DELETE** confirmation, with a verified safety backup retained first.
