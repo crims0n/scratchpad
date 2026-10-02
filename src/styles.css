@@ -926,6 +926,10 @@ body {
   font: inherit;
 }
 
+#workspace-menu-storage {
+  flex-shrink: 0;
+}
+
 .dropdown-item:hover {
   background-color: var(--bg-input);
 }
@@ -2369,7 +2373,8 @@ html:not(.editor-line-numbers-enabled) .app-container.compare-mode .editor-line-
   overflow-wrap: anywhere;
 }
 
-#collection-backup-status {
+#collection-backup-status,
+#collection-backup-target {
   white-space: pre-line;
 }
 
