@@ -2251,6 +2251,7 @@ function backupChoice(message, confirmLabel = null) {
   const cancel = document.getElementById("collection-restore-cancel");
   const confirm = document.getElementById("collection-restore-confirm");
   status.textContent = message;
+  document.getElementById("collection-backup-preflight").hidden = !confirmLabel;
   cancel.textContent = confirmLabel ? "Cancel" : "Close";
   cancel.disabled = false;
   confirm.hidden = !confirmLabel;
@@ -2294,6 +2295,8 @@ async function collectionBackupAction(restoring) {
   backdrop.setAttribute("aria-hidden", "false");
   document.getElementById("collection-backup-heading").textContent = restoring ? "Restore collection" : "Back up collection";
   safety.hidden = true;
+  safety.textContent = "";
+  document.getElementById("collection-backup-preflight").hidden = false;
   cancel.disabled = true;
   document.getElementById("collection-restore-confirm").hidden = true;
   status.textContent = restoring ? "Choose a collection backup…" : "Saving pending edits…";
@@ -2321,7 +2324,7 @@ async function collectionBackupAction(restoring) {
       if (content == null) return;
       candidate = parseBackup(content);
       const summary = value => `${value.notes.length} notes, ${value.folders.length} folders, ${value.trash.length} trash entries`;
-      if (!await backupChoice(`Replace ${destination}? Current: ${summary({ notes, folders, trash })}. Backup: ${summary(candidate)}. This replaces the whole collection; it does not merge. A verified safety backup of your current collection will be retained before replacement.`, "Replace collection")) return;
+      if (!await backupChoice(`Replace ${destination}?\n\nCurrent: ${summary({ notes, folders, trash })}.\nBackup: ${summary(candidate)}.\n\nThis replaces the whole collection; it does not merge.\n\nA verified safety backup of your current collection will be retained before replacement.`, "Replace collection")) return;
     }
     status.textContent = "Saving pending edits…";
     didFlush = true;
@@ -2332,7 +2335,7 @@ async function collectionBackupAction(restoring) {
       const path = await invoke("save_collection_backup", { content: safetyContent, dbPath: activeDbPath });
       if (path == null) return;
       if (typeof path !== "string" || !path.trim()) throw new Error("Backup file was not confirmed");
-      await backupChoice(`Collection backup saved and verified: ${path}`);
+      await backupChoice(`Collection backup saved and verified:\n${path}`);
       return;
     }
     status.textContent = "Preserving your current collection and restoring…";

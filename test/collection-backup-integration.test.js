@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { bootApp } from "./helpers/app-harness.js";
 import { parseBackup, serializeBackup } from "../src/collection-backup.js";
@@ -40,6 +41,8 @@ async function restore(app, confirm = true) {
   app.click("collection-restore-btn");
   await app.settle();
   assert.equal(document.getElementById("collection-restore-confirm").hidden, false);
+  assert.equal(document.getElementById("collection-backup-preflight").hidden, false);
+  assert.match(document.getElementById("collection-backup-status").textContent, /\?\n\nCurrent:.*\nBackup:.*\n\nThis replaces.*\n\nA verified/);
   app.click(confirm ? "collection-restore-confirm" : "collection-restore-cancel");
   await app.settle();
 }
@@ -55,7 +58,50 @@ test("backup captures immediately pending edits and all metadata, verified file 
   assert.equal(bridge.exports.length, 1);
   assert.deepEqual(parseBackup(bridge.exports[0]), { ...original, notes: [{ ...app.read("scratchpad_notes")[0], content: "unsaved edit" }] });
   assert.match(document.getElementById("collection-backup-status").textContent, /saved and verified/);
+  assert.equal(document.getElementById("collection-backup-preflight").hidden, true);
   await close(app);
+});
+
+test("backup guidance is shown during work, hidden for results, and reset on reopening", async () => {
+  const bridge = native();
+  let finish;
+  const app = await boot(bridge, { handlers: { save_collection_backup: () => new Promise((resolve, reject) => {
+    finish = error => error ? reject(error) : resolve("/tmp/export.json");
+  }) } });
+  const reminder = document.getElementById("collection-backup-preflight");
+  const status = document.getElementById("collection-backup-status");
+  const cancel = document.getElementById("collection-restore-cancel");
+  for (const error of [null, new Error("disk full")]) {
+    app.click("collection-backup-btn"); await app.settle();
+    assert.equal(reminder.hidden, false);
+    assert.equal(cancel.disabled, true);
+    assert.equal(document.getElementById("collection-backup-safety").hidden, true);
+    assert.doesNotMatch(status.textContent, /saved and verified|failed/);
+    finish(error); await app.settle();
+    assert.equal(reminder.hidden, true);
+    assert.equal(cancel.textContent, "Close");
+    assert.equal(cancel.disabled, false);
+    assert.equal(document.getElementById("collection-restore-confirm").hidden, true);
+    assert.match(status.textContent, error ? /Backup failed: disk full/ : /saved and verified:\n\/tmp\/export.json/);
+    assert.match(document.getElementById("collection-backup-modal").textContent, /not encrypted/);
+    cancel.click(); await app.settle();
+  }
+  app.dom.window.close();
+});
+
+test("collection dialog paragraphs have a blank-line gap and preserve status paragraph breaks", async () => {
+  const styles = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+  const app = await boot(native(), { beforeBoot: win => {
+    const style = win.document.createElement("style");
+    style.textContent = styles;
+    win.document.head.append(style);
+  } });
+  const paragraph = document.getElementById("collection-backup-status");
+  const computed = app.dom.window.getComputedStyle(paragraph);
+  assert.equal(computed.marginBottom, "1.5em");
+  assert.equal(computed.lineHeight, "1.5");
+  assert.equal(computed.whiteSpace, "pre-line");
+  app.dom.window.close();
 });
 
 test("local restore preserves the original backup, publishes candidate only after save, and can be repeated", async () => {
@@ -66,7 +112,13 @@ test("local restore preserves the original backup, publishes candidate only afte
   assert.equal(bridge.pending(), null);
   assert.deepEqual(app.sidebarTitles(), ["pinned", "second"]);
   assert.match(document.getElementById("collection-backup-status").textContent, /Collection restored/);
+  assert.equal(document.getElementById("collection-backup-preflight").hidden, true);
   assert.match(document.getElementById("collection-backup-safety").textContent, /safety.json/);
+  app.click("collection-restore-cancel"); await app.settle();
+  app.click("collection-restore-btn"); await app.settle();
+  assert.equal(document.getElementById("collection-backup-preflight").hidden, false);
+  assert.equal(document.getElementById("collection-backup-safety").hidden, true);
+  assert.equal(document.getElementById("collection-backup-safety").textContent, "");
   app.click("collection-restore-cancel"); await app.settle();
   await restore(app);
   assert.deepEqual(local(app), incoming);
@@ -83,6 +135,7 @@ test("cancel, invalid/truncated/unsupported backups, and file picker cancel do n
     bridge.select(file);
     app.click("collection-restore-btn"); await app.settle();
     assert.match(document.getElementById("collection-backup-status").textContent, /Restore failed/);
+    assert.equal(document.getElementById("collection-backup-preflight").hidden, true);
     assert.deepEqual(local(app), original);
     app.click("collection-restore-cancel"); await app.settle();
   }
@@ -271,6 +324,7 @@ test("export and pending-save failures never report a completed backup", async (
   const bridge = native(), app = await boot(bridge, { handlers: { save_collection_backup: () => { throw new Error("disk full"); } } });
   app.click("collection-backup-btn"); await app.settle();
   assert.match(document.getElementById("collection-backup-status").textContent, /Backup failed.*disk full/);
+  assert.equal(document.getElementById("collection-backup-preflight").hidden, true);
   assert.deepEqual(local(app), original);
   await close(app);
   const bridge2 = native(), app2 = await boot(bridge2, { handlers: {
