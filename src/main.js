@@ -369,7 +369,7 @@ const mcpWriter = createMcpWriter({
       for (const [id, editor] of [[activeNoteId, primaryEditor], [secondaryNoteId, secondaryEditor]]) {
         if (id !== note.id || operation !== "append_to_note") continue;
         const { selectionStart, selectionEnd, selectionDirection, scrollTop, scrollLeft } = editor;
-        editor.value = note.content;
+        editor.loadDocument(note.content, { foldKey: noteFoldKey(note), format: getNoteFormat(note) });
         editor.setSelectionRange(selectionStart, selectionEnd, selectionDirection);
         editor.scrollTop = scrollTop;
         editor.scrollLeft = scrollLeft;
@@ -836,7 +836,7 @@ function loadActiveNote() {
   cancelScheduledNoteComparison();
 
   noteTitleInput.value = activeNote.title;
-  primaryEditor.value = activeNote.content;
+  primaryEditor.loadDocument(activeNote.content, { foldKey: noteFoldKey(activeNote), format: getNoteFormat(activeNote) });
   
   updateWordCharCount();
   updateMarkdownPreview();
@@ -851,6 +851,10 @@ function loadActiveNote() {
     updateHighlights();
   }
   if (compareStopped) renderSecondaryEditor();
+}
+
+function noteFoldKey(note) {
+  return JSON.stringify([activeDbPath, note.id]);
 }
 
 function clearEmptyCollectionUi() {
@@ -3855,6 +3859,7 @@ function selectMatch(index, focusEditor = false) {
   if (focusEditor && editorIsVisible) {
     primaryEditor.focus();
   }
+  primaryEditor.revealRange(match.start, match.end);
   primaryEditor.setSelectionRange(match.start, match.end);
   updateCursorPositionForText(primaryEditor);
 
@@ -4816,7 +4821,7 @@ function loadSecondaryNote() {
   cancelScheduledNoteComparison();
 
   secondaryNoteTitle.value = note.title;
-  secondaryEditor.value = note.content;
+  secondaryEditor.loadDocument(note.content, { foldKey: noteFoldKey(note), format: getNoteFormat(note) });
 
   const compareStopped = syncCompareControl();
   updateSecondaryEditor();

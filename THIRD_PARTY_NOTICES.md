@@ -131,6 +131,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ## CodeMirror 6
 
 Scratchpad bundles [CodeMirror 6](https://codemirror.net/) for its note editors.
+The bundle also includes Lezer's Markdown, JSON, XML, and YAML syntax parsers for
+format-aware section folding.
 CodeMirror and the packages included in the editor bundle use the MIT License.
 The full copyright and license notices for each bundled package are retained in
 [src/vendor/codemirror.LICENSE.txt](src/vendor/codemirror.LICENSE.txt), distributed
