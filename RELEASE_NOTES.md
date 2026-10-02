@@ -2,6 +2,7 @@
 
 ## Highlights
 
+- Editor syntax highlighting follows detected Markdown, JSON, XML, YAML, and CSV formats in both panes; TXT stays plain, with the existing Appearance toggle controlling colors.
 - Sidebar badges distinguish detected TXT, MD, JSON, XML, YAML, and CSV notes, updating after edits; non-Markdown snippets preserve literal characters.
 - Back up and restore a complete local-only or workspace collection, including folders, ordering, pins, and trash.
 - Preserve unreadable local notes and folders instead of overwriting them, with read-only protection and a recovery/export path.

@@ -6,8 +6,40 @@ const SYNTAX_CLASSES = new Set([
   "syntax-emphasis",
   "syntax-heading",
   "syntax-link",
-  "syntax-punctuation"
+  "syntax-punctuation",
+  "syntax-key",
+  "syntax-string",
+  "syntax-number",
+  "syntax-literal",
+  "syntax-tag",
+  "syntax-comment",
+  "syntax-meta",
+  "syntax-csv-0",
+  "syntax-csv-1",
+  "syntax-csv-2"
 ]);
+
+const FORMAT_LANGUAGES = { JSON: "json", XML: "xml", YAML: "yaml" };
+const TOKEN_CLASSES = {
+  "hljs-attr": "syntax-key",
+  "hljs-attribute": "syntax-key",
+  "hljs-string": "syntax-string",
+  "hljs-number": "syntax-number",
+  "hljs-literal": "syntax-literal",
+  "hljs-keyword": "syntax-literal",
+  "hljs-tag": "syntax-tag",
+  "hljs-name": "syntax-tag",
+  "hljs-comment": "syntax-comment",
+  "hljs-meta": "syntax-meta",
+  "hljs-punctuation": "syntax-punctuation",
+  "hljs-bullet": "syntax-punctuation",
+  "hljs-symbol": "syntax-number",
+  "hljs-type": "syntax-literal"
+};
+
+const HIGHLIGHT_ENTITIES = {
+  "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#x27;": "'"
+};
 
 const DECORATION_CLASSES = new Set([
   "diff-line-added",
@@ -21,6 +53,7 @@ function escapeHTML(value) {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
+    .replace(/\r/g, "&#13;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
@@ -49,7 +82,7 @@ function paintMatches(line, lineStart, expression, className, classes) {
   }
 }
 
-function buildSyntaxClasses(text) {
+function buildMarkdownClasses(text) {
   const classes = Array.from({ length: text.length }, () => null);
   let offset = 0;
   let openFence = null;
@@ -129,6 +162,111 @@ function buildSyntaxClasses(text) {
   return classes;
 }
 
+function buildCsvClasses(text) {
+  const classes = Array(text.length).fill(null);
+  let column = 0;
+  let start = 0;
+  let quoted = false;
+  for (let index = 0; index <= text.length; index += 1) {
+    const character = text[index];
+    if (character === '"') {
+      if (quoted && text[index + 1] === '"') { index += 1; continue; }
+      quoted = !quoted;
+    }
+    if (!quoted && (character === ',' || character === '\n' || character === '\r' || character === undefined)) {
+      paint(classes, start, index, `syntax-csv-${column % 3}`);
+      if (character === ',') {
+        paint(classes, index, index + 1, "syntax-punctuation");
+        column += 1;
+      } else {
+        column = 0;
+        if (character === '\r' && text[index + 1] === '\n') index += 1;
+      }
+      start = index + 1;
+    }
+  }
+  return classes;
+}
+
+function buildFormatClasses(text, format, highlighter) {
+  if (format === "MD") return buildMarkdownClasses(text);
+  if (format === "CSV") return buildCsvClasses(text);
+  const language = FORMAT_LANGUAGES[format];
+  if (!language || !highlighter?.getLanguage?.(language)) return [];
+
+  try {
+    const result = highlighter.highlight(text, { language, ignoreIllegals: true });
+    // Highlight.js emits only escaped text and nested span tokens. Read their
+    // ranges in one pass, without constructing thousands of temporary DOM nodes.
+    // Only known color classes survive; we always render escaped original source.
+    const classes = Array(text.length).fill(null);
+    const stack = [null];
+    const fragments = [];
+    let offset = 0;
+    let htmlOffset = 0;
+    for (const match of result.value.matchAll(/<span class="([^"]*)">|<\/span>|([^<]+)/g)) {
+      if (match.index !== htmlOffset) return [];
+      htmlOffset += match[0].length;
+      if (match[1] !== undefined) {
+        const className = match[1].split(/\s+/)
+          .map(name => Object.hasOwn(TOKEN_CLASSES, name) ? TOKEN_CLASSES[name] : null)
+          .find(Boolean) ?? stack.at(-1);
+        stack.push(className);
+      } else if (match[0] === "</span>") {
+        if (stack.length === 1) return [];
+        stack.pop();
+      } else {
+        const fragment = match[2].replace(/&(?:amp|lt|gt|quot|#x27);/g, entity => HIGHLIGHT_ENTITIES[entity]);
+        fragments.push(fragment);
+        const end = offset + fragment.length;
+        if (end > text.length) return [];
+        if (stack.at(-1)) classes.fill(stack.at(-1), offset, end);
+        offset = end;
+      }
+    }
+    return htmlOffset === result.value.length && stack.length === 1 && fragments.join("") === text ? classes : [];
+  } catch {
+    // A missing or failing grammar must still leave all source text readable.
+    return [];
+  }
+}
+
+function syntaxSettings(options) {
+  return {
+    enabled: options.syntaxEnabled ?? true,
+    format: options.format ?? "MD",
+    highlighter: options.highlighter ?? globalThis.window?.hljs
+  };
+}
+
+export function renderEditorBackdrop(text, options = {}) {
+  const source = String(text ?? "");
+  const { enabled, format, highlighter } = syntaxSettings(options);
+  const classes = enabled ? buildFormatClasses(source, format, highlighter) : [];
+  return composeEditorBackdrop(source, classes, options);
+}
+
+// Each pane holds just its latest tokenization. Find, comparison, and resize
+// redraws can reuse it; edits, format changes, and toggles invalidate it.
+export function createEditorBackdropRenderer() {
+  let previous = null;
+  return (text, options = {}) => {
+    const source = String(text ?? "");
+    const settings = syntaxSettings(options);
+    if (!previous || previous.source !== source || Object.keys(settings).some(key => previous[key] !== settings[key])) {
+      previous = {
+        source, ...settings,
+        classes: settings.enabled ? buildFormatClasses(source, settings.format, settings.highlighter) : []
+      };
+    }
+    if (!options.matches?.length && !options.decorations?.length) {
+      previous.html ??= composeEditorBackdrop(source, previous.classes, options);
+      return previous.html;
+    }
+    return composeEditorBackdrop(source, previous.classes, options);
+  };
+}
+
 function normalizeMatches(matches, textLength) {
   return (matches ?? [])
     .map((match, originalIndex) => ({
@@ -156,14 +294,11 @@ function normalizeDecorations(decorations, textLength) {
     .sort((left, right) => left.start - right.start || left.end - right.end);
 }
 
-export function renderEditorBackdrop(
-  text,
-  { syntaxEnabled = true, matches = [], activeMatchIndex = -1, decorations = [] } = {}
+function composeEditorBackdrop(
+  source,
+  syntaxClasses,
+  { matches = [], activeMatchIndex = -1, decorations = [] } = {}
 ) {
-  const source = String(text ?? "");
-  const syntaxClasses = syntaxEnabled
-    ? buildSyntaxClasses(source)
-    : Array.from({ length: source.length }, () => null);
   const normalizedMatches = normalizeMatches(matches, source.length);
   const normalizedDecorations = normalizeDecorations(decorations, source.length);
   const boundaries = new Set([0, source.length]);
