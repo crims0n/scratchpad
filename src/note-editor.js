@@ -9,7 +9,7 @@ import {
 } from "./vendor/codemirror.js";
 import { getChangedRange } from "./editor-edit.js";
 import { createEditorDecorationBuilder } from "./syntax-highlighting.js";
-import { editorFolding, editorFoldGutter, foldingFormatEffect, getEditorFolds, getEditorFoldAtLine, revealFoldedRange } from "./editor-folding.js";
+import { canFoldDocument, editorFolding, editorFoldGutter, foldingFormatEffect, getEditorFolds, getEditorFoldAtLine, revealFoldedRange } from "./editor-folding.js";
 
 const editors = new WeakMap();
 const presentationEffect = StateEffect.define();
@@ -197,7 +197,7 @@ export function createNoteEditor(element, { label, placeholder = "" } = {}) {
       const marks = buildDecorations(this.value, options).map(range => Decoration.mark({
         class: range.className, ...(range.tagName ? { tagName: range.tagName } : {})
       }).range(range.start, range.end));
-      const folding = ["MD", "JSON", "XML", "YAML"].includes(options.format);
+      const folding = canFoldDocument(view.state.doc, options.format);
       const settings = `${Boolean(options.lineNumbers)}:${Boolean(options.compare)}:${folding}`;
       const effects = [presentationEffect.of({
         marks: Decoration.set(marks, true), changedLines: new Set(options.changedLines ?? []), changeType: options.changeType
