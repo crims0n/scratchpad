@@ -597,9 +597,11 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 6px;
 }
 
 .note-item-title {
+  min-width: 0;
   font-weight: 500;
   font-size: 0.95rem;
   white-space: nowrap;
@@ -613,6 +615,19 @@ body {
   display: flex;
   align-items: center;
   flex: 0 0 auto;
+  gap: 2px;
+}
+
+.note-format-badge {
+  flex: 0 0 auto;
+  padding: 0 3px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  color: var(--text-secondary);
+  font-size: 0.6rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.03em;
 }
 
 .note-item-delete,
@@ -656,8 +671,16 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 6px;
   font-size: 0.75rem;
   color: var(--text-secondary);
+}
+
+.note-item-date {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .note-item-snippet {

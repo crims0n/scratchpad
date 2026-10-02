@@ -39,6 +39,7 @@ See [release notes](RELEASE_NOTES.md) for highlights, compatibility details, and
 - Two-note side-by-side editing with drag-to-split and live source comparison
 - Top-level pinned notes, collapsible sidebar folders with drag-and-drop organization, search, configurable note previews, manual ordering, word counts, and distraction-free Focus Mode
 - Find and replace with case-sensitive, exact-match, and regular-expression modes, live highlighting, and results across one or every scratchpad
+- Sidebar format badges for detected TXT, MD, JSON, XML, YAML, and CSV content, refreshed after edits
 - Native text-file import and Markdown/standalone HTML export
 - Formatted, note-only printing through the system print dialog (Cmd/Ctrl+P)
 - Copy as Markdown or sanitized rendered HTML

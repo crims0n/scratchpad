@@ -17,6 +17,7 @@ import { renderMarkdown, resolveLinkAction, sanitizeMarkdownHtml } from "./markd
 import { buildNoteHtml, htmlExportFilename, HTML_EXPORT_COLORS } from "./note-html-export.js";
 import { printNoteDocument } from "./note-print.js";
 import { getNotePreview } from "./note-preview.js";
+import { createNoteFormatDetector } from "./note-format.js";
 import { ACTIVE_TEXT_PROPERTIES, DERIVED_THEME_PROPERTIES, deriveThemeSurfaceColors } from "./theme-colors.js";
 import { createCssColorResolver, createOpaqueColorParser, isColorDark } from "./css-color.js";
 import { PRESET_THEMES } from "./preset-themes.js";
@@ -877,16 +878,20 @@ function clearEmptyCollectionUi() {
   previewHighlightsRendered = false;
 }
 
+const getNoteFormat = createNoteFormatDetector();
+
 function createNoteListItem(note) {
     const item = document.createElement("li");
     item.className = `note-item ${note.id === activeNoteId ? "active" : ""} ${isNotePinned(note) ? "pinned" : ""}`;
     item.setAttribute("data-id", note.id);
     item.setAttribute("data-pinned", String(isNotePinned(note)));
     item.tabIndex = 0;
-    item.setAttribute("aria-label", `Open ${isNotePinned(note) ? "pinned " : ""}${note.title}`);
+    const format = getNoteFormat(note);
+    item.title = `Detected format: ${format}`;
+    item.setAttribute("aria-label", `Open ${isNotePinned(note) ? "pinned " : ""}${note.title}, detected format ${format}`);
     if (note.id === activeNoteId) item.setAttribute("aria-current", "true");
     
-    const snippet = getNotePreview(note, notePreviewLines);
+    const snippet = getNotePreview(note, notePreviewLines, format);
     
     const formattedDate = new Date(note.updatedAt).toLocaleDateString(undefined, {
       month: "short",
@@ -913,7 +918,8 @@ function createNoteListItem(note) {
       </div>
       <div class="note-item-snippet">${escapeHTML(snippet)}</div>
       <div class="note-item-meta">
-        <span>${formattedDate}</span>
+        <span class="note-item-date">${formattedDate}</span>
+        <span class="note-format-badge" aria-hidden="true">${format}</span>
       </div>
     `;
     item.querySelectorAll("button").forEach(button => { button.disabled = isLocalRecoveryBlocked(); });
