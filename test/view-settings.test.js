@@ -30,7 +30,7 @@ test("editor and sidebar view settings are adjustable and persistent", async () 
   assert.deepEqual(
     [...document.querySelectorAll("#actions-dropdown-content > .dropdown-section > .dropdown-section-title")]
       .map(label => label.textContent),
-    ["Workspace", "Note", "Appearance", "Agent access", "Help"]
+    ["Collection", "Note", "Appearance", "Agent access", "Help"]
   );
   assert.equal(document.getElementById("theme-picker-btn").firstElementChild.textContent, "Color theme");
   assert.equal(document.getElementById("active-theme-menu-value").textContent, "Default Dark");
@@ -38,7 +38,7 @@ test("editor and sidebar view settings are adjustable and persistent", async () 
   assert.equal(document.getElementById("copy-html").textContent, "Copy rendered HTML");
   assert.equal(document.getElementById("import-btn").textContent, "Import text file");
   assert.equal(document.getElementById("export-btn").textContent, "Export Markdown file");
-  assert.equal(document.getElementById("db-connect-btn").textContent, "Open workspace");
+  assert.equal(document.getElementById("db-connect-btn").textContent, "Open or create workspace…");
   assert.equal(document.getElementById("mcp-permissions-summary").textContent, "Off");
   assert.equal(document.getElementById("agent-access-toggle-btn").textContent, "Off");
   assert.equal(document.getElementById("agent-access-config-btn").textContent, "MCP Configuration");

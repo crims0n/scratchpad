@@ -38,6 +38,8 @@ test("help and reference documents current Markdown editing behavior", () => {
   const mcp = document.getElementById("pane-mcp").textContent;
 
   assert.match(shortcuts, /F1/);
+  assert.match(shortcuts, /A collection is your notes, folders, and trash/);
+  assert.match(shortcuts, /Open or create workspace….*Return to local notes.*does not merge collections/);
   assert.match(shortcuts, /Clear Local Collection.*exact word DELETE.*verified safety backup/);
   assert.match(shortcuts, /Deleting a folder from the sidebar returns its notes to the top level/);
   assert.match(shortcuts, /Compare.*removed source text on the left and added source text on the right/);

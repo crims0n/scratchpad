@@ -2291,7 +2291,8 @@ async function collectionBackupAction(restoring) {
   const cancel = document.getElementById("collection-restore-cancel");
   const app = document.getElementById("app");
   const previousFocus = actionsBtn;
-  const destination = activeDbPath ? activeDbPath : "Local notes";
+  const destination = activeDbPath ? `Workspace file: ${activeDbPath}` : "Local notes (stored in this app)";
+  document.getElementById("collection-backup-target").textContent = `${restoring ? "Restore destination" : "Backup source"}: ${destination}\nIncludes notes, folders, and trash.`;
   backdrop.style.display = "flex";
   backdrop.setAttribute("aria-hidden", "false");
   document.getElementById("collection-backup-heading").textContent = restoring ? "Restore collection" : "Back up collection";
@@ -2336,7 +2337,7 @@ async function collectionBackupAction(restoring) {
       const path = await invoke("save_collection_backup", { content: safetyContent, dbPath: activeDbPath });
       if (path == null) return;
       if (typeof path !== "string" || !path.trim()) throw new Error("Backup file was not confirmed");
-      await backupChoice(`Collection backup saved and verified:\n${path}`);
+      await backupChoice(`Collection backup saved and verified:\n${path}\n\nSource: ${destination}`);
       return;
     }
     status.textContent = "Preserving your current collection and restoring…";
@@ -2371,7 +2372,7 @@ async function collectionBackupAction(restoring) {
     cancelScheduledMcpSnapshotUpdates();
     await syncMcpSnapshot().catch(error => console.error("Could not publish restored collection", error));
     setSavedState();
-    await backupChoice("Collection restored. The previous collection's safety backup is retained; keep it until you have checked your restored notes.");
+    await backupChoice(`Collection restored.\n\nDestination: ${destination}\n\nThe previous collection's safety backup is retained; keep it until you have checked your restored notes.`);
   } catch (error) {
     // If even rollback failed, retry the durable checkpoint and keep local data
     // locked if it still cannot be recovered. Never autosave a partial restore.
@@ -3295,6 +3296,11 @@ function refreshLocalRecoveryUi() {
   clearButton.title = activeDbPath ? "Return to local notes before clearing; workspace files are never cleared"
     : needsRecovery || trashLoadError ? "Recover unreadable local data before clearing"
       : !window.__TAURI__ ? "Clearing requires a verified safety backup in the desktop app" : "Clear only local notes, folders, and trash";
+  document.getElementById("local-clear-menu-scope").textContent = activeDbPath
+    ? "Return to local notes to clear. Workspace files are never cleared."
+    : needsRecovery || trashLoadError ? "Recover unreadable local data before clearing."
+      : !window.__TAURI__ ? "Clearing requires the desktop app and a verified safety backup."
+        : "Clears only local notes, folders, and trash.";
   for (const element of [newNoteBtn, newFolderBtn, importBtn, replaceOneBtn, replaceAllBtn,
     ctxInsertBtn, ctxPinBtn, ctxMoveUpBtn, ctxMoveDownBtn, ctxMoveFolderBtn, ctxDeleteNoteBtn,
     ctxFolderNewNoteBtn, ctxFolderRenameBtn, ctxFolderMoveUpBtn, ctxFolderMoveDownBtn, ctxFolderDeleteBtn]) element.disabled = blocked;
@@ -3475,11 +3481,15 @@ function updateDbUiState(isConnected) {
     const fileName = activeDbPath.split(/[/\\]/).pop();
     workspaceMenuValue.textContent = fileName;
     workspaceMenuValue.title = activeDbPath;
+    document.getElementById("workspace-menu-storage").textContent = "Workspace file";
+    document.getElementById("collection-menu-scope").textContent = "Backup and restore apply to this workspace collection. Local notes stay separate.";
   } else {
     dbConnectBtn.style.display = "block";
     dbDisconnectBtn.style.display = "none";
     workspaceMenuValue.textContent = "Local notes";
-    workspaceMenuValue.title = "Notes stored in local webview storage";
+    workspaceMenuValue.title = "Local notes, folders, and trash stored in this app";
+    document.getElementById("workspace-menu-storage").textContent = "In this app";
+    document.getElementById("collection-menu-scope").textContent = "Backup and restore apply to Local notes. Workspace files stay separate.";
     
   }
   setSavedState();

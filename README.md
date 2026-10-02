@@ -53,6 +53,8 @@ By default, notes, folders, and trash stay in the desktop webview's local storag
 
 Local notes and workspace notes are two separate collections, each with its own trash. While a workspace is connected, changes are written to that workspace and the local collection is left exactly as it was, so disconnecting returns the notes and trash you had before. Connecting an empty workspace seeds it with the active notes and folders already available in the app; local trash stays local. A workspace with existing notes, folders, or trash opens its own collection.
 
+A **collection** is your notes, folders, and trash; a **workspace file** is a portable storage location for a collection. The menu’s **Collection** section shows **In this app — Local notes** or **Workspace file — filename**, and identifies the collection that backup and restore affect. Choose **Open or create workspace…** to switch to a workspace file, or **Return to local notes** to switch back. These actions do not merge collections. **Clear Local Collection…** always targets local storage, never a workspace file.
+
 Pending workspace changes are flushed before the desktop window closes; if that save fails, Scratchpad cancels the close and reports the error. If a workspace cannot be opened at start-up, Scratchpad reports it and falls back to your local notes, leaving the workspace file untouched.
 
 Scratchpad has no analytics, advertising, accounts, or sync service. Markdown is parsed on-device, preview HTML is sanitized, and remote images are blocked so merely previewing a note does not contact an image host. Links in the preview open in your default browser rather than inside the app; following one is an explicit network action and may contact that destination.

@@ -29,6 +29,11 @@ Scratchpad is a fast, local-first place for notes, snippets, and Markdown. Every
 - Pin important scratchpads to keep them at the very top of the sidebar without placing them inside a folder. Unpinning returns a scratchpad to its folder.
 - Use \`Cmd/Ctrl+F\` to find text or \`Cmd/Ctrl+H\` to find and replace. Find Results can search one scratchpad or all of them.
 
+## Collections and workspace files
+- A **collection** is your notes, folders, and trash. **Local notes** keeps one collection in this app; a **workspace file** holds a separate, portable collection.
+- The menu’s **Collection** section shows the active storage location. In the desktop app, choose **Open or create workspace…** to switch to a workspace, or **Return to local notes** to switch back. An empty, not-yet-initialized workspace starts with local notes and folders; local trash stays local.
+- **Back Up Collection…** and **Restore Collection…** act on the collection shown in the menu, whether local or in a workspace file. Restore replaces, rather than merges, notes, folders, and trash after confirmation, and retains a verified safety backup. Backups are unencrypted; keep them private.
+
 ## Delete and recover
 - Right-click a note and choose **Delete Note** to move it to trash.
 - Click the **trash icon at the bottom right**, then **Restore**, to recover a note. It returns to its original folder or the top level if that folder was removed.
