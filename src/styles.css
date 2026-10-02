@@ -671,8 +671,16 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 6px;
   font-size: 0.75rem;
   color: var(--text-secondary);
+}
+
+.note-item-date {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .note-item-snippet {
