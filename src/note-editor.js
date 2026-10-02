@@ -4,10 +4,12 @@ import {
   Compartment, Decoration, EditorSelection, EditorState, EditorView,
   GutterMarker, StateEffect, StateField, Transaction,
   standardKeymap, drawSelection, dropCursor, gutter, history, historyKeymap,
-  insertNewline, isolateHistory, keymap, lineNumbers, placeholder as editorPlaceholder, redo, undo
+  foldEffect, insertNewline, isolateHistory, keymap, lineNumbers,
+  placeholder as editorPlaceholder, redo, undo, unfoldEffect
 } from "./vendor/codemirror.js";
 import { getChangedRange } from "./editor-edit.js";
 import { createEditorDecorationBuilder } from "./syntax-highlighting.js";
+import { editorFolding, editorFoldGutter, foldingFormatEffect, getEditorFolds, getEditorFoldAtLine, revealFoldedRange } from "./editor-folding.js";
 
 const editors = new WeakMap();
 const presentationEffect = StateEffect.define();
@@ -49,6 +51,11 @@ export function createNoteEditor(element, { label, placeholder = "" } = {}) {
   const placeholderConfig = new Compartment();
   const gutterConfig = new Compartment();
   const buildDecorations = createEditorDecorationBuilder();
+  // Each adapter belongs to one pane; keys identify collection + note.
+  const foldSessions = new Map();
+  let foldSessionKey = null;
+  let foldFormat = "TXT";
+  let comparing = false;
   let readOnly = false;
   let placeholderText = placeholder;
   let gutterSettings = "";
@@ -82,6 +89,9 @@ export function createNoteEditor(element, { label, placeholder = "" } = {}) {
         keyup(event) { emit("keyup", event); },
         focus(event) { emit("focus", event); }
       }),
+      // Register folding's keymap after Scratchpad's DOM handlers too: the
+      // first keymap installs CodeMirror's shared keyboard event handler.
+      editorFolding(),
       keymap.of([
         { key: "Enter", run: insertNewline, shift: insertNewline },
         ...historyKeymap,
@@ -106,12 +116,25 @@ export function createNoteEditor(element, { label, placeholder = "" } = {}) {
     set value(value) { this.loadDocument(value); },
     // Loading a note/collection resets history even when its text is identical.
     // This prevents Undo from copying edits from the previously displayed note.
-    loadDocument(value) {
+    loadDocument(value, { foldKey = null, format = "TXT" } = {}) {
+      if (foldSessionKey !== null) {
+        const ranges = getEditorFolds(view.state);
+        if (ranges.length) foldSessions.set(foldSessionKey, { source: this.value, format: foldFormat, ranges });
+        else foldSessions.delete(foldSessionKey);
+      }
+      foldSessionKey = foldKey;
+      foldFormat = format;
       documentVersion += 1;
       silent = true;
       try {
         gutterSettings = "";
         view.setState(EditorState.create({ doc: String(value ?? ""), extensions: extensions() }));
+        const saved = foldSessions.get(foldSessionKey);
+        const effects = [foldingFormatEffect.of(format)];
+        if (!comparing && saved?.source === this.value && saved.format === format) {
+          effects.push(...saved.ranges.map(range => foldEffect.of(range)));
+        } else foldSessions.delete(foldSessionKey);
+        view.dispatch({ effects });
       } finally { silent = false; }
     },
     get selectionStart() { return view.state.selection.main.from; },
@@ -158,20 +181,40 @@ export function createNoteEditor(element, { label, placeholder = "" } = {}) {
     get scrollHeight() { return view.scrollDOM.scrollHeight; },
     get clientHeight() { return view.scrollDOM.clientHeight; },
     scrollToRange(start, end) {
+      revealFoldedRange(view, start, end);
       view.dispatch({ effects: EditorView.scrollIntoView(EditorSelection.range(start, end), { y: "center" }) });
+    },
+    revealRange(start, end) { revealFoldedRange(view, start, end); },
+    get foldedRanges() { return getEditorFolds(view.state); },
+    toggleFold(lineNumber) {
+      const folded = getEditorFolds(view.state).find(range => view.state.doc.lineAt(range.from).number === lineNumber);
+      const range = folded ?? getEditorFoldAtLine(view.state, lineNumber);
+      if (!range) return false;
+      view.dispatch({ effects: (folded ? unfoldEffect : foldEffect).of(range) });
+      return true;
     },
     setPresentation(options = {}) {
       const marks = buildDecorations(this.value, options).map(range => Decoration.mark({
         class: range.className, ...(range.tagName ? { tagName: range.tagName } : {})
       }).range(range.start, range.end));
-      const settings = `${Boolean(options.lineNumbers)}:${Boolean(options.compare)}`;
+      const folding = ["MD", "JSON", "XML", "YAML"].includes(options.format);
+      const settings = `${Boolean(options.lineNumbers)}:${Boolean(options.compare)}:${folding}`;
       const effects = [presentationEffect.of({
         marks: Decoration.set(marks, true), changedLines: new Set(options.changedLines ?? []), changeType: options.changeType
       })];
+      if (options.format !== foldFormat) {
+        foldFormat = options.format ?? "TXT";
+        effects.push(foldingFormatEffect.of(foldFormat));
+      }
+      if (options.compare && !comparing) {
+        effects.push(...getEditorFolds(view.state).map(range => unfoldEffect.of(range)));
+      }
+      comparing = Boolean(options.compare);
       if (settings !== gutterSettings) {
         gutterSettings = settings;
         effects.push(gutterConfig.reconfigure([
           ...(options.lineNumbers ? [lineNumbers()] : []),
+          ...(folding ? [editorFoldGutter()] : []),
           ...(options.compare ? [comparisonGutter] : [])
         ]));
       }

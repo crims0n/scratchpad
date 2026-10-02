@@ -2,6 +2,7 @@
 
 ## Highlights
 
+- Collapse detected Markdown, JSON, XML, and YAML sections in either pane using gutter chevrons and hidden-line placeholders. Find reveals hidden matches; Compare starts expanded, and saved/exported source retains all content.
 - Both note editors use CodeMirror 6, preserving format colors, Markdown helpers, Find/Replace, Compare, wrapping, and appearance settings while providing editor-managed undo and aligned gutters.
 - Editor syntax highlighting follows detected Markdown, JSON, XML, YAML, and CSV formats in both panes; TXT stays plain, with the existing Appearance toggle controlling colors.
 - Sidebar badges distinguish detected TXT, MD, JSON, XML, YAML, and CSV notes, updating after edits; non-Markdown snippets preserve literal characters.

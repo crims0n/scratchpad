@@ -1294,6 +1294,37 @@ button.view-setting-value:hover {
   opacity: 0.42;
 }
 
+.note-editor .cm-foldGutter .cm-gutterElement { padding: 0 3px; }
+.note-editor .editor-fold-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 1.4em;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+.note-editor .cm-foldPlaceholder {
+  margin: 0 4px;
+  padding: 0 5px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-input);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.8em;
+  cursor: pointer;
+}
+.note-editor .editor-fold-toggle:hover,
+.note-editor .cm-foldPlaceholder:hover { color: var(--editor-text); }
+.note-editor .editor-fold-toggle:focus-visible,
+.note-editor .cm-foldPlaceholder:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 1px; }
+
 .note-editor .note-editor-diff-gutter { width: 7px; }
 .note-editor .note-editor-diff-gutter .cm-gutterElement {
   border-left: 3px solid transparent;

@@ -178,6 +178,10 @@ Syntax highlighting is enabled by default. Open **Scratchpad menu → Appearance
 
 Source line numbers are off by default. Open **Scratchpad menu → Appearance → Line numbers** to show a subtle, theme-aware gutter in both editor panes; the preference is remembered between launches.
 
+Collapse sections with the gutter chevrons: Markdown headings and fenced code, JSON objects and arrays, XML elements, and YAML nested mappings, sequences, and scalar blocks. Click the hidden-line placeholder to expand a section. CSV and TXT stay unfolded. Folding works independently of syntax colors and line numbers; each pane remembers folds for each note and collection until the app closes. Find searches the complete source and expands selected hidden matches. Entering Compare expands both notes. Saving, exporting, and copying the complete document include hidden text, and folding does not add text undo steps. Edits recheck fold boundaries; changed or invalid boundaries expand automatically.
+
+With the editor focused, use **Cmd+Alt+[ / Cmd+Alt+]** on macOS or **Ctrl+Shift+[ / Ctrl+Shift+]** elsewhere to collapse or expand the current section. **Ctrl+Alt+[ / Ctrl+Alt+]** collapses or expands all sections. Hidden-line placeholders also support keyboard activation.
+
 Open two notes side by side, then choose **Compare** in the toolbar to highlight source differences without changing either note. Removed text is marked on the left, added text on the right, and related words receive contiguous substring detail. The toolbar reports the total number of changed lines across both notes. Comparison refreshes after a brief pause in typing, showing **Updating comparison…** while pending, and turns off when split view closes.
 
 ## Themes
