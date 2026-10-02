@@ -339,6 +339,7 @@ let mcpWriteListener = null;
 let mcpCollectionId = window.crypto.randomUUID();
 let isWorkspaceSwitching = false;
 let isClosePending = false;
+// Covers backup, restore, and clearing local data: all exclude edits/switches/close.
 let isCollectionBackupBusy = false;
 
 function enqueueWorkspaceOperation(operation) {
@@ -2239,7 +2240,7 @@ async function recoverInterruptedCollectionRestore() {
     const recovered = await recoverLocalRestore(localStorage, restoreJournal);
     localRestoreError = "";
     localCollection.setRestoreBlocked(false);
-    if (recovered) showNotification("Interrupted restore rolled back; your previous local collection was recovered");
+    if (recovered) showNotification("Interrupted local collection change rolled back; your previous collection was recovered");
   } catch (error) {
     localRestoreError = String(error.message || error);
     localCollection.setRestoreBlocked(true);
@@ -2395,6 +2396,156 @@ async function collectionBackupAction(restoring) {
     refreshLocalRecoveryUi();
     previousFocus.focus();
     // Resume only edits which were already scheduled before opening the dialog.
+    if (!didFlush && !isLocalRecoveryBlocked()) pendingNotes.forEach(id => scheduleNoteSave(id));
+  }
+}
+
+async function clearLocalCollectionAction() {
+  if (isCollectionBackupBusy || isWorkspaceSwitching || isClosePending) return;
+  if (activeDbPath) {
+    showNotification("Return to local notes before clearing the local collection; workspaces are not cleared");
+    return;
+  }
+  if (!window.__TAURI__) {
+    showNotification("Clearing the local collection requires the desktop app and a verified safety backup");
+    return;
+  }
+  if (localCollection.blocked() || trashLoadError) {
+    showNotification("Recover unreadable local data before clearing the collection");
+    return;
+  }
+  isCollectionBackupBusy = true;
+  const collectionId = mcpCollectionId;
+  const pendingNotes = [...noteSaveDebounceTimers.keys()];
+  let didFlush = false, replacementStarted = false, showResult = false, resolveChoice = null;
+  const backdrop = document.getElementById("local-clear-backdrop");
+  const modal = document.getElementById("local-clear-modal");
+  const status = document.getElementById("local-clear-status");
+  const instructions = document.getElementById("local-clear-instructions");
+  const input = document.getElementById("local-clear-confirmation");
+  const safety = document.getElementById("local-clear-safety");
+  const cancel = document.getElementById("local-clear-cancel");
+  const confirm = document.getElementById("local-clear-confirm");
+  const app = document.getElementById("app");
+  const choose = choice => {
+    if (!resolveChoice || cancel.disabled || (choice && (confirm.hidden || confirm.disabled || input.disabled || input.value !== "DELETE"))) return;
+    const resolve = resolveChoice;
+    resolveChoice = null;
+    input.disabled = cancel.disabled = confirm.disabled = true;
+    resolve(choice);
+  };
+  const awaitChoice = () => new Promise(resolve => { resolveChoice = resolve; });
+  const updateConfirmation = () => { confirm.disabled = !resolveChoice || input.value !== "DELETE"; };
+  const blockKeys = event => {
+    if (event.key === "Tab") trapModalFocus(event, modal);
+    if (event.key === "Escape") { event.preventDefault(); if (!cancel.disabled) cancel.click(); }
+    if (!modal.contains(event.target)) event.preventDefault();
+    event.stopImmediatePropagation();
+  };
+  const blockClicks = event => {
+    if (!modal.contains(event.target)) { event.preventDefault(); event.stopImmediatePropagation(); }
+  };
+  const requireLocal = () => {
+    if (activeDbPath || collectionId !== mcpCollectionId || localCollection.blocked() || trashLoadError) {
+      throw new Error("Local collection changed or needs recovery; no clearing was started");
+    }
+    // A failed legacy-key removal must not re-import old notes after a clear/restart.
+    if (readStoredNotes(localStorage.getItem(LOCAL_NOTES_BACKUP_KEY))) {
+      throw new Error("Previously set-aside notes still need migration; restart the app before clearing");
+    }
+  };
+  const reloadView = async () => {
+    loadLocalCollection();
+    loadTrashFromLocalStorage();
+    activeNoteId = notes[0]?.id ?? null;
+    secondaryNoteId = null;
+    searchInput.value = "";
+    renderNoteList();
+    loadActiveNote();
+    syncSecondaryNoteUi(true);
+    refreshTrashUi();
+    mcpCollectionId = window.crypto.randomUUID();
+    cancelScheduledMcpSnapshotUpdates();
+    await syncMcpSnapshot().catch(error => console.error("Could not publish local collection after clearing", error));
+  };
+  backdrop.style.display = "flex";
+  backdrop.setAttribute("aria-hidden", "false");
+  instructions.hidden = false;
+  safety.hidden = true;
+  safety.textContent = input.value = "";
+  input.disabled = false;
+  cancel.textContent = "Cancel";
+  cancel.disabled = confirm.disabled = true;
+  confirm.hidden = false;
+  const count = (items, singular, plural = `${singular}s`) => `${items.length} ${items.length === 1 ? singular : plural}`;
+  status.textContent = `Clear Local notes?\n\n${count(notes, "note")}, ${count(folders, "folder")}, ${count(trash, "trash entry", "trash entries")} will be removed.`;
+  app.inert = true;
+  refreshEditorAvailability();
+  clearPendingSaveTimers();
+  trashUi.close();
+  input.addEventListener("input", updateConfirmation);
+  cancel.onclick = () => choose(false);
+  confirm.onclick = () => choose(true);
+  document.addEventListener("keydown", blockKeys, true);
+  document.addEventListener("click", blockClicks, true);
+  modal.focus();
+  try {
+    await dbSaveQueue;
+    requireLocal();
+    cancel.disabled = false;
+    const choice = awaitChoice();
+    modal.focus(); // Keep the scope/counts visible; never initially focus the destructive button.
+    if (!await choice) return;
+    requireLocal();
+    status.textContent = "Saving pending edits and preserving your local collection…";
+    didFlush = true;
+    if (!await flushPendingSaves()) throw new Error("Pending edits could not be saved; clearing stopped");
+    requireLocal();
+    const safetyContent = serializeBackup({ notes, folders, trash });
+    replacementStarted = true;
+    await replaceLocalCollection(localStorage, { notes: [], folders: [], trash: [] }, {
+      ...restoreJournal,
+      begin: async (values, content) => {
+        const path = await restoreJournal.begin(values, content);
+        if (typeof path !== "string" || !path.trim()) throw new Error("Safety backup was not confirmed; clearing stopped");
+        safety.hidden = false;
+        safety.textContent = `Your previous local collection is preserved in:\n${path}\n\nUse Restore Collection… to restore this safety backup. Keep it private; it is not encrypted.`;
+      }
+    }, safetyContent);
+    await reloadView();
+    setSavedState();
+    status.textContent = "Local notes, folders, and trash cleared. Workspace files, preferences, themes, and existing backup/recovery copies were not changed.";
+    showResult = true;
+  } catch (error) {
+    status.textContent = `Could not clear local collection: ${error.message || error}`;
+    showResult = true;
+    if (replacementStarted) {
+      localCollection.setRestoreBlocked(true);
+      await recoverInterruptedCollectionRestore();
+      await reloadView();
+    }
+  } finally {
+    if (showResult) {
+      instructions.hidden = true;
+      confirm.hidden = true;
+      input.value = "";
+      cancel.textContent = "Close";
+      cancel.disabled = false;
+      const closed = awaitChoice();
+      cancel.focus();
+      await closed;
+    }
+    resolveChoice = null;
+    input.removeEventListener("input", updateConfirmation);
+    cancel.onclick = confirm.onclick = null;
+    document.removeEventListener("keydown", blockKeys, true);
+    document.removeEventListener("click", blockClicks, true);
+    backdrop.style.display = "none";
+    backdrop.setAttribute("aria-hidden", "true");
+    app.inert = false;
+    isCollectionBackupBusy = false;
+    refreshLocalRecoveryUi();
+    actionsBtn.focus();
     if (!didFlush && !isLocalRecoveryBlocked()) pendingNotes.forEach(id => scheduleNoteSave(id));
   }
 }
@@ -2715,6 +2866,7 @@ function attachEventListeners() {
   exportBtn.addEventListener("click", exportAsMarkdownFile);
   document.getElementById("collection-backup-btn").addEventListener("click", () => collectionBackupAction(false));
   document.getElementById("collection-restore-btn").addEventListener("click", () => collectionBackupAction(true));
+  document.getElementById("local-clear-btn").addEventListener("click", clearLocalCollectionAction);
   dbConnectBtn.addEventListener("click", connectDatabase);
   dbDisconnectBtn.addEventListener("click", disconnectDatabase);
   agentAccessToggleBtn.addEventListener("click", (event) => {
@@ -3135,6 +3287,11 @@ function refreshLocalRecoveryUi() {
   document.getElementById("local-recovery-replace-btn").title = localCollection.canReplace() ? "" : "Automatic replacement is available in the desktop app; export for manual recovery";
   document.getElementById("local-recovery-confirmation").hidden = true;
   refreshEditorAvailability();
+  const clearButton = document.getElementById("local-clear-btn");
+  clearButton.disabled = Boolean(activeDbPath) || needsRecovery || Boolean(trashLoadError) || !window.__TAURI__;
+  clearButton.title = activeDbPath ? "Return to local notes before clearing; workspace files are never cleared"
+    : needsRecovery || trashLoadError ? "Recover unreadable local data before clearing"
+      : !window.__TAURI__ ? "Clearing requires a verified safety backup in the desktop app" : "Clear only local notes, folders, and trash";
   for (const element of [newNoteBtn, newFolderBtn, importBtn, replaceOneBtn, replaceAllBtn,
     ctxInsertBtn, ctxPinBtn, ctxMoveUpBtn, ctxMoveDownBtn, ctxMoveFolderBtn, ctxDeleteNoteBtn,
     ctxFolderNewNoteBtn, ctxFolderRenameBtn, ctxFolderMoveUpBtn, ctxFolderMoveDownBtn, ctxFolderDeleteBtn]) element.disabled = blocked;

@@ -85,6 +85,14 @@ Before replacement, Scratchpad saves and verifies an independent, restorable saf
 
 Backups and safety copies are unencrypted and contain active **and trashed** note content; store them privately and copy important backups somewhere outside the app data directory. Clearing app data also deletes local notes and automatic safety copies. Collection backups are distinct from Markdown exports (one note) and preserved-data recovery exports (raw damaged data for manual recovery).
 
+### Clearing the local collection
+
+In the desktop app, while **Local notes** is active, choose **Clear Local Collection…**. Review the note, folder, and trash counts, then type the exact word **DELETE** to enable **Clear local collection**. Cancel or Escape leaves the collection unchanged; confirmation is discarded when the dialog closes. Return to local notes first if a workspace is connected. Recover unreadable local data or an interrupted collection change before clearing.
+
+Clearing removes only the local notes, folders, and trash; it does not move notes to trash, reset preferences/themes, modify workspace files, or delete existing backup/recovery copies. Pending edits are saved and a verified, restorable safety backup is retained **before** clearing. A save or safety-backup failure stops the operation. Clearing uses the same durable checkpoint and rollback/startup recovery as local restore. Empty collections stay empty across restart; create or select a note before editing.
+
+The result shows the safety backup path. Use **Restore Collection…** to restore it into local notes if needed. Safety copies are unencrypted, include trashed content, and have no automatic expiry. This action is **not secure erasure** and is not a full app-data reset. Close other instances using the local collection first; it does not lock other processes. Copy important backups outside the app data directory.
+
 ## Agent access (MCP)
 
 Open **Scratchpad menu → Agent access** and turn access **On**. Choose **MCP Configuration** to copy the executable path, `--mcp-stdio` argument, or generic JSON example into a client that supports local stdio MCP servers. Configuration stays available while access is off. Scratchpad must remain open; the accent-colored **MCP listening** indicator appears beside the save status while access is enabled.

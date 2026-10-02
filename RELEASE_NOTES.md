@@ -4,6 +4,7 @@
 
 - Back up and restore a complete local-only or workspace collection, including folders, ordering, pins, and trash.
 - Preserve unreadable local notes and folders instead of overwriting them, with read-only protection and a recovery/export path.
+- Clear only the local notes, folders, and trash through an explicit **DELETE** confirmation, with a verified safety backup retained first.
 - Keep intentionally empty collections empty, with a clear prompt to create or select a note before editing.
 - Improve MCP collection switching, top-level folder filtering, and listener resilience.
 
@@ -19,6 +20,7 @@
 
 ## Local data preservation and empty collections
 
+- **Clear Local Collection…** is available in the desktop app while local notes are active. Review the counts and type the exact word **DELETE** to enable clearing; Cancel/Escape makes no collection change. Pending edits and a verified safety backup are saved before clearing, using the local restore checkpoint/rollback path. Preferences, themes, workspace files, and existing backup/recovery copies are retained. This is not secure erasure; keep the unencrypted safety backup private and use **Restore Collection…** to recover it if needed.
 - Unreadable or structurally invalid local notes/folders no longer silently become an empty collection. Local writes are blocked while the recovery warning is active, preserving the original stored values.
 - Recovery controls let you retry reading, export preserved raw data for manual recovery, or explicitly replace unreadable notes/folders only after an independent native recovery copy has been saved and verified. Healthy collection data and trash are retained by that recovery action.
 - Recovery exports contain raw damaged data and are distinct from collection backups; they cannot be imported through **Restore Collection…**. Replacement through the recovery controls is desktop-only.

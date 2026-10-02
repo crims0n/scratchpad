@@ -2373,6 +2373,36 @@ html:not(.editor-line-numbers-enabled) .app-container.compare-mode .editor-line-
   cursor: wait;
 }
 
+#local-clear-modal p {
+  margin: 0 0 1.5em;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+#local-clear-confirmation {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 10px 0 24px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+#local-clear-confirmation:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+#local-clear-modal button:disabled, #local-clear-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .help-pane.active {
   display: flex;
 }

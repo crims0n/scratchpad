@@ -133,6 +133,7 @@
                 <button class="dropdown-item" id="db-disconnect-btn" style="display: none;">Return to local notes</button>
                 <button class="dropdown-item" id="collection-backup-btn">Back Up Collection…</button>
                 <button class="dropdown-item" id="collection-restore-btn" aria-haspopup="dialog">Restore Collection…</button>
+                <button class="dropdown-item" id="local-clear-btn" aria-haspopup="dialog">Clear Local Collection…</button>
               </div>
               <div class="dropdown-divider"></div>
               <div class="dropdown-section" id="note-menu-section">
@@ -381,6 +382,25 @@
         <p id="collection-backup-safety" hidden></p>
         <button id="collection-restore-cancel" class="mcp-config-copy-btn" type="button">Cancel</button>
         <button id="collection-restore-confirm" class="mcp-config-copy-btn" type="button" hidden>Replace collection</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="local-clear-backdrop" class="help-modal-backdrop" style="display: none;" aria-hidden="true">
+    <div id="local-clear-modal" class="help-modal" role="dialog" aria-modal="true" aria-labelledby="local-clear-heading" aria-describedby="local-clear-status" tabindex="-1">
+      <div class="help-modal-header"><h3 id="local-clear-heading">Clear local collection</h3></div>
+      <div class="help-modal-body">
+        <p id="local-clear-status" role="status" aria-live="polite"></p>
+        <div id="local-clear-instructions">
+          <p>This removes all local notes, folders, and trash, including their contents. It does not move notes to trash. Workspace files, preferences, themes, and existing backup/recovery copies stay untouched.</p>
+          <p>A verified safety backup will be saved before clearing. It includes active and trashed note content and is not encrypted. This is not secure erasure; keep retained backups private.</p>
+          <p>Close other Scratchpad instances using the local collection before continuing.</p>
+          <label for="local-clear-confirmation">Type <strong>DELETE</strong> to enable clearing:</label>
+          <input id="local-clear-confirmation" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="local-clear-status" />
+        </div>
+        <p id="local-clear-safety" hidden></p>
+        <button id="local-clear-cancel" class="mcp-config-copy-btn" type="button">Cancel</button>
+        <button id="local-clear-confirm" class="mcp-config-copy-btn trash-empty-btn" type="button" disabled>Clear local collection</button>
       </div>
     </div>
   </div>
@@ -635,6 +655,7 @@
         <div class="help-pane active" id="pane-shortcuts" role="tabpanel" aria-labelledby="tab-shortcuts-btn">
           <div class="shortcuts-section">
             <h4 class="shortcuts-heading">Workspace & Notes</h4>
+            <p class="shortcuts-note">In the desktop app, return to <strong>Local notes</strong> and choose <strong>Clear Local Collection…</strong> to remove local notes, folders, and trash. Review the counts and type the exact word <strong>DELETE</strong> to enable clearing. A verified safety backup is retained first; use <strong>Restore Collection…</strong> to recover it. Preferences, themes, workspace files, and existing backup/recovery copies stay untouched. Cancel/Escape changes nothing. This is not secure erasure; safety copies are unencrypted. Recover unreadable data before clearing and close other instances using the local collection.</p>
             <p class="shortcuts-note">Use the menu’s <strong>Back Up Collection…</strong> and <strong>Restore Collection…</strong> actions to save or replace the open local/workspace collection, including folders, order, pins, and trash. Restore validates the backup and retains a verified safety copy before replacement; it does not merge. Preferences and themes are excluded. Backups are unencrypted; keep them private. If a local restore is interrupted, Scratchpad recovers its checkpoint at startup; if recovery fails, local data stays read-only and <strong>Retry reading</strong> retries recovery.</p>
             <p class="shortcuts-note">Double-click the empty space below the scratchpad list to create a new scratchpad. Use the folder button in the sidebar to create collapsible folders. Pinned notes stay at the very top as ordinary notes, while unpinned notes without a folder remain below the folders. Drag notes onto folders to move them, or right-click a folder to add a note, rename, reorder, or safely remove it. Deleting a folder from the sidebar returns its notes to the top level.</p>
             <p class="shortcuts-note">Right-click a note and choose <strong>Delete Note</strong> to move it to trash. Click the <strong>trash icon at the bottom right</strong> and choose <strong>Restore</strong> to recover it. Restored notes return to their original folder, or the top level if it no longer exists. Right-click the trash icon (or focus it and press Shift+F10), choose <strong>Empty Trash…</strong>, and confirm to permanently remove recovery copies. Each local collection or workspace has its own trash, which survives restarts and never expires automatically.</p>

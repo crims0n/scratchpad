@@ -22,10 +22,10 @@ test("interactive controls have an accessible name", () => {
   assert.deepEqual(unnamed, []);
 });
 
-test("help, theme, about, MCP, trash, and collection backup overlays expose modal dialog semantics", () => {
+test("help, theme, about, MCP, trash, collection backup, and clear-local overlays expose modal dialog semantics", () => {
   const dialogs = [...document.querySelectorAll("[role='dialog']")];
 
-  assert.equal(dialogs.length, 6);
+  assert.equal(dialogs.length, 7);
   dialogs.forEach((dialog) => {
     assert.equal(dialog.getAttribute("aria-modal"), "true");
     assert.ok(dialog.getAttribute("aria-label") || dialog.getAttribute("aria-labelledby"));
@@ -38,6 +38,7 @@ test("help and reference documents current Markdown editing behavior", () => {
   const mcp = document.getElementById("pane-mcp").textContent;
 
   assert.match(shortcuts, /F1/);
+  assert.match(shortcuts, /Clear Local Collection.*exact word DELETE.*verified safety backup/);
   assert.match(shortcuts, /Deleting a folder from the sidebar returns its notes to the top level/);
   assert.match(shortcuts, /Compare.*removed source text on the left and added source text on the right/);
   assert.match(shortcuts, /Jump to List Content \/ Line Start/);
