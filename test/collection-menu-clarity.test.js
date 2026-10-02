@@ -36,7 +36,7 @@ test("collection menu clarifies local/workspace scope, switching, and long filen
     style.textContent = styles;
     win.document.head.append(style);
   } });
-  assert.equal(text("workspace-menu-storage"), "In this app");
+  assert.equal(text("workspace-menu-storage"), "Current");
   assert.equal(text("workspace-menu-value"), "Local notes");
   assert.equal(text("collection-menu-heading"), "Collection");
   assert.equal(document.querySelectorAll("#workspace-menu-section p:not([hidden])").length, 0, "descriptions do not clutter the menu");
@@ -50,14 +50,14 @@ test("collection menu clarifies local/workspace scope, switching, and long filen
   assertDescriptions();
 
   app.click("db-connect-btn"); await app.settle();
-  assert.equal(text("workspace-menu-storage"), "Workspace file");
+  assert.equal(text("workspace-menu-storage"), "Current");
   assert.equal(text("collection-menu-heading"), "Workspace");
   assert.equal(text("workspace-menu-value"), filename);
   assert.equal(document.getElementById("workspace-menu-value").title, path);
   assert.equal(text("collection-menu-scope"), "Backup and restore apply to this workspace collection. Local notes stay separate.");
   assert.equal(document.getElementById("workspace-menu-value").children.length, 0, "filenames are plain text");
   for (const id of ["collection-backup-btn", "collection-restore-btn"]) {
-    assert.match(document.getElementById(id).getAttribute("aria-describedby"), /workspace-menu-storage workspace-menu-value/, "accessible descriptions include the storage type and full workspace filename");
+    assert.match(document.getElementById(id).getAttribute("aria-describedby"), /workspace-menu-storage workspace-menu-value/, "accessible descriptions include the Current label and full workspace filename");
   }
   assert.equal(document.getElementById("local-clear-btn").disabled, true);
   assert.equal(document.getElementById("local-clear-btn").hidden, true);
@@ -74,7 +74,7 @@ test("collection menu clarifies local/workspace scope, switching, and long filen
   assert.deepEqual(app.read("scratchpad_notes"), original.notes);
 
   app.click("db-disconnect-btn"); await app.settle();
-  assert.equal(text("workspace-menu-storage"), "In this app");
+  assert.equal(text("workspace-menu-storage"), "Current");
   assert.equal(text("collection-menu-heading"), "Collection");
   assert.match(text("collection-menu-scope"), /apply to Local notes.*Workspace files stay separate/);
   assert.equal(text("local-clear-menu-scope"), "Clears only local notes, folders, and trash.");
@@ -100,7 +100,7 @@ test("backup and restore identify local and startup-workspace targets during wor
       save_collection_backup: () => new Promise(resolve => { finishBackup = () => resolve("/tmp/export.json"); })
     } });
     const destination = path ? `Workspace file: ${path}` : "Local notes (stored in this app)";
-    assert.equal(text("workspace-menu-storage"), path ? "Workspace file" : "In this app");
+    assert.equal(text("workspace-menu-storage"), "Current");
     assert.equal(text("collection-menu-heading"), path ? "Workspace" : "Collection");
     assert.equal(document.getElementById("local-clear-btn").hidden, Boolean(path));
     app.click("collection-backup-btn"); await app.settle();

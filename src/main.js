@@ -3482,7 +3482,6 @@ function updateDbUiState(isConnected) {
     const fileName = activeDbPath.split(/[/\\]/).pop();
     workspaceMenuValue.textContent = fileName;
     workspaceMenuValue.title = activeDbPath;
-    document.getElementById("workspace-menu-storage").textContent = "Workspace file";
     document.getElementById("collection-menu-heading").textContent = "Workspace";
     document.getElementById("collection-menu-scope").textContent = "Backup and restore apply to this workspace collection. Local notes stay separate.";
   } else {
@@ -3490,7 +3489,6 @@ function updateDbUiState(isConnected) {
     dbDisconnectBtn.style.display = "none";
     workspaceMenuValue.textContent = "Local notes";
     workspaceMenuValue.title = "Local notes, folders, and trash stored in this app";
-    document.getElementById("workspace-menu-storage").textContent = "In this app";
     document.getElementById("collection-menu-heading").textContent = "Collection";
     document.getElementById("collection-menu-scope").textContent = "Backup and restore apply to Local notes. Workspace files stay separate.";
     
