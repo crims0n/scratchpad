@@ -33,7 +33,7 @@ test('recognizes YAML structure while avoiding lone mappings and ordinary lists'
   for (const content of [
     'name: scratchpad\nversion: 1', 'server:\n  port: 8080',
     'fruits:\n  - apple\n  - pear', '---\nname: scratchpad',
-    '# settings\nname: scratchpad\nenabled: true',
+    '---\n# settings\nname: scratchpad\nenabled: true',
     'description: |\n  # This is literal text\n  and more text\nenabled: true',
     '- name: one\n  enabled: true'
   ]) assert.equal(detect(content), 'YAML', content);
@@ -99,6 +99,7 @@ test('Markdown headings and common prose do not become incidental YAML or CSV', 
   for (const content of [
     'Note: call mom\nTodo: groceries', 'Owner: Pat\nDue: Friday',
     'Hi Bob, thanks\nSee you later, Alice',
+    'Thanks, Bob\nCheers, Alice',
     'Hi Bob, thanks\nSee you later, Alice\nGood morning, everyone'
   ]) assert.equal(detect(content), 'TXT', content);
 });
@@ -106,7 +107,7 @@ test('Markdown headings and common prose do not become incidental YAML or CSV', 
 test('strong YAML and CSV evidence still wins over literal Markdown in data', () => {
   for (const content of [
     '%YAML 1.2\n---\n# Settings\n\nname: scratchpad',
-    '# Settings\nname: scratchpad\nenabled: true',
+    '# Settings\nname: scratchpad\nenabled: true\nserver:\n  port: 80',
     'description: |\n  # Heading\n\n  ## Subheading\n  literal text\nenabled: true'
   ]) assert.equal(detect(content), 'YAML', content);
   for (const content of [
@@ -114,6 +115,25 @@ test('strong YAML and CSV evidence still wins over literal Markdown in data', ()
     '"# Heading",description\nAlice,"- bullet, with comma"',
     'First name,Description\nAlice Smith,"a sentence, and another"'
   ]) assert.equal(detect(content), 'CSV', content);
+});
+
+test('leading YAML comments do not override nested structure or scalar blocks', () => {
+  for (const content of [
+    '# CI workflow\n# Runs on push\n\nname: CI\non: push\njobs:\n  test:\n    runs-on: ubuntu-latest',
+    '# Config\n\nport: 80\nserver:\n  host: x',
+    '# Description\n\nsummary: |\n  # Literal heading\n  ordinary text\nenabled: true',
+    '# Description\n\nsummary: |\n  # Literal heading\n  ordinary text',
+    '---\n# Config\n\nport: 80\nhost: x'
+  ]) assert.equal(detect(content), 'YAML', content);
+});
+
+test('ambiguous flat heading/mapping notes favor Markdown, with or without a blank line', () => {
+  for (const content of [
+    '# Config\n\nport: 80\nhost: x',
+    '# Shopping\nmilk: 2\neggs: 12',
+    '# Settings\nname: scratchpad\nenabled: true'
+  ]) assert.equal(detect(content), 'MD', content);
+  assert.equal(detect('port: 80\nhost: x'), 'YAML', 'unheaded typed properties still provide YAML evidence');
 });
 
 test('caches unchanged content without leaking format across notes or revisions', () => {

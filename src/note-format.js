@@ -49,7 +49,10 @@ function isCsv(source) {
       if (columns < 2 || (expectedColumns !== null && columns !== expectedColumns)) return false;
       expectedColumns = columns;
       finishField();
-      if (rows === 0) compactHeader = fields.every(value => /^[a-z_][\w.-]*$/i.test(value.trim()));
+      if (rows === 0) {
+        compactHeader = fields.every(value => /^[a-z_][\w.-]*$/i.test(value.trim()))
+          && fields.some(value => /^[a-z_][\w.-]*$/.test(value) || value.trim().includes('_'));
+      }
       fields = [];
       rows += 1;
       columns = 1;
@@ -85,12 +88,11 @@ function isYaml(source) {
   let explicitDocument = false;
   let typedValue = false;
   let headings = 0;
-  let headingGap = false;
+  let blockScalar = false;
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
     if (/^#{1,6}(?:[ \t]|$)/.test(line)) {
       headings += 1;
-      if (index + 1 < lines.length && !lines[index + 1].trim()) headingGap = true;
     }
     if (!line.trim() || /^\s*#/.test(line)) continue;
     if (/^(?:---|\.\.\.)\s*$/.test(line) || /^%YAML\s+\d+\.\d+\s*$/.test(line)) {
@@ -107,18 +109,21 @@ function isYaml(source) {
       if (/^(?:true|false|null|~|[-+]?(?:0x[\da-f]+|\d+(?:\.\d+)?(?:e[-+]?\d+)?))(?:[ \t]*(?:#.*)?)$/i.test(value)
         || /^(?:["'\[{]|[|>][+-]?(?:[ \t]|$))/.test(value)) typedValue = true;
       if (indent > 0) nested = true;
-      if (/:[ \t]*[|>][+-]?[ \t]*(?:#.*)?$/.test(line)) blockIndent = indent;
+      if (/:[ \t]*[|>][+-]?[ \t]*(?:#.*)?$/.test(line)) {
+        blockIndent = indent;
+        blockScalar = true;
+      }
     } else if (mappings > 0 && /^ +-[ \t]+\S/.test(line)) {
       nested = true;
     } else {
       return false;
     }
   }
-  // Multiple headings or a heading separated from its body are stronger
-  // Markdown evidence than incidental "word: value" lines. YAML directives
-  // explicitly select YAML; comments inside scalar blocks are ignored above.
-  if (!explicitDocument && (headings > 1 || headingGap)) return false;
-  return (mappings >= 2 && typedValue) || (mappings >= 1 && (nested || explicitDocument));
+  // A heading plus flat mappings is indistinguishable from a YAML comment
+  // plus properties. Prefer Markdown for that ambiguity, while nested data,
+  // scalar blocks, and document markers provide stronger YAML evidence.
+  if (!explicitDocument && !nested && !blockScalar && headings > 0) return false;
+  return (mappings >= 2 && typedValue) || (mappings >= 1 && (nested || blockScalar || explicitDocument));
 }
 
 function hasMarkdownBlocks(source) {
