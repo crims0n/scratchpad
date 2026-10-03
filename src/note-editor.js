@@ -137,6 +137,29 @@ export function createNoteEditor(element, { label, placeholder = "" } = {}) {
         view.dispatch({ effects });
       } finally { silent = false; }
     },
+    // MCP supplies the final content. Map a suffix through the current editing
+    // session instead of recreating its history and folds. A different note or
+    // mismatched prefix must still use the normal full-document load.
+    updateFromAppend(value, { foldKey = null, format = "TXT" } = {}) {
+      const content = String(value ?? "");
+      const previous = this.value;
+      if (foldKey !== foldSessionKey || !content.startsWith(previous)) {
+        this.loadDocument(content, { foldKey, format });
+        return;
+      }
+      const effects = format !== foldFormat ? [foldingFormatEffect.of(format)] : [];
+      if (content === previous && !effects.length) return;
+      foldFormat = format;
+      silent = true;
+      try {
+        view.dispatch({
+          changes: { from: view.state.doc.length, insert: content.slice(previous.length) },
+          selection: view.state.selection,
+          effects,
+          annotations: [Transaction.remote.of(true), Transaction.addToHistory.of(false), isolateHistory.of("full")]
+        });
+      } finally { silent = false; }
+    },
     get selectionStart() { return view.state.selection.main.from; },
     get selectionEnd() { return view.state.selection.main.to; },
     get selectionDirection() { return view.state.selection.main.anchor > view.state.selection.main.head ? "backward" : "forward"; },
