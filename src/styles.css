@@ -1284,7 +1284,7 @@ button.view-setting-value:hover {
 .note-editor .cm-placeholder { color: var(--text-muted); }
 
 .note-editor .cm-gutters {
-  background: color-mix(in srgb, var(--bg-input) 55%, var(--editor-bg));
+  background: var(--editor-bg);
   color: var(--text-muted);
   border-right: 1px solid color-mix(in srgb, var(--border-color) 65%, transparent);
 }
