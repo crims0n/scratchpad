@@ -1,17 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-use std::fs::{self, OpenOptions};
-use std::io::Write;
+use crate::file_export::{sync_directory, write_new_verified};
+use std::fs;
 use std::path::{Path, PathBuf};
 
 const JOURNAL: &str = "pending-local-restore.json";
-
-fn sync_directory(_directory: &Path) -> Result<(), String> {
-    #[cfg(unix)]
-    fs::File::open(_directory)
-        .and_then(|file| file.sync_all())
-        .map_err(|error| error.to_string())?;
-    Ok(())
-}
 
 fn private_directory(directory: &Path) -> Result<(), String> {
     fs::create_dir_all(directory).map_err(|error| error.to_string())?;
@@ -23,25 +15,6 @@ fn private_directory(directory: &Path) -> Result<(), String> {
     }
     if let Some(parent) = directory.parent() {
         sync_directory(parent)?;
-    }
-    Ok(())
-}
-
-fn write_new_verified(path: &Path, content: &str) -> Result<(), String> {
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    let mut file = options.open(path).map_err(|error| error.to_string())?;
-    file.write_all(content.as_bytes())
-        .map_err(|error| error.to_string())?;
-    file.sync_all().map_err(|error| error.to_string())?;
-    drop(file);
-    if fs::read(path).map_err(|error| error.to_string())? != content.as_bytes() {
-        return Err("Backup verification failed".into());
     }
     Ok(())
 }
@@ -88,17 +61,7 @@ pub fn ensure_export_destination(
 // Never truncate an existing backup: stage, sync, verify, then replace it.
 pub fn export(path: &Path, content: &str) -> Result<(), String> {
     validate_backup(content)?;
-    let parent = path.parent().ok_or("Backup path has no parent")?;
-    let temporary = parent.join(format!(".scratchpad-backup-{}.tmp", uuid::Uuid::new_v4()));
-    let result = (|| {
-        write_new_verified(&temporary, content)?;
-        fs::rename(&temporary, path).map_err(|error| error.to_string())?;
-        sync_directory(parent)
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(&temporary);
-    }
-    result
+    crate::file_export::export(path, content)
 }
 
 pub fn preserve(directory: &Path, content: &str) -> Result<String, String> {

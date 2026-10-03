@@ -96,8 +96,9 @@ test("export handles success, cancellation, and failure without replacing source
   let result = "success";
   let exported;
   const app = await boot({ storage: { scratchpad_notes: original }, handlers: {
-    save_recovery_file_native: ({ content, defaultName }) => {
+    save_recovery_file_native: ({ content, defaultName, dbPath }) => {
       assert.equal(defaultName, "scratchpad-local-recovery.json");
+      assert.equal(dbPath, null);
       exported = JSON.parse(content);
       if (result !== "success") throw result;
       return "/tmp/recovery.json";
