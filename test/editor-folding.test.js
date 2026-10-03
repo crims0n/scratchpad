@@ -85,6 +85,17 @@ test("large-note transactions never invoke fold parsers, even with no folds acti
   }
 });
 
+test("moderate pretty-printed JSON and nested YAML retain useful folds beyond 2,000 lines", () => {
+  const json = JSON.stringify(Array.from({ length: 1_000 }, () => ({ a: 1, b: 2, c: 3 })), null, 2);
+  const yaml = Array.from({ length: 1_000 }, (_, index) => `item${index}:\n  a: 1\n  b: 2\n  c: 3`).join("\n");
+  for (const [format, source] of [["JSON", json], ["YAML", yaml]]) {
+    const doc = EditorState.create({ doc: source }).doc;
+    assert.ok(doc.lines > 2_000 && doc.lines < MAX_FOLD_LINES);
+    assert.ok(doc.length < MAX_FOLD_CHARACTERS);
+    assert.ok(getFormatFoldRanges(doc, format).length >= 1_000);
+  }
+});
+
 test("crossing either folding limit expands folds and shrinking restores candidates", () => {
   for (const doc of ["# Heading\n" + "x".repeat(MAX_FOLD_CHARACTERS - 10), "# Heading\n" + "x\n".repeat(MAX_FOLD_LINES - 2) + "x"]) {
     let state = EditorState.create({ doc, extensions: editorFolding() });

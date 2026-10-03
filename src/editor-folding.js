@@ -10,7 +10,7 @@ const parsers = { MD: markdownParser, JSON: jsonParser, XML: xmlParser, YAML: ya
 export const foldingFormatEffect = StateEffect.define();
 // Bound synchronous parsing until folding uses incremental language support.
 export const MAX_FOLD_CHARACTERS = 100_000;
-export const MAX_FOLD_LINES = 2_000;
+export const MAX_FOLD_LINES = 10_000;
 
 export function canFoldDocument(doc, format) {
   return Boolean(parsers[format]) && doc.length <= MAX_FOLD_CHARACTERS && doc.lines <= MAX_FOLD_LINES;
