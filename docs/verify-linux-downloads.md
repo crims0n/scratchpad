@@ -12,7 +12,7 @@ Linux does not require these signatures to run Scratchpad. They let you confirm 
 ## Release-signing key
 
 - Public key: <https://crims0n.github.io/scratchpad/release-signing-key.asc>
-- Fingerprint: `FINGERPRINT-PENDING`
+- Fingerprint: `1AD2 0240 0B0C 14AD 86F4 3E14 4F6B 122C D9DC CB40`
 
 Check the fingerprint against this page and the [Scratchpad website](https://crims0n.github.io/scratchpad/#verify-linux) before trusting the key. Both are served over HTTPS from the project's repository.
 
