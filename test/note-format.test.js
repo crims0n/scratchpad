@@ -89,6 +89,33 @@ test('empty and ambiguous notes fall back to TXT', () => {
   }
 });
 
+test('Markdown headings and common prose do not become incidental YAML or CSV', () => {
+  for (const content of [
+    '# Shopping\n\nmilk: 2\neggs: 12',
+    '# Meeting notes\n## Attendees\nOwner: Pat\nDue: Friday',
+    '# Meeting notes\nOwner: Pat\nDue: Friday',
+    '# Plan, today\n- Call, tomorrow'
+  ]) assert.equal(detect(content), 'MD', content);
+  for (const content of [
+    'Note: call mom\nTodo: groceries', 'Owner: Pat\nDue: Friday',
+    'Hi Bob, thanks\nSee you later, Alice',
+    'Hi Bob, thanks\nSee you later, Alice\nGood morning, everyone'
+  ]) assert.equal(detect(content), 'TXT', content);
+});
+
+test('strong YAML and CSV evidence still wins over literal Markdown in data', () => {
+  for (const content of [
+    '%YAML 1.2\n---\n# Settings\n\nname: scratchpad',
+    '# Settings\nname: scratchpad\nenabled: true',
+    'description: |\n  # Heading\n\n  ## Subheading\n  literal text\nenabled: true'
+  ]) assert.equal(detect(content), 'YAML', content);
+  for (const content of [
+    'First name,Age\nAlice Smith,30',
+    '"# Heading",description\nAlice,"- bullet, with comma"',
+    'First name,Description\nAlice Smith,"a sentence, and another"'
+  ]) assert.equal(detect(content), 'CSV', content);
+});
+
 test('caches unchanged content without leaking format across notes or revisions', () => {
   let parses = 0;
   class CountingParser extends dom.window.DOMParser {
