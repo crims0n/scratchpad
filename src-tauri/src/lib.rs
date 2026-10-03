@@ -800,7 +800,15 @@ fn handle_macos_menu_event<R: Runtime>(app: &AppHandle<R>, event: tauri::menu::M
 pub fn run(context: tauri::Context<tauri::Wry>) {
     let builder = tauri::Builder::default()
         .manage(mcp::McpState::default())
-        .manage(note_print::PrintState::default());
+        .manage(note_print::PrintState::default())
+        .on_window_event(|window, event| {
+            // The frontend destroys main only after pending saves succeed.
+            // A print preview must not keep an editor-less process alive;
+            // CloseRequested is too early because saving can cancel a close.
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
+                window.app_handle().exit(0);
+            }
+        });
     #[cfg(target_os = "macos")]
     let builder = builder
         .menu(macos_menu)
