@@ -223,6 +223,7 @@ fn save_file_native(
         "Markdown",
         &["md"],
         db_path.as_deref(),
+        TextExportKind::Note,
     )
 }
 
@@ -243,8 +244,14 @@ fn save_html_file_native(
         &content,
         &backup::directory(&app)?,
         db_path.as_deref(),
+        TextExportKind::Note,
     )?;
     Ok(path.to_string_lossy().into_owned())
+}
+
+enum TextExportKind {
+    Note,
+    Recovery,
 }
 
 fn write_text_export(
@@ -252,11 +259,15 @@ fn write_text_export(
     content: &str,
     backup_directory: &Path,
     db_path: Option<&str>,
+    kind: TextExportKind,
 ) -> Result<(), String> {
     backup::ensure_export_destination(path, backup_directory, db_path).map_err(|_| {
         "Choose an export file, not the open workspace or an active restore checkpoint"
     })?;
-    file_export::export(path, content)
+    match kind {
+        TextExportKind::Note => file_export::export_note(path, content),
+        TextExportKind::Recovery => file_export::export(path, content),
+    }
 }
 
 #[tauri::command]
@@ -273,6 +284,7 @@ fn save_recovery_file_native(
         "Recovery JSON",
         &["json"],
         db_path.as_deref(),
+        TextExportKind::Recovery,
     )
 }
 
@@ -379,6 +391,7 @@ fn save_text_file(
     filter_name: &str,
     extensions: &[&str],
     db_path: Option<&str>,
+    kind: TextExportKind,
 ) -> Result<String, String> {
     let file_path = rfd::FileDialog::new()
         .set_file_name(&default_name)
@@ -386,7 +399,7 @@ fn save_text_file(
         .save_file();
 
     if let Some(path) = file_path {
-        write_text_export(&path, &content, &backup::directory(app)?, db_path)?;
+        write_text_export(&path, &content, &backup::directory(app)?, db_path, kind)?;
         Ok(path.to_string_lossy().to_string())
     } else {
         Err("Cancelled".to_string())
@@ -922,10 +935,31 @@ mod tests {
         std::fs::write(&workspace, "workspace sentinel").unwrap();
         std::fs::write(&checkpoint, "checkpoint sentinel").unwrap();
         let html = "<!DOCTYPE html><title>Résumé 日本語</title><p>note</p>";
-        write_text_export(&target, html, &directory, workspace.to_str()).unwrap();
+        write_text_export(
+            &target,
+            html,
+            &directory,
+            workspace.to_str(),
+            TextExportKind::Note,
+        )
+        .unwrap();
         assert_eq!(std::fs::read_to_string(&target).unwrap(), html);
-        assert!(write_text_export(&workspace, html, &directory, workspace.to_str()).is_err());
-        assert!(write_text_export(&checkpoint, html, &directory, None).is_err());
+        assert!(write_text_export(
+            &workspace,
+            html,
+            &directory,
+            workspace.to_str(),
+            TextExportKind::Note
+        )
+        .is_err());
+        assert!(write_text_export(
+            &checkpoint,
+            html,
+            &directory,
+            None,
+            TextExportKind::Recovery
+        )
+        .is_err());
         assert_eq!(
             std::fs::read_to_string(&workspace).unwrap(),
             "workspace sentinel"
@@ -934,10 +968,14 @@ mod tests {
             std::fs::read_to_string(&checkpoint).unwrap(),
             "checkpoint sentinel"
         );
-        assert!(
-            write_text_export(&directory.join("missing/note.html"), html, &directory, None)
-                .is_err()
-        );
+        assert!(write_text_export(
+            &directory.join("missing/note.html"),
+            html,
+            &directory,
+            None,
+            TextExportKind::Note
+        )
+        .is_err());
         std::fs::remove_dir_all(&directory).unwrap();
     }
 

@@ -95,6 +95,8 @@ Choose **Scratchpad menu → Note → Export HTML file** to save the selected no
 
 HTML export uses the same sanitization as Preview: scripts and unsafe links are removed, internet/local-file images are blocked, and supported embedded raster images are retained. Safe external links remain clickable and go online only when opened. The HTML file contains readable, unencrypted note content; store and share it accordingly. HTML exports are for reading/sharing, not collection backups or a round-trip import format. PDF export is not included.
 
+Native HTML, Markdown, recovery, and collection-backup exports stage and verify a new file in the destination folder before replacing the destination. The folder must be writable. Overwriting replaces the file itself, including a symlink, rather than changing its target or other hard links; extended attributes, ownership, and ACLs are not copied. On Unix, new HTML/Markdown files follow the normal umask and overwrites retain an existing regular file’s permission bits. Recovery and backup files remain owner-only (0600).
+
 ### Printing a note
 
 Choose **Scratchpad menu → Note → Print Note…**, or press **Cmd+P** on macOS / **Ctrl+P** on Windows and Linux. The desktop app opens a separate, note-only preview and its system print dialog, using a fresh snapshot of the selected note, including current edits; in Dual-Note Split View it uses the active pane. Only formatted note content is printed, not the sidebar, editor controls, other notes, search highlights, or preview toolbar. Printing uses a light, paper-friendly palette regardless of the app theme, with wrapped code blocks, table headers, and page-break guidance. The same Preview/HTML sanitization and image restrictions apply.
