@@ -9,6 +9,7 @@ Scratchpad is a fast, local-first place for notes, snippets, and Markdown. Every
 ## Start writing
 - Create a scratchpad with \`Cmd/Ctrl+N\`, or by double-clicking the empty space below the sidebar list, and find your notes from the sidebar.
 - Switch between **Edit**, **Split**, and **Preview** to work with rendered Markdown.
+- Click gutter arrows to collapse Markdown, JSON, XML, or YAML sections. Click a hidden-line placeholder to expand it; Find reveals hidden matches. Folding is available for notes up to 100,000 characters and 10,000 lines.
 - Open a second note beside this one with \`Cmd/Ctrl+\\\`.
 - With two notes open, choose **Compare** in the toolbar to highlight removed text on the left and added text on the right as you edit.
 - Enter Focus Mode with \`Cmd/Ctrl+Shift+F\` when you want fewer distractions.

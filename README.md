@@ -33,6 +33,7 @@ See [release notes](RELEASE_NOTES.md) for highlights, compatibility details, and
 - Edit, synchronized edit/preview, and full Markdown preview layouts
 - Optional format-aware editor coloring for Markdown, JSON, XML, YAML, and CSV, plus language-aware fenced-code highlighting in previews
 - Optional, theme-aware source line numbers in either editor pane
+- Collapsible Markdown, JSON, XML, and YAML sections in either editor pane, with Find revealing hidden matches
 - Markdown-aware continuation for lists, task lists, blockquotes, code fences, and tables
 - Pair completion, selection wrapping, and smart URL or spreadsheet paste
 - Right-click Markdown starter templates for tables, task lists, code blocks, and links

@@ -198,7 +198,8 @@ The editor checks the expected revision when the queued append starts, before
 applying any text. A conflict changes nothing: reread the note and decide
 whether to submit a new append. The append preserves the title and other
 metadata and advances the modification time. It preserves the active editor,
-selection, and scroll position.
+selection, scroll position, undo history, and valid collapsed sections in both
+panes when they show that note.
 
 Once accepted, the append appears as an ordinary editor change while it saves.
 Typing after that point operates on the appended text and is preserved. Success
