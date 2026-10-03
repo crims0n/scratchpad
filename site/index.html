@@ -49,7 +49,7 @@
           <p class="visually-hidden" id="download-status" aria-live="polite">Loading release downloads.</p>
         </div>
 
-        <p class="security-note"><strong>Beta software:</strong> packages are not yet production-signed, so your operating system may display a security warning.</p>
+        <p class="security-note"><strong>Beta software:</strong> macOS and Windows packages are not yet production-signed, so your operating system may display a security warning. Linux packages are <a href="#verify-linux">GPG-signed</a>.</p>
       </div>
 
       <div class="hero-visual" aria-label="Scratchpad application preview">
@@ -101,6 +101,13 @@
         <h2 id="catalog-title">Downloads and checksums</h2>
         <p>Choose an alternate installer or verify your download against its SHA-256 digest.</p>
         <p class="release-notes" id="release-notes">Loading the newest release notes…</p>
+        <div class="signing-key" id="verify-linux">
+          <h3>Verify Linux packages</h3>
+          <p>Each Linux release includes a <code>SHA256SUMS</code> file signed with the Scratchpad <a href="./release-signing-key.asc">release-signing key</a>.</p>
+          <p class="signing-fingerprint-label">Key fingerprint</p>
+          <code class="signing-fingerprint" id="signing-fingerprint">1AD2 0240 0B0C 14AD 86F4 3E14 4F6B 122C D9DC CB40</code>
+          <p><a href="https://github.com/crims0n/scratchpad/blob/main/docs/verify-linux-downloads.md">How to verify a download <span aria-hidden="true">↗</span></a></p>
+        </div>
       </div>
 
       <details class="platform-details" open>

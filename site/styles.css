@@ -449,6 +449,35 @@ summary {
   background: rgba(168, 85, 247, 0.12);
 }
 
+.signing-key {
+  margin-top: 28px;
+}
+
+.signing-key h3 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+}
+
+.signing-key p {
+  margin: 0 0 10px;
+}
+
+.signing-fingerprint-label {
+  color: var(--subtle);
+  font-family: var(--mono);
+  font-size: 0.58rem;
+}
+
+.signing-fingerprint {
+  display: block;
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
 .checksum-row {
   margin-top: 10px;
   display: grid;

@@ -21,6 +21,12 @@ backups with the same care as active notes.
 See the [MCP reference](docs/mcp.md#live-data-and-privacy-boundary) for the local
 authentication boundary, message limits, and client configuration.
 
+## Verifying downloads
+
+Linux release packages are covered by a signed `SHA256SUMS` file. See
+[Verifying Linux downloads](docs/verify-linux-downloads.md) for the key
+fingerprint and procedure.
+
 ## Reporting a vulnerability
 
 Please do not open a public issue for a suspected vulnerability. Use GitHub's [private vulnerability reporting form](https://github.com/crims0n/scratchpad/security/advisories/new) and include:
