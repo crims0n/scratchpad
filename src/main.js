@@ -369,7 +369,7 @@ const mcpWriter = createMcpWriter({
       for (const [id, editor] of [[activeNoteId, primaryEditor], [secondaryNoteId, secondaryEditor]]) {
         if (id !== note.id || operation !== "append_to_note") continue;
         const { selectionStart, selectionEnd, selectionDirection, scrollTop, scrollLeft } = editor;
-        editor.loadDocument(note.content, { foldKey: noteFoldKey(note), format: getNoteFormat(note) });
+        editor.updateFromAppend(note.content, { foldKey: noteFoldKey(note), format: getNoteFormat(note) });
         editor.setSelectionRange(selectionStart, selectionEnd, selectionDirection);
         editor.scrollTop = scrollTop;
         editor.scrollLeft = scrollLeft;

@@ -3,6 +3,20 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { bootApp, getAppElement } from "./helpers/app-harness.js";
 
+test("external append fallback resets history for mismatched source or note identity", async () => {
+  await bootApp({ instance: "append-fallback" });
+  const editor = getAppElement("editor");
+  editor.loadDocument("first", { foldKey: "one" });
+  editor.applyEdit({ value: "first edited", selectionStart: 0, selectionEnd: 0 });
+  editor.updateFromAppend("first edited appended", { foldKey: "two" });
+  assert.equal(editor.value, "first edited appended");
+  assert.equal(editor.undo(), false, "equal prefixes do not carry history between notes");
+  editor.applyEdit({ value: "another edit", selectionStart: 0, selectionEnd: 0 });
+  editor.updateFromAppend("authoritative content", { foldKey: "two" });
+  assert.equal(editor.value, "authoritative content");
+  assert.equal(editor.undo(), false, "mismatched source takes the full-load fallback");
+});
+
 test("editor transactions preserve history through presentation changes and keep panes independent", async () => {
   const app = await bootApp({ storage: { scratchpad_notes: [
     { id: "one", title: "One", content: "alpha", updatedAt: 2, isTitleLocked: true },
