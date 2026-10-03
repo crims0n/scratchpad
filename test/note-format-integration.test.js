@@ -60,3 +60,16 @@ test('sidebar badges work across folders, imports, both editors, and collection 
   await app.settle();
   assert.equal(badge('json').textContent, 'JSON');
 });
+
+test('Markdown with mapping-like prose keeps its badge, heading fold, and cleaned snippet', async () => {
+  await bootApp({ instance: 2, storage: { scratchpad_notes: [
+    { id: 'shopping', title: 'Shopping', content: '# Shopping\n\nmilk: 2\neggs: 12', updatedAt: 1, isTitleLocked: true }
+  ] } });
+  const item = document.querySelector('.note-item[data-id="shopping"]');
+  assert.equal(item.querySelector('.note-format-badge').textContent, 'MD');
+  assert.ok(!item.querySelector('.note-item-snippet').textContent.includes('# Shopping'));
+  const editor = getAppElement('editor');
+  assert.ok(editor.contentDOM.querySelector('.syntax-heading'));
+  assert.equal(editor.toggleFold(1), true);
+  assert.equal(editor.foldedRanges.length, 1);
+});

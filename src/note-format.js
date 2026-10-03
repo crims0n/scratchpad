@@ -23,37 +23,59 @@ function isCsv(source) {
   let quoted = false;
   let afterQuote = false;
   let fieldStart = true;
+  let field = '';
+  let fields = [];
+  let compactHeader = false;
+  let quotedEvidence = false;
+  let numericEvidence = false;
+
+  function finishField() {
+    fields.push(field);
+    if (/^[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[-+]?\d+)?$/i.test(field.trim())) numericEvidence = true;
+    field = '';
+  }
 
   for (let index = 0; index <= source.length; index += 1) {
     const character = source[index];
     if (quoted) {
       if (character === undefined) return false;
       if (character === '"') {
-        if (source[index + 1] === '"') index += 1;
+        if (source[index + 1] === '"') { field += '"'; index += 1; }
         else { quoted = false; afterQuote = true; }
-      }
+      } else field += character;
       continue;
     }
     if (character === '\n' || character === undefined) {
       if (columns < 2 || (expectedColumns !== null && columns !== expectedColumns)) return false;
       expectedColumns = columns;
+      finishField();
+      if (rows === 0) {
+        compactHeader = fields.every(value => /^[a-z_][\w.-]*$/i.test(value.trim()))
+          && fields.some(value => /^[a-z_][\w.-]*$/.test(value) || value.trim().includes('_'));
+      }
+      fields = [];
       rows += 1;
       columns = 1;
       fieldStart = true;
       afterQuote = false;
     } else if (character === ',') {
+      finishField();
       columns += 1;
       fieldStart = true;
       afterQuote = false;
     } else if (character === '"' && fieldStart) {
       quoted = true;
+      quotedEvidence = true;
       fieldStart = false;
     } else {
       if (afterQuote || character === '"') return false;
       fieldStart = false;
+      field += character;
     }
   }
-  return rows >= 2;
+  // Matching comma counts alone also describe ordinary sentences. Prefer TXT
+  // unless records have compact headers, quoted cells, or numeric values.
+  return rows >= 2 && (compactHeader || quotedEvidence || numericEvidence);
 }
 
 // These are structural hints, not a YAML validator. A lone "Meeting: Friday"
@@ -64,7 +86,14 @@ function isYaml(source) {
   let nested = false;
   let blockIndent = null;
   let explicitDocument = false;
-  for (const line of lines) {
+  let typedValue = false;
+  let headings = 0;
+  let blockScalar = false;
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (/^#{1,6}(?:[ \t]|$)/.test(line)) {
+      headings += 1;
+    }
     if (!line.trim() || /^\s*#/.test(line)) continue;
     if (/^(?:---|\.\.\.)\s*$/.test(line) || /^%YAML\s+\d+\.\d+\s*$/.test(line)) {
       explicitDocument = true;
@@ -73,17 +102,28 @@ function isYaml(source) {
     const indent = line.match(/^ */)[0].length;
     if (blockIndent !== null && indent > blockIndent) continue;
     blockIndent = null;
-    if (/^\s*(?:-\s+)?(?:[\w.-]+|"[^"\n]+"|'[^'\n]+'):(?:\s|$)/.test(line)) {
+    const mapping = /^\s*(?:-\s+)?(?:[\w.-]+|"[^"\n]+"|'[^'\n]+'):(?:[ \t]+(.*)|$)/.exec(line);
+    if (mapping) {
       mappings += 1;
+      const value = (mapping[1] ?? '').trim();
+      if (/^(?:true|false|null|~|[-+]?(?:0x[\da-f]+|\d+(?:\.\d+)?(?:e[-+]?\d+)?))(?:[ \t]*(?:#.*)?)$/i.test(value)
+        || /^(?:["'\[{]|[|>][+-]?(?:[ \t]|$))/.test(value)) typedValue = true;
       if (indent > 0) nested = true;
-      if (/:[ \t]*[|>][+-]?[ \t]*(?:#.*)?$/.test(line)) blockIndent = indent;
+      if (/:[ \t]*[|>][+-]?[ \t]*(?:#.*)?$/.test(line)) {
+        blockIndent = indent;
+        blockScalar = true;
+      }
     } else if (mappings > 0 && /^ +-[ \t]+\S/.test(line)) {
       nested = true;
     } else {
       return false;
     }
   }
-  return mappings >= 2 || (mappings >= 1 && (nested || explicitDocument));
+  // A heading plus flat mappings is indistinguishable from a YAML comment
+  // plus properties. Prefer Markdown for that ambiguity, while nested data,
+  // scalar blocks, and document markers provide stronger YAML evidence.
+  if (!explicitDocument && !nested && !blockScalar && headings > 0) return false;
+  return (mappings >= 2 && typedValue) || (mappings >= 1 && (nested || blockScalar || explicitDocument));
 }
 
 function hasMarkdownBlocks(source) {
