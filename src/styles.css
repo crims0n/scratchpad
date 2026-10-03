@@ -1272,19 +1272,19 @@ button.view-setting-value:hover {
 }
 
 .note-editor .cm-content {
-  padding: 24px 0;
+  padding: 16px 0;
   caret-color: var(--editor-text);
 }
 
 .note-editor .cm-cursor,
 .note-editor .cm-dropCursor { border-left-color: var(--editor-text); }
 
-.note-editor .cm-line { padding: 0 24px; }
+.note-editor .cm-line { padding: 0 16px; }
 
 .note-editor .cm-placeholder { color: var(--text-muted); }
 
 .note-editor .cm-gutters {
-  background: color-mix(in srgb, var(--bg-input) 55%, var(--editor-bg));
+  background: var(--editor-bg);
   color: var(--text-muted);
   border-right: 1px solid color-mix(in srgb, var(--border-color) 65%, transparent);
 }
