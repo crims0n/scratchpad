@@ -74,3 +74,10 @@ test("the Linux verification guide publishes the same fingerprint", async () => 
   assert.ok(guide.includes(`Fingerprint: \`${expected}\``), setupHint);
   assert.ok(!guide.includes("FINGERPRINT-PENDING"), setupHint);
 });
+
+test("every beta release body links verification with the same fingerprint", async () => {
+  const expected = await readPublishedFingerprint();
+  const workflow = await readFile(new URL("../.github/workflows/beta-release.yml", import.meta.url), "utf8");
+  assert.ok(workflow.includes(`fingerprint \`${expected}\``), "update the release-body footer in beta-release.yml");
+  assert.ok(workflow.includes("docs/verify-linux-downloads.md"));
+});
