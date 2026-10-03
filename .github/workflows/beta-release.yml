@@ -141,6 +141,13 @@ jobs:
           {
             echo 'body<<SCRATCHPAD_RELEASE_NOTES'
             cat RELEASE_NOTES.md
+            # Fixed footer so every release links verification, whatever the notes say.
+            cat <<'FOOTER'
+
+          ## Verifying Linux downloads
+
+          Linux packages are covered by `SHA256SUMS`, signed as `SHA256SUMS.asc` with the Scratchpad release-signing key (fingerprint `1AD2 0240 0B0C 14AD 86F4 3E14 4F6B 122C D9DC CB40`). Follow [Verifying Linux downloads](https://github.com/crims0n/scratchpad/blob/main/docs/verify-linux-downloads.md) before installing.
+          FOOTER
             echo 'SCRATCHPAD_RELEASE_NOTES'
           } >> "$GITHUB_OUTPUT"
 
