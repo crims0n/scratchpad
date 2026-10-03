@@ -30,8 +30,9 @@ SUBFPR=$(gpg --with-colons --list-keys "$FPR" | awk -F: '$1=="fpr"{print $10}' |
 # Public key for the website and CI verification
 gpg --armor --export "$FPR" > site/release-signing-key.asc
 
-# Secret for CI: the signing subkey only
-gpg --armor --export-secret-subkeys "$SUBFPR!" > signing-subkey.asc
+# Secret for CI: the signing subkey only. Keep the "!" in single quotes:
+# zsh treats !" inside double quotes as a history-expansion marker.
+gpg --armor --export-secret-subkeys "$SUBFPR"'!' > signing-subkey.asc
 
 # Revocation certificate for the primary key (store offline; see Revocation)
 gpg --output scratchpad-release-revoke.asc --gen-revoke "$FPR"
