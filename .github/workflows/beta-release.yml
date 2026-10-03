@@ -98,6 +98,9 @@ jobs:
               --bundles nsis,msi
 
     runs-on: ${{ matrix.platform }}
+    # Holds the release-signing secrets; protect it with required reviewers
+    # and a main-only deployment branch policy (docs/release-signing.md).
+    environment: release-signing
 
     steps:
       - name: Check out repository
@@ -141,10 +144,24 @@ jobs:
             echo 'SCRATCHPAD_RELEASE_NOTES'
           } >> "$GITHUB_OUTPUT"
 
+      - name: Import Linux release-signing key
+        id: signing_key
+        if: matrix.platform == 'ubuntu-22.04'
+        env:
+          RELEASE_SIGNING_GPG_PRIVATE_KEY: ${{ secrets.RELEASE_SIGNING_GPG_PRIVATE_KEY }}
+          RELEASE_SIGNING_GPG_PASSPHRASE: ${{ secrets.RELEASE_SIGNING_GPG_PASSPHRASE }}
+        run: scripts/import-release-signing-key.sh site/release-signing-key.asc
+
       - name: Build and draft beta release
+        id: tauri
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Embed a GPG signature in the AppImage; a signing failure fails the build.
+          SIGN: ${{ matrix.platform == 'ubuntu-22.04' && '1' || '' }}
+          SIGN_KEY: ${{ steps.signing_key.outputs.fingerprint }}
+          APPIMAGETOOL_SIGN_PASSPHRASE: ${{ matrix.platform == 'ubuntu-22.04' && secrets.RELEASE_SIGNING_GPG_PASSPHRASE || '' }}
+          APPIMAGETOOL_FORCE_SIGN: ${{ matrix.platform == 'ubuntu-22.04' && '1' || '' }}
         with:
           tagName: scratchpad-beta-v__VERSION__
           releaseName: Scratchpad Beta v__VERSION__
@@ -153,3 +170,17 @@ jobs:
           releaseDraft: true
           prerelease: true
           args: ${{ matrix.args }}
+
+      - name: Sign and verify Linux release checksums
+        if: matrix.platform == 'ubuntu-22.04'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ID: ${{ steps.tauri.outputs.releaseId }}
+          SIGNING_KEY_FINGERPRINT: ${{ steps.signing_key.outputs.fingerprint }}
+        run: scripts/sign-linux-release.sh site/release-signing-key.asc
+
+      - name: Remove release-signing key
+        if: always() && matrix.platform == 'ubuntu-22.04'
+        run: |
+          gpgconf --kill gpg-agent || true
+          rm -rf "$HOME/.gnupg"
