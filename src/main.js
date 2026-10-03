@@ -2607,7 +2607,7 @@ function exportAsMarkdownFile() {
   if (window.__TAURI__) {
     // Show a saving state
     saveStatus.textContent = "Exporting...";
-    invoke("save_file_native", { content: content, defaultName: fileName })
+    invoke("save_file_native", { content: content, defaultName: fileName, dbPath: activeDbPath })
       .then((path) => {
         showNotification("Saved successfully");
       })
@@ -3370,7 +3370,7 @@ async function exportLocalRecovery() {
     refreshLocalRecoveryUi();
     const defaultName = "scratchpad-local-recovery.json";
     if (window.__TAURI__) {
-      await invoke("save_recovery_file_native", { content, defaultName });
+      await invoke("save_recovery_file_native", { content, defaultName, dbPath: activeDbPath });
       status.textContent = "Recovery data exported. The local collection has not been changed.";
     } else {
       const url = URL.createObjectURL(new Blob([content], { type: "application/json;charset=utf-8" }));

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-use std::fs::{self, File};
-use std::io::Write;
+use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::Manager;
 #[cfg(target_os = "macos")]
@@ -11,6 +10,7 @@ use tauri::{
 };
 
 mod backup;
+mod file_export;
 mod mcp;
 mod note_print;
 mod recovery;
@@ -210,8 +210,21 @@ fn ensure_workspace_schema(conn: &rusqlite::Connection) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn save_file_native(content: String, default_name: String) -> Result<String, String> {
-    save_text_file(content, default_name, "Markdown", &["md"])
+fn save_file_native(
+    app: tauri::AppHandle,
+    content: String,
+    default_name: String,
+    db_path: Option<String>,
+) -> Result<String, String> {
+    save_text_file(
+        &app,
+        content,
+        default_name,
+        "Markdown",
+        &["md"],
+        db_path.as_deref(),
+        TextExportKind::Note,
+    )
 }
 
 #[tauri::command]
@@ -226,33 +239,53 @@ fn save_html_file_native(
         .add_filter("HTML", &["html"])
         .save_file()
         .ok_or("Cancelled")?;
-    write_html_export(
+    write_text_export(
         &path,
         &content,
         &backup::directory(&app)?,
         db_path.as_deref(),
+        TextExportKind::Note,
     )?;
     Ok(path.to_string_lossy().into_owned())
 }
 
-fn write_html_export(
+enum TextExportKind {
+    Note,
+    Recovery,
+}
+
+fn write_text_export(
     path: &Path,
     content: &str,
     backup_directory: &Path,
     db_path: Option<&str>,
+    kind: TextExportKind,
 ) -> Result<(), String> {
     backup::ensure_export_destination(path, backup_directory, db_path).map_err(|_| {
-        "Choose an HTML file, not the open workspace or an active restore checkpoint"
+        "Choose an export file, not the open workspace or an active restore checkpoint"
     })?;
-    let mut file = File::create(path).map_err(|error| error.to_string())?;
-    file.write_all(content.as_bytes())
-        .map_err(|error| error.to_string())?;
-    file.sync_all().map_err(|error| error.to_string())
+    match kind {
+        TextExportKind::Note => file_export::export_note(path, content),
+        TextExportKind::Recovery => file_export::export(path, content),
+    }
 }
 
 #[tauri::command]
-fn save_recovery_file_native(content: String, default_name: String) -> Result<String, String> {
-    save_text_file(content, default_name, "Recovery JSON", &["json"])
+fn save_recovery_file_native(
+    app: tauri::AppHandle,
+    content: String,
+    default_name: String,
+    db_path: Option<String>,
+) -> Result<String, String> {
+    save_text_file(
+        &app,
+        content,
+        default_name,
+        "Recovery JSON",
+        &["json"],
+        db_path.as_deref(),
+        TextExportKind::Recovery,
+    )
 }
 
 #[tauri::command]
@@ -352,10 +385,13 @@ fn read_local_recovery_copies(app: tauri::AppHandle) -> Result<Vec<String>, Stri
 }
 
 fn save_text_file(
+    app: &tauri::AppHandle,
     content: String,
     default_name: String,
     filter_name: &str,
     extensions: &[&str],
+    db_path: Option<&str>,
+    kind: TextExportKind,
 ) -> Result<String, String> {
     let file_path = rfd::FileDialog::new()
         .set_file_name(&default_name)
@@ -363,9 +399,7 @@ fn save_text_file(
         .save_file();
 
     if let Some(path) = file_path {
-        let mut file = File::create(&path).map_err(|e| e.to_string())?;
-        file.write_all(content.as_bytes())
-            .map_err(|e| e.to_string())?;
+        write_text_export(&path, &content, &backup::directory(app)?, db_path, kind)?;
         Ok(path.to_string_lossy().to_string())
     } else {
         Err("Cancelled".to_string())
@@ -891,7 +925,7 @@ mod tests {
     }
 
     #[test]
-    fn html_export_writes_utf8_and_refuses_workspace_and_restore_checkpoint_targets() {
+    fn text_exports_write_utf8_and_refuse_workspace_and_restore_checkpoint_targets() {
         let directory =
             std::env::temp_dir().join(format!("scratchpad-html-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir(&directory).unwrap();
@@ -901,10 +935,31 @@ mod tests {
         std::fs::write(&workspace, "workspace sentinel").unwrap();
         std::fs::write(&checkpoint, "checkpoint sentinel").unwrap();
         let html = "<!DOCTYPE html><title>Résumé 日本語</title><p>note</p>";
-        write_html_export(&target, html, &directory, workspace.to_str()).unwrap();
+        write_text_export(
+            &target,
+            html,
+            &directory,
+            workspace.to_str(),
+            TextExportKind::Note,
+        )
+        .unwrap();
         assert_eq!(std::fs::read_to_string(&target).unwrap(), html);
-        assert!(write_html_export(&workspace, html, &directory, workspace.to_str()).is_err());
-        assert!(write_html_export(&checkpoint, html, &directory, None).is_err());
+        assert!(write_text_export(
+            &workspace,
+            html,
+            &directory,
+            workspace.to_str(),
+            TextExportKind::Note
+        )
+        .is_err());
+        assert!(write_text_export(
+            &checkpoint,
+            html,
+            &directory,
+            None,
+            TextExportKind::Recovery
+        )
+        .is_err());
         assert_eq!(
             std::fs::read_to_string(&workspace).unwrap(),
             "workspace sentinel"
@@ -913,10 +968,14 @@ mod tests {
             std::fs::read_to_string(&checkpoint).unwrap(),
             "checkpoint sentinel"
         );
-        assert!(
-            write_html_export(&directory.join("missing/note.html"), html, &directory, None)
-                .is_err()
-        );
+        assert!(write_text_export(
+            &directory.join("missing/note.html"),
+            html,
+            &directory,
+            None,
+            TextExportKind::Note
+        )
+        .is_err());
         std::fs::remove_dir_all(&directory).unwrap();
     }
 

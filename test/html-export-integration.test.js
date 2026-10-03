@@ -98,6 +98,11 @@ test("workspace export uses the open workspace's note, protects its path and lea
   await app.settle();
   assert.equal(parsed().querySelector("h1").textContent, "Workspace body");
   assert.equal(exports().at(-1).args.dbPath, "/tmp/export-workspace.sqlite");
+  app.click("export-btn");
+  await app.settle();
+  const markdown = app.invocations.findLast(item => item.command === "save_file_native");
+  assert.equal(markdown.args.dbPath, "/tmp/export-workspace.sqlite");
+  assert.equal(markdown.args.content, "# Workspace body");
   assert.deepEqual(app.read("scratchpad_notes"), before);
 });
 
