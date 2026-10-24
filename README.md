@@ -20,7 +20,7 @@ Scratchpad is in beta. Download the newest prerelease from the [Scratchpad websi
 - **Windows:** run the `.msi` or `.exe` installer.
 - **Linux:** install the `.deb`, or make the `.AppImage` executable and run it.
 
-macOS and Windows beta packages are not yet production-signed and may show a security warning, so only install artifacts downloaded from this repository. Linux packages are GPG-signed; see [Verifying Linux downloads](docs/verify-linux-downloads.md). Back up important workspace files before testing.
+macOS beta packages are not yet production-signed and may show a security warning. Windows packages from v0.8.2 are Authenticode-signed and timestamped, though SmartScreen may still warn about new downloads. Only install artifacts downloaded from this repository. Linux packages are GPG-signed; see [Verifying Linux downloads](docs/verify-linux-downloads.md). Back up important workspace files before testing.
 
 See [release notes](RELEASE_NOTES.md) for highlights, compatibility details, and beta caveats.
 
