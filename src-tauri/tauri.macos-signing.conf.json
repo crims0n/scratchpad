@@ -1,0 +1,9 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "macOS": {
+      "signingIdentity": "Developer ID Application: PATRICK JON MCDOWELL (B62UYUQ6C3)",
+      "hardenedRuntime": true
+    }
+  }
+}

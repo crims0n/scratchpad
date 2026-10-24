@@ -20,7 +20,7 @@ Scratchpad is in beta. Download the newest prerelease from the [Scratchpad websi
 - **Windows:** run the `.msi` or `.exe` installer.
 - **Linux:** install the `.deb`, or make the `.AppImage` executable and run it.
 
-macOS beta packages are not yet production-signed and may show a security warning. Windows packages from v0.8.2 are Authenticode-signed and timestamped, though SmartScreen may still warn about new downloads. Only install artifacts downloaded from this repository. Linux packages are GPG-signed; see [Verifying Linux downloads](docs/verify-linux-downloads.md). Back up important workspace files before testing.
+macOS packages from v0.8.2 are signed with a Developer ID certificate and notarized by Apple. Windows packages from v0.8.2 are Authenticode-signed and timestamped, though SmartScreen may still warn about new downloads. Only install artifacts downloaded from this repository. Linux packages are GPG-signed; see [Verifying Linux downloads](docs/verify-linux-downloads.md). Back up important workspace files before testing.
 
 See [release notes](RELEASE_NOTES.md) for highlights, compatibility details, and beta caveats.
 
@@ -251,7 +251,7 @@ The **CI** workflow validates every push to `main` and every pull request. The m
 
 Before triggering a beta release, update the version in `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, both lockfiles, and the About panel in `src/index.html`. Update `RELEASE_NOTES.md`, the README, MCP reference, welcome note, and in-app Help for the final feature set. The validation command checks version consistency, and the workflow refuses to overwrite an existing release tag. Review the generated draft and its assets before publishing it. The website's download manifest is generated from published GitHub releases; do not point it at unbuilt packages.
 
-Linux artifacts are signed during the release using secrets in the protected `release-signing` environment. The release fails if signing or verification fails. The draft includes `SHA256SUMS` and `SHA256SUMS.asc`; see [Linux release signing](docs/release-signing.md) for key setup, rotation, and revocation. Windows executables and both installers are Authenticode-signed and timestamped with Azure Artifact Signing, and the release fails if any signature does not verify; see [Windows release signing](docs/windows-release-signing.md). macOS production distribution will also require platform signing and notarization credentials.
+Linux artifacts are signed during the release using secrets in the protected `release-signing` environment. The release fails if signing or verification fails. The draft includes `SHA256SUMS` and `SHA256SUMS.asc`; see [Linux release signing](docs/release-signing.md) for key setup, rotation, and revocation. Windows executables and both installers are Authenticode-signed and timestamped with Azure Artifact Signing, and the release fails if any signature does not verify; see [Windows release signing](docs/windows-release-signing.md). The macOS app and DMG are signed with a Developer ID certificate, notarized, and stapled, and the release fails if signing, notarization, or Gatekeeper verification fails; see [macOS release signing](docs/macos-release-signing.md).
 
 ## Architecture
 

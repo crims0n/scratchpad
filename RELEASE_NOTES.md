@@ -2,12 +2,14 @@
 
 ## Highlights
 
+- The macOS app and DMG are now signed with a Developer ID certificate and notarized by Apple, so they open without a security bypass. The universal app uses the hardened runtime with no entitlements.
 - Windows application executables and both installers are now Authenticode-signed and timestamped with Azure Artifact Signing, identifying the publisher as Patrick McDowell.
 - Linux packages are now signed. Each release includes a `SHA256SUMS` file covering the AppImage and `.deb`, signed with the Scratchpad release-signing key as `SHA256SUMS.asc`. The AppImage also carries an embedded GPG signature.
 - The website's new **Verify Linux packages** section publishes the release-signing key and its full fingerprint, `1AD2 0240 0B0C 14AD 86F4 3E14 4F6B 122C D9DC CB40`, with step-by-step verification instructions.
 
 ## Release signing
 
+- The macOS release job notarizes and staples both the app and the DMG, then verifies the uploaded artifacts: Developer ID signature from the expected team, secure timestamp, hardened runtime, Gatekeeper acceptance, and a launch of the signed binary on both architectures. Any failure stops the release.
 - The Windows release job verifies both installers and every executable and DLL they install. Missing or invalid signatures, an unexpected publisher, or a missing timestamp fail the job.
 - The release workflow signs Linux artifacts with a dedicated signing subkey held in a protected environment. A signing or verification failure stops the release.
 - Before publishing, the workflow verifies the final uploaded packages using only the published key, and confirms that modified packages or checksums are rejected.
@@ -18,4 +20,4 @@
 
 - v0.8.2 retains the existing beta application identity and packaging. No manual collection migration is required from v0.8.0 or v0.8.1.
 - Existing notes, folders, trash, themes, preferences, and workspace files continue to use their existing locations. Back up important data before upgrading, and do not delete app data while recovery is pending.
-- macOS builds are not yet production-signed and may display a security warning. Windows packages are signed, but SmartScreen may still warn about new downloads while reputation builds. Automated checks do not replace installed-package acceptance testing on macOS, Windows, and Linux.
+- macOS and Windows packages are signed, but SmartScreen may still warn about new downloads while reputation builds. Automated checks do not replace installed-package acceptance testing on macOS, Windows, and Linux.

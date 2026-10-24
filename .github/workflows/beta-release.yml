@@ -90,6 +90,7 @@ jobs:
           - platform: macos-latest
             args: >-
               --config src-tauri/tauri.beta.conf.json
+              --config src-tauri/tauri.macos-signing.conf.json
               --target universal-apple-darwin
               --bundles app,dmg
           - platform: ubuntu-22.04
@@ -174,6 +175,18 @@ jobs:
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
         run: ./scripts/setup-windows-signing.ps1 -Description 'Scratchpad Beta'
 
+      - name: Set up macOS code signing
+        id: macos_signing
+        if: matrix.platform == 'macos-latest'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+          APPLE_API_KEY: ${{ vars.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ vars.APPLE_API_ISSUER }}
+        run: scripts/setup-macos-signing.sh src-tauri/tauri.macos-signing.conf.json
+
       - name: Build and draft beta release
         id: tauri
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1
@@ -184,6 +197,11 @@ jobs:
           SIGN_KEY: ${{ steps.signing_key.outputs.fingerprint }}
           APPIMAGETOOL_SIGN_PASSPHRASE: ${{ matrix.platform == 'ubuntu-22.04' && secrets.RELEASE_SIGNING_GPG_PASSPHRASE || '' }}
           APPIMAGETOOL_FORCE_SIGN: ${{ matrix.platform == 'ubuntu-22.04' && '1' || '' }}
+          # Notarize and staple the macOS app. The signing identity comes from
+          # tauri.macos-signing.conf.json and the keychain imported above.
+          APPLE_API_ISSUER: ${{ matrix.platform == 'macos-latest' && vars.APPLE_API_ISSUER || '' }}
+          APPLE_API_KEY: ${{ matrix.platform == 'macos-latest' && vars.APPLE_API_KEY || '' }}
+          APPLE_API_KEY_PATH: ${{ steps.macos_signing.outputs.api_key_path }}
         with:
           tagName: scratchpad-beta-v__VERSION__
           releaseName: Scratchpad Beta v__VERSION__
@@ -208,6 +226,25 @@ jobs:
             throw "Expected one NSIS setup and one MSI, got: $($paths -join ', ')"
           }
           ./scripts/verify-windows-release.ps1 -Setup $setup[0] -Msi $msi[0]
+
+      - name: Notarize and verify macOS release
+        if: matrix.platform == 'macos-latest'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ID: ${{ steps.tauri.outputs.releaseId }}
+          MACOS_SIGNING_IDENTITY: ${{ steps.macos_signing.outputs.identity }}
+          MACOS_SIGNING_TEAM_ID: ${{ steps.macos_signing.outputs.team_id }}
+          MACOS_SIGNING_KEYCHAIN: ${{ steps.macos_signing.outputs.keychain }}
+          APPLE_API_ISSUER: ${{ vars.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ vars.APPLE_API_KEY }}
+          APPLE_API_KEY_PATH: ${{ steps.macos_signing.outputs.api_key_path }}
+        run: scripts/finalize-macos-release.sh
+
+      - name: Remove macOS signing keychain
+        if: always() && matrix.platform == 'macos-latest'
+        run: |
+          security delete-keychain "$RUNNER_TEMP/scratchpad-signing.keychain-db" 2>/dev/null || true
+          rm -rf "$RUNNER_TEMP/private_keys" "$RUNNER_TEMP/developer-id.p12"
 
       - name: Sign and verify Linux release checksums
         if: matrix.platform == 'ubuntu-22.04'
