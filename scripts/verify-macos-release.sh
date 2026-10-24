@@ -38,12 +38,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if [[ "$(spctl --status 2>&1)" == *enabled* ]]; then
-  gatekeeper=1
-else
-  gatekeeper=0
-  echo "::warning::Gatekeeper assessments are disabled on this machine; skipping spctl checks."
-fi
+gatekeeper_status=$(spctl --status 2>&1) \
+  || fail "Could not read Gatekeeper status: $gatekeeper_status"
+[[ "$gatekeeper_status" == "assessments enabled" ]] \
+  || fail "Gatekeeper assessments must be enabled to verify a release: $gatekeeper_status"
 
 check_signature() {
   local path=$1 details
@@ -58,7 +56,6 @@ check_signature() {
 
 assess() {
   local path=$1 type=$2 assessment
-  [[ "$gatekeeper" -eq 1 ]] || return 0
   if [[ "$type" == open ]]; then
     assessment=$(spctl --assess --type open --context context:primary-signature --verbose=2 "$path" 2>&1) \
       || fail "Gatekeeper rejected $path: $assessment"
@@ -124,6 +121,7 @@ verify_app() {
   if arch -x86_64 /usr/bin/true 2>/dev/null; then
     [[ "$(uname -m)" == x86_64 ]] || smoke_test "x86_64 slice (Rosetta)" arch -x86_64 "$binary"
   else
+    [[ "${GITHUB_ACTIONS:-}" != true ]] || fail "Rosetta is required in CI to launch the x86_64 slice."
     echo "  Rosetta is not installed; skipping the x86_64 launch check."
   fi
   echo "  OK: signed by team $team, notarized, stapled, hardened runtime, no entitlements, $archs"
