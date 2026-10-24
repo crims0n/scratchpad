@@ -9,6 +9,25 @@ permissions:
   contents: read
 
 jobs:
+  windows-transition:
+    name: Verify Windows beta transition
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Test installer-controlled transition with disposable Beta data
+        shell: pwsh
+        run: |
+          $makensis = 'C:\Program Files (x86)\NSIS\makensis.exe'
+          if (-not (Test-Path -LiteralPath $makensis)) {
+            choco install nsis --version=3.11 --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw 'Could not install NSIS' }
+          }
+          ./scripts/test-windows-beta-transition.ps1 -MakeNsis $makensis
+
   validate:
     name: Validate
     runs-on: ubuntu-22.04

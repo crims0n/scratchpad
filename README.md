@@ -230,6 +230,8 @@ npm run tauri -- dev
 
 The frontend is served directly from `src/`; there is no framework-specific development server.
 
+Plain `tauri dev` and local builds use **Scratchpad Development**, with a separate application identifier (`io.github.crims0n.scratchpad.dev`), executable name, local storage, native settings, and MCP discovery files. Release packaging explicitly applies `src-tauri/tauri.release.conf.json` to retain the published installation identity. Use copied workspace files for development: separate app profiles do not coordinate writes to a workspace file you deliberately open in both apps.
+
 ### Validate changes
 
 ```bash
@@ -245,7 +247,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 npm run tauri -- build
 ```
 
-Bundles and installers are written beneath `src-tauri/target/release/bundle/`.
+Development bundles and installers are written beneath `src-tauri/target/release/bundle/`. They use the development profile even with release compiler optimizations; the production identity is selected by the release workflow's explicit configuration override.
 
 ## Releases
 

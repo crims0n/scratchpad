@@ -89,16 +89,19 @@ jobs:
         include:
           - platform: macos-latest
             args: >-
+              --config src-tauri/tauri.release.conf.json
               --config src-tauri/tauri.beta.conf.json
               --config src-tauri/tauri.macos-signing.conf.json
               --target universal-apple-darwin
               --bundles app,dmg
           - platform: ubuntu-22.04
             args: >-
+              --config src-tauri/tauri.release.conf.json
               --config src-tauri/tauri.beta.conf.json
               --bundles appimage,deb
           - platform: windows-latest
             args: >-
+              --config src-tauri/tauri.release.conf.json
               --config src-tauri/tauri.beta.conf.json
               --config src-tauri/tauri.windows-signing.conf.json
               --bundles nsis,msi

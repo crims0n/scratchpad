@@ -41,14 +41,20 @@ import is required solely because of the display-name change.
   explicitly retains the upgrade code generated for the published beta, so
   the product-name change does not create a different MSI upgrade family.
   Verify the installed path before updating your MCP client.
-- **Windows, NSIS EXE:** after backing up and quitting, uninstall
-  **Scratchpad Beta**, leaving any **delete application data** option unchecked.
-  Install Scratchpad using the new EXE. This is an explicit uninstall/reinstall
-  transition: NSIS looks up previous installations by product name, and the
-  rename changes that name. Keep your backups until notes, preferences, and
-  workspace connections have been checked. Update MCP clients to the new
-  installed `scratchpad.exe` path. Keep the same installer format for this
-  transition; switching between MSI and EXE is not an acceptance-tested path.
+- **Windows, NSIS EXE:** after backing up and quitting, run the new EXE directly.
+  Its installer detects the published per-user **Scratchpad Beta** installation
+  and asks to replace it while keeping application data. It runs the old
+  uninstaller in update mode, where data deletion is disabled, then removes the
+  old uninstaller and Beta installer records before copying the new files. No
+  delete-data checkbox is offered during this transition. Silent installation
+  uses the same data-preserving path. Close Beta and its MCP clients first; a
+  locked executable, inconsistent installation record, uninstall failure, or
+  incomplete removal stops installation. Repair an incomplete Beta installation
+  with its original installer before retrying, retaining all application data.
+  Keep backups until notes, preferences, and workspace connections have been
+  checked. Update MCP clients to the new installed `scratchpad.exe` path. Keep
+  the same installer format for this transition; switching between MSI and EXE
+  is not an acceptance-tested path.
 - **Linux, Debian package:** install the new `.deb` through the system package
   manager, for example `sudo apt install ./Scratchpad_1.0.0_amd64.deb` from its
   download directory. The new `scratchpad` package declares that it conflicts
@@ -105,9 +111,16 @@ results, and any defect links. Include:
   using the file; immediate-close saves and failed-save protection.
 - Installed MCP command, permissions, connection and writes, and confirmation
   that clients no longer start an old executable.
-- MSI replacing the previous product, NSIS retaining data during the documented
-  uninstall/reinstall, Debian replacing `scratchpad-beta`, and removal of stale
+- MSI replacing the previous product, NSIS retaining data during the
+  installer-controlled transition, Debian replacing `scratchpad-beta`, and removal of stale
   launchers without deleting user data.
+- NSIS interactive confirmation and cancellation, plus the complete 1.0
+  installer on a clean supported Windows system. CI tests the production hook
+  against the actual signed v0.8.2 NSIS installer with disposable profile data:
+  clean install, invalid records, missing uninstaller, locked executable,
+  uninstall failure/incomplete removal, successful data retention, cleanup of
+  the old uninstaller, and repeat installation. That does not replace acceptance
+  of the final 1.0 package or its interactive UI.
 - An installed v0.8.2 client discovering the published stable release; the new
   client reporting no update to the same or an older version.
 
@@ -118,13 +131,25 @@ before signing off for publication.
 
 ## Persistent packaging values
 
-Keep the application identifier and Cargo executable name unchanged. The MSI
+The default `tauri.conf.json` is a development profile: **Scratchpad Development**,
+`io.github.crims0n.scratchpad.dev`, executable `scratchpad-dev`. Both `tauri dev`
+and plain local builds use it, so development on `main` does not reuse released
+local data, settings, recovery files, or MCP token paths. Do not open production
+workspace files from development builds; the separate identity does not lock
+shared files across processes.
+
+Release workflows must explicitly apply `tauri.release.conf.json` before signing
+overrides. It retains the published application identifier and `scratchpad`
+executable name. Keep those production values unchanged. The MSI
 upgrade code is `425f5eeb-5cef-5929-8fcc-d21bcbaf7de9`, derived from the beta
 product name by Tauri 2.12.3 as
 `UUIDv5(DNS, "Scratchpad Beta.exe.app.x64")`. Tauri documents the effects of
 [`productName`](https://v2.tauri.app/reference/config/#productname), the need to
 retain [`wix.upgradeCode`](https://v2.tauri.app/reference/config/#wixconfig), and
 Debian [`conflicts` / `replaces`](https://v2.tauri.app/reference/config/#debconfig).
-The retained beta build override clears Debian replacement metadata to avoid
-conflicting with its own package name. The remaining beta workflow is temporary
-until the stable release path in #34 replaces it.
+The retained beta build override clears Debian replacement metadata and the
+NSIS transition hook to avoid replacing itself. The remaining beta workflow is
+temporary until the stable release path in #34 replaces it. After 1.0, `main`
+is the development line, changes use short-lived PR branches, and there is one
+stable release workflow. There is no ongoing beta release channel; the old
+identifier and manifest alias serve existing users' data and discovery only.

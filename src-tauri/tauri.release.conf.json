@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Scratchpad",
+  "identifier": "io.github.crims0n.scratchpad.beta",
+  "mainBinaryName": "scratchpad",
+  "app": {
+    "windows": [
+      {
+        "title": "Scratchpad",
+        "width": 960,
+        "height": 680
+      }
+    ]
+  },
+  "bundle": {
+    "windows": {
+      "wix": {
+        "upgradeCode": "425f5eeb-5cef-5929-8fcc-d21bcbaf7de9"
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "installerHooks": "windows/beta-transition.nsh"
+      }
+    },
+    "linux": {
+      "deb": {
+        "conflicts": ["scratchpad-beta"],
+        "replaces": ["scratchpad-beta"]
+      }
+    }
+  }
+}
