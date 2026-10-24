@@ -14,15 +14,15 @@ Scratchpad is a lightweight, open-source, local-first desktop editor for notes, 
 
 ## Install
 
-Scratchpad is in beta. Download the newest prerelease from the [Scratchpad website](https://crims0n.github.io/scratchpad/) or [GitHub Releases](https://github.com/crims0n/scratchpad/releases):
+Download the latest published release from the [Scratchpad website](https://crims0n.github.io/scratchpad/) or [GitHub Releases](https://github.com/crims0n/scratchpad/releases). Stable releases are the default once available; draft candidates are never advertised:
 
-- **macOS:** open the `.dmg` and drag Scratchpad Beta to Applications.
+- **macOS:** open the `.dmg` and drag the app to Applications.
 - **Windows:** run the `.msi` or `.exe` installer.
 - **Linux:** install the `.deb`, or make the `.AppImage` executable and run it.
 
-macOS packages from v0.8.2 are signed with a Developer ID certificate and notarized by Apple. Windows packages from v0.8.2 are Authenticode-signed and timestamped, though SmartScreen may still warn about new downloads. Only install artifacts downloaded from this repository. Linux packages are GPG-signed; see [Verifying Linux downloads](docs/verify-linux-downloads.md). Back up important workspace files before testing.
+macOS packages from v0.8.2 are signed with a Developer ID certificate and notarized by Apple. Windows packages from v0.8.2 are Authenticode-signed and timestamped, though SmartScreen may still warn about new downloads. Only install artifacts downloaded from this repository. Linux packages are GPG-signed; see [Verifying Linux downloads](docs/verify-linux-downloads.md). Back up important collections before upgrading.
 
-See [release notes](RELEASE_NOTES.md) for highlights, compatibility details, and beta caveats.
+See [release notes](RELEASE_NOTES.md) for highlights and limitations. Existing beta users should follow [Upgrading from beta to 1.0](docs/transition-to-1.0.md), including the renamed macOS app and Windows installer transition.
 
 ## Features
 
@@ -251,11 +251,11 @@ Development bundles and installers are written beneath `src-tauri/target/release
 
 ## Releases
 
-The **CI** workflow validates every push to `main` and every pull request. The manually triggered **Beta Release** workflow validates the project, builds macOS, Windows, and Linux packages, and attaches them to a draft prerelease.
+The **CI** workflow validates every push to `main` and every pull request. Development uses `main` and short-lived PR branches. The manually triggered **Stable Release** workflow builds signed macOS, Windows, and Linux packages from `main` and attaches them to a draft, non-prerelease `vX.Y.Z`. There is one release stream; beta packaging has been retired. The internal published identifier and old-client manifest alias are retained for compatibility.
 
-Before triggering a beta release, update the version in `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, both lockfiles, and the About panel in `src/index.html`. Update `RELEASE_NOTES.md`, the README, MCP reference, welcome note, and in-app Help for the final feature set. The validation command checks version consistency, and the workflow refuses to overwrite an existing release tag. Review the generated draft and its assets before publishing it. The website's download manifest is generated from published GitHub releases; do not point it at unbuilt packages.
+Before triggering a release, update the version in `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, both lockfiles, and the About panel in `src/index.html`. Update `RELEASE_NOTES.md`, the README, MCP reference, welcome note, and in-app Help for the final feature set. The workflow requires a stable version of 1.0.0 or later and refuses existing tags or releases, including drafts; failed GitHub queries stop validation. It verifies final downloaded asset hashes and website-manifest recognition after all signing jobs pass. Review and install the draft packages before publishing. The website's download manifest is generated from published GitHub releases; do not point it at unbuilt packages.
 
-Follow the [beta release checklist](docs/beta-release-checklist.md) to build a draft, check signing on all three platforms, and record installed-package acceptance results before publishing.
+Follow the [release checklist](docs/release-checklist.md) to build a draft, check signing on all three platforms, and record installed-package acceptance results before publishing. Publishing is a separate manual step after candidate review; the workflow never publishes automatically.
 
 Linux artifacts are signed during the release using secrets in the protected `release-signing` environment. The release fails if signing or verification fails. The draft includes `SHA256SUMS` and `SHA256SUMS.asc`; see [Linux release signing](docs/release-signing.md) for key setup, rotation, and revocation. Windows executables and both installers are Authenticode-signed and timestamped with Azure Artifact Signing, and the release fails if any signature does not verify; see [Windows release signing](docs/windows-release-signing.md). The macOS app and DMG are signed with a Developer ID certificate, notarized, and stapled, and the release fails if signing, notarization, or Gatekeeper verification fails; see [macOS release signing](docs/macos-release-signing.md).
 

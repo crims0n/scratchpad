@@ -33,10 +33,10 @@ test("signing is not part of the default or platform Tauri config", async () => 
   assert.equal(config.bundle.windows?.signCommand, undefined);
 });
 
-test("the Windows beta build uses the signing config and verifies it", async () => {
-  const workflow = await readFile(new URL("../.github/workflows/beta-release.yml", import.meta.url), "utf8");
+test("the Windows stable build uses the signing config and verifies it", async () => {
+  const workflow = await readFile(new URL("../.github/workflows/release.yml", import.meta.url), "utf8");
   const windowsArgs = /- platform: windows-latest\r?\n\s+args: >-\r?\n((?:[ \t]+--.*\r?\n)+)/.exec(workflow);
-  assert.ok(windowsArgs, "beta-release.yml must have a windows-latest matrix entry");
+  assert.ok(windowsArgs, "release.yml must have a windows-latest matrix entry");
   assert.match(windowsArgs[1], new RegExp(`--config ${signingConfigPath.replaceAll(".", "\\.")}`));
   assert.match(workflow, /scripts\/setup-windows-signing\.ps1/);
   assert.match(workflow, /scripts\/verify-windows-release\.ps1/);

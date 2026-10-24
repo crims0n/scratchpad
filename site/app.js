@@ -93,7 +93,7 @@ function renderManifest(manifest) {
   });
 
   const notes = release.notes.split(/\n\s*\n/)[0]?.replace(/^#+\s*/, "").trim();
-  elements.notes.textContent = notes || `${releaseLabel} is available for testing.`;
+  elements.notes.textContent = notes || `${releaseLabel} is available.`;
   elements.downloadStatus.textContent = `Downloads loaded from ${releaseLabel}.`;
 }
 
@@ -106,7 +106,7 @@ async function loadRelease() {
     renderManifest(manifest);
   } catch (error) {
     console.error("Could not load release manifest", error);
-    elements.releaseBadge.textContent = "Latest beta";
+    elements.releaseBadge.textContent = "Latest release";
     elements.releaseDate.textContent = "";
     elements.primaryDownload.href = RELEASES_URL;
     elements.primaryDownload.textContent = "View GitHub Releases";

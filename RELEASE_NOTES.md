@@ -1,23 +1,26 @@
-# Scratchpad Beta v0.8.2
+# Scratchpad v1.0.0
 
 ## Highlights
 
-- The macOS app and DMG are now signed with a Developer ID certificate and notarized by Apple, so they open without a security bypass. The universal app uses the hardened runtime with no entitlements.
-- Windows application executables and both installers are now Authenticode-signed and timestamped with Azure Artifact Signing, identifying the publisher as Patrick McDowell.
-- Linux packages are now signed. Each release includes a `SHA256SUMS` file covering the AppImage and `.deb`, signed with the Scratchpad release-signing key as `SHA256SUMS.asc`. The AppImage also carries an embedded GPG signature.
-- The website's new **Verify Linux packages** section publishes the release-signing key and its full fingerprint, `1AD2 0240 0B0C 14AD 86F4 3E14 4F6B 122C D9DC CB40`, with step-by-step verification instructions.
+- Scratchpad's first stable release brings the existing local-first Markdown editor, dual-note view and comparison, search, folders, persistent trash, themes, and optional local MCP agent access into one release stream.
+- macOS universal packages are Developer ID-signed and notarized. Windows EXE/MSI installers and installed executables are Authenticode-signed and timestamped. Linux AppImage and Debian downloads are covered by a GPG-signed checksum manifest; the AppImage also carries an embedded signature.
+- Complete collection backup/restore and guarded local collection clearing retain verified safety copies. Unreadable local data is preserved for recovery instead of being silently replaced.
+- Updates use one preferred release feed. Existing beta clients can discover 1.0, and newer clients no longer select a channel from the internal application identifier. Update checks remain optional and off by default; installation is manual.
 
-## Release signing
+## Upgrading from beta
 
-- The macOS release job notarizes and staples both the app and the DMG, then verifies the uploaded artifacts: Developer ID signature from the expected team, secure timestamp, hardened runtime, Gatekeeper acceptance, and a launch of the signed binary on both architectures. Any failure stops the release.
-- The Windows release job verifies both installers and every executable and DLL they install. Missing or invalid signatures, an unexpected publisher, or a missing timestamp fail the job.
-- The release workflow signs Linux artifacts with a dedicated signing subkey held in a protected environment. A signing or verification failure stops the release.
-- Before publishing, the workflow verifies the final uploaded packages using only the published key, and confirms that modified packages or checksums are rejected.
-- Launching an AppImage does not check its signature, and `apt`/`dpkg` do not verify a `.deb` you downloaded directly. Use the `SHA256SUMS` procedure to verify either package before installing.
-- Application features and behavior are unchanged from v0.8.1. See the v0.8.1 release for the CodeMirror 6 editors, format detection, section folding, HTML export, and printing.
+Back up local notes and workspace collections, resolve any failed-save or recovery message, and quit Scratchpad and its MCP clients before upgrading. Follow [Upgrading from beta to 1.0](https://github.com/crims0n/scratchpad/blob/main/docs/transition-to-1.0.md) for the platform-specific procedure.
 
-## Compatibility and beta notice
+- Existing data locations and the published executable name are retained. Do not delete or reset app data during the transition.
+- On macOS the new app is `Scratchpad.app`. The old `Scratchpad Beta.app` has a different filename; remove the old application bundle after checking the new app, without removing its associated data. Update MCP clients to the new application path.
+- The Windows MSI retains the beta upgrade identity. The EXE installer detects the old per-user Beta install, removes it with app-data deletion disabled, and stops if the previous executable is locked or removal fails. Use the same installer format for this transition and update MCP paths as needed.
+- The Debian package replaces `scratchpad-beta`. AppImage users should replace their chosen file and update launchers/MCP commands containing the old filename.
+- Check local notes, folders/order, pins, trash, preferences, and workspace reconnection after installation and restart. Collection backups do not include preferences or MCP configuration.
 
-- v0.8.2 retains the existing beta application identity and packaging. No manual collection migration is required from v0.8.0 or v0.8.1.
-- Existing notes, folders, trash, themes, preferences, and workspace files continue to use their existing locations. Back up important data before upgrading, and do not delete app data while recovery is pending.
-- macOS and Windows packages are signed, but SmartScreen may still warn about new downloads while reputation builds. Automated checks do not replace installed-package acceptance testing on macOS, Windows, and Linux.
+## Verification and limitations
+
+Verify Linux packages using `SHA256SUMS`, `SHA256SUMS.asc`, and the published release-signing key. Follow [Verifying Linux downloads](https://github.com/crims0n/scratchpad/blob/main/docs/verify-linux-downloads.md). Launching an AppImage does not automatically validate its signature, and a directly downloaded Debian package requires explicit verification.
+
+Windows signatures identify Patrick McDowell as the publisher; SmartScreen may still warn while download reputation builds. Signing and automated checks do not replace installed-package acceptance on each supported platform.
+
+Notes, workspace files, backups, trash, and recovery copies are unencrypted. Do not run multiple instances against the same collection or workspace file. Keep important backups outside the app data directory. Folding remains limited to 100,000 characters and 10,000 lines. In-app update installation, encryption, remote sync, and dedicated PDF export remain outside 1.0; native printing can save to PDF where the operating system supports it.

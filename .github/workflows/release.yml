@@ -1,4 +1,4 @@
-name: Beta Release
+name: Stable Release
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: beta-release-${{ github.ref }}
+  group: stable-release
   cancel-in-progress: false
 
 jobs:
@@ -16,6 +16,7 @@ jobs:
     runs-on: ubuntu-22.04
     outputs:
       version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
 
     steps:
       - name: Check out repository
@@ -48,6 +49,12 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Validate stable version and unused tag/release
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-stable-release.mjs >> "$GITHUB_OUTPUT"
+
       - name: Validate frontend
         run: npm run check
 
@@ -57,26 +64,12 @@ jobs:
           cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
           cargo test --manifest-path src-tauri/Cargo.toml
 
-      - name: Read application version
-        id: version
-        shell: bash
-        run: |
-          version=$(node -e "const fs = require('fs'); process.stdout.write(JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8')).version)")
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
-      - name: Ensure release version is new
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: scratchpad-beta-v${{ steps.version.outputs.version }}
-        run: |
-          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "::error::Release $RELEASE_TAG already exists. Bump the application version before starting another beta release."
-            exit 1
-          fi
-
   build:
-    name: Build beta (${{ matrix.platform }})
+    name: Build signed release (${{ matrix.platform }})
     needs: validate
+    outputs:
+      # Each matrix entry uploads to the same draft release.
+      release_id: ${{ steps.tauri.outputs.releaseId }}
     permissions:
       contents: write
       # Windows signing exchanges GitHub OIDC tokens for Azure Artifact Signing
@@ -90,19 +83,16 @@ jobs:
           - platform: macos-latest
             args: >-
               --config src-tauri/tauri.release.conf.json
-              --config src-tauri/tauri.beta.conf.json
               --config src-tauri/tauri.macos-signing.conf.json
               --target universal-apple-darwin
               --bundles app,dmg
           - platform: ubuntu-22.04
             args: >-
               --config src-tauri/tauri.release.conf.json
-              --config src-tauri/tauri.beta.conf.json
               --bundles appimage,deb
           - platform: windows-latest
             args: >-
               --config src-tauri/tauri.release.conf.json
-              --config src-tauri/tauri.beta.conf.json
               --config src-tauri/tauri.windows-signing.conf.json
               --bundles nsis,msi
 
@@ -176,7 +166,7 @@ jobs:
           ARTIFACT_SIGNING_PROFILE: ${{ vars.ARTIFACT_SIGNING_PROFILE }}
           AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
-        run: ./scripts/setup-windows-signing.ps1 -Description 'Scratchpad Beta'
+        run: ./scripts/setup-windows-signing.ps1 -Description 'Scratchpad'
 
       - name: Set up macOS code signing
         id: macos_signing
@@ -190,7 +180,7 @@ jobs:
           APPLE_API_ISSUER: ${{ vars.APPLE_API_ISSUER }}
         run: scripts/setup-macos-signing.sh src-tauri/tauri.macos-signing.conf.json
 
-      - name: Build and draft beta release
+      - name: Build and draft stable release
         id: tauri
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1
         env:
@@ -206,12 +196,14 @@ jobs:
           APPLE_API_KEY: ${{ matrix.platform == 'macos-latest' && vars.APPLE_API_KEY || '' }}
           APPLE_API_KEY_PATH: ${{ steps.macos_signing.outputs.api_key_path }}
         with:
-          tagName: scratchpad-beta-v__VERSION__
-          releaseName: Scratchpad Beta v__VERSION__
+          tagName: v__VERSION__
+          releaseName: Scratchpad v__VERSION__
           releaseBody: ${{ steps.release_notes.outputs.body }}
           generateReleaseNotes: true
           releaseDraft: true
-          prerelease: true
+          prerelease: false
+          releaseCommitish: ${{ github.sha }}
+          uploadUpdaterJson: false
           args: ${{ matrix.args }}
 
       - name: Verify Windows signatures
@@ -262,3 +254,36 @@ jobs:
         run: |
           gpgconf --kill gpg-agent || true
           rm -rf "$HOME/.gnupg"
+
+  verify-draft:
+    name: Verify complete signed draft
+    needs: [validate, build]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install verification dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Download and verify final draft assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          RELEASE_ID: ${{ needs.build.outputs.release_id }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" > "$RUNNER_TEMP/release.json"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/release-assets"
+          node scripts/verify-release-draft.mjs \
+            --release "$RUNNER_TEMP/release.json" \
+            --assets-dir "$RUNNER_TEMP/release-assets" \
+            --version "$RELEASE_VERSION" --commit "$GITHUB_SHA"

@@ -1,7 +1,7 @@
 # Upgrading from beta to 1.0
 
-This is the upgrade procedure prepared for the 1.0 candidate. The current
-published release is v0.8.2. Installed-package verification remains tracked in
+This is the upgrade procedure prepared for the 1.0 candidate. Until 1.0 is
+published, downloads continue to point to v0.8.2. Installed-package verification remains tracked in
 [#33](https://github.com/crims0n/scratchpad/issues/33) and
 [#35](https://github.com/crims0n/scratchpad/issues/35); the configuration changes
 and automated checks alone do not establish that every platform upgrade works.
@@ -26,7 +26,7 @@ import is required solely because of the display-name change.
    Quit Scratchpad and stop MCP clients that launch its executable. Do not run
    beta and 1.0 against the same data at the same time.
 4. Download the candidate for your platform. Review the signing checks in the
-   [release checklist](beta-release-checklist.md#review-signing-results), and
+   [release checklist](release-checklist.md#review-signing-results), and
    [verify Linux downloads](verify-linux-downloads.md) before installing them.
 
 ## Install the renamed app
@@ -147,9 +147,9 @@ product name by Tauri 2.12.3 as
 [`productName`](https://v2.tauri.app/reference/config/#productname), the need to
 retain [`wix.upgradeCode`](https://v2.tauri.app/reference/config/#wixconfig), and
 Debian [`conflicts` / `replaces`](https://v2.tauri.app/reference/config/#debconfig).
-The retained beta build override clears Debian replacement metadata and the
-NSIS transition hook to avoid replacing itself. The remaining beta workflow is
-temporary until the stable release path in #34 replaces it. After 1.0, `main`
-is the development line, changes use short-lived PR branches, and there is one
-stable release workflow. There is no ongoing beta release channel; the old
-identifier and manifest alias serve existing users' data and discovery only.
+The beta workflow and beta configuration have been retired. **Stable Release**
+(`release.yml`) applies the production override and required platform signing
+configuration, then leaves `v1.0.0` as a draft for review. After 1.0, `main`
+remains the development line, changes use short-lived PR branches, and there is
+one stable release workflow. There is no ongoing beta release channel; the
+old identifier and manifest alias serve existing users' data and discovery only.
