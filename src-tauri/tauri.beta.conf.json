@@ -3,6 +3,17 @@
   "productName": "Scratchpad Beta",
   "identifier": "io.github.crims0n.scratchpad.beta",
   "bundle": {
+    "windows": {
+      "nsis": {
+        "installerHooks": null
+      }
+    },
+    "linux": {
+      "deb": {
+        "conflicts": [],
+        "replaces": []
+      }
+    },
     "macOS": {
       "signingIdentity": "-"
     }

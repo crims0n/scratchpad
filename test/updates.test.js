@@ -16,7 +16,7 @@ async function setup({ preferences = null, fetch = async () => release } = {}) {
   const calls = [];
   const invoke = async (command, args) => {
     calls.push({ command, args });
-    if (command === "get_update_info") return { installedVersion: "0.7.1", channel: "beta" };
+    if (command === "get_update_info") return { installedVersion: "0.7.1" };
     if (command === "check_for_updates") return fetch();
   };
   const checker = createUpdateChecker({ invoke, storage, now: () => time,
@@ -154,7 +154,7 @@ test("opting out during local initialization prevents the network request from s
   });
   const pending = checker.check(false);
   checker.setAutomatic(false);
-  resolveInfo({ installedVersion: "0.7.1", channel: "beta" });
+  resolveInfo({ installedVersion: "0.7.1" });
   await pending;
   await checker.ready;
   assert.equal(checks, 0);

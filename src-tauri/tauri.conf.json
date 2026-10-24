@@ -1,8 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Scratchpad",
+  "productName": "Scratchpad Development",
   "version": "0.8.2",
-  "identifier": "io.github.crims0n.scratchpad",
+  "identifier": "io.github.crims0n.scratchpad.dev",
+  "mainBinaryName": "scratchpad-dev",
   "build": {
     "beforeBuildCommand": "npm run vendor",
     "beforeDevCommand": "npm run vendor",
@@ -12,7 +13,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "Scratchpad",
+        "title": "Scratchpad Development",
         "width": 960,
         "height": 680
       }
