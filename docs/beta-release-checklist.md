@@ -27,7 +27,8 @@ Read the platform signing guides for detailed checks: [macOS](macos-release-sign
 ## Install before publishing
 
 - **macOS (Apple Silicon and Intel):** browser-download the DMG, install to Applications, and launch without a Gatekeeper bypass. Edit, save, and reopen a note; enable agent access and connect an MCP client with the installed executable.
-- **Windows:** browser-download both installers on a clean test system. Check file properties and UAC show the expected publisher, record SmartScreen behavior, then install, launch, edit/save/reopen, and uninstall each package.
-- **Linux:** download packages and checksum files from the same draft. Follow [Verifying Linux downloads](verify-linux-downloads.md), then test AppImage launch and `.deb` installation on a supported clean system. Edit, save, and reopen a note.
+- **Windows:** browser-download both installers on a clean test system. Check file properties and UAC show the expected publisher, record SmartScreen behavior, then install, launch, edit/save/reopen, connect an MCP client with the installed executable, and uninstall each package.
+- **Linux:** download packages and checksum files from the same draft. Follow [Verifying Linux downloads](verify-linux-downloads.md), then test AppImage launch and `.deb` installation on a supported clean system. Edit, save, reopen a note, and connect an MCP client with each installed package.
+- **Upgrade:** on each platform, upgrade a v0.8.1 installation with backed-up test data. Confirm notes, folders, preferences, and the existing collection remain available.
 
 Only publish the draft after recording these acceptance results and reviewing the release notes and complete asset list. Publishing updates the website's release manifest; draft builds do not replace the public downloads.
