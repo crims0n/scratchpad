@@ -2,12 +2,13 @@
 
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { stableRelease, assertReleaseAvailable } from "../scripts/check-stable-release.mjs";
-import { expectedAssets, verifyDraft } from "../scripts/verify-release-draft.mjs";
+import { expectedAssets, downloadDraftAssets, verifyDraft } from "../scripts/verify-release-draft.mjs";
+import { prepareDraft } from "../scripts/prepare-stable-release.mjs";
 
 test("only canonical stable versions starting at 1.0.0 can create releases", () => {
   assert.deepEqual(stableRelease("1.0.0"), { version: "1.0.0", tag: "v1.0.0" });
@@ -27,6 +28,53 @@ test("existing tags and draft releases block reuse; malformed responses fail clo
 });
 
 const commit = "a".repeat(40);
+const releaseId = 123;
+
+function preparation({ refs = [], pages = [[]], errorAt = 0, response = {} } = {}) {
+  const calls = [];
+  const input = { ref: "refs/heads/main", repository: "crims0n/scratchpad", version: "1.0.0", commit, body: "Release notes and verification instructions", api: async (args, body) => {
+    calls.push({ args, body });
+    if (calls.length === errorAt) throw new Error("GitHub authentication or network failure");
+    if (body) return { ...body, id: releaseId, ...response };
+    return args[0] === "--paginate" ? pages : refs;
+  } };
+  return { input, calls };
+}
+
+test("preparation checks availability then creates exactly one unpublished draft for the source commit", async () => {
+  const { input, calls } = preparation();
+  assert.deepEqual(await prepareDraft(input), { version: "1.0.0", tag: "v1.0.0", releaseId });
+  assert.equal(calls.length, 3);
+  const writes = calls.filter(call => call.body);
+  assert.equal(writes.length, 1);
+  assert.deepEqual(writes[0], { args: ["repos/crims0n/scratchpad/releases"], body: {
+    tag_name: "v1.0.0", name: "Scratchpad v1.0.0", body: input.body,
+    draft: true, prerelease: false, target_commitish: commit, generate_release_notes: true
+  } });
+});
+
+test("existing drafts, tag reuse, and failed lookups stop preparation before any write", async () => {
+  for (const options of [
+    { pages: [[{ tag_name: "v1.0.0", draft: true }]] },
+    { refs: [{ ref: "refs/tags/v1.0.0" }] }, { errorAt: 1 }, { errorAt: 2 }, { pages: {} }
+  ]) {
+    const { input, calls } = preparation(options);
+    await assert.rejects(prepareDraft(input));
+    assert.equal(calls.some(call => call.body), false);
+  }
+});
+
+test("preparation requires main and rejects malformed creation responses without retrying", async () => {
+  const { input, calls } = preparation();
+  await assert.rejects(prepareDraft({ ...input, ref: "refs/heads/feature" }), /must run from main/);
+  assert.equal(calls.length, 0);
+  for (const response of [{ id: null }, { draft: false }, { target_commitish: "main" }, { tag_name: "v2.0.0" }]) {
+    const attempt = preparation({ response });
+    await assert.rejects(prepareDraft(attempt.input), /expected candidate draft/);
+    assert.equal(attempt.calls.filter(call => call.body).length, 1);
+  }
+});
+
 const digest = content => createHash("sha256").update(content).digest("hex");
 async function fixture(t) {
   const assetsDir = await mkdtemp(join(tmpdir(), "scratchpad-stable-draft-"));
@@ -38,11 +86,11 @@ async function fixture(t) {
   const assets = [];
   for (const [name, bytes] of contents) {
     await writeFile(join(assetsDir, name), bytes);
-    assets.push({ name, state: "uploaded", size: bytes.length, digest: `sha256:${digest(bytes)}`,
+    assets.push({ id: assets.length + 1, name, state: "uploaded", size: bytes.length, digest: `sha256:${digest(bytes)}`,
       browser_download_url: `https://github.com/crims0n/scratchpad/releases/download/v1.0.0/${name}` });
   }
-  const release = { tag_name: "v1.0.0", name: "Scratchpad v1.0.0", target_commitish: commit, draft: true, prerelease: false, assets };
-  return { release, assetsDir, version: "1.0.0", commit };
+  const release = { id: releaseId, tag_name: "v1.0.0", name: "Scratchpad v1.0.0", target_commitish: commit, draft: true, prerelease: false, assets };
+  return { release, releaseId, assetsDir, version: "1.0.0", commit };
 }
 
 test("complete draft verification hashes all eight final files and recognizes the stable installers", async t => {
@@ -52,6 +100,43 @@ test("complete draft verification hashes all eight final files and recognizes th
   assert.equal(report.assets.length, 8);
   assert.ok(report.assets.every(asset => /^[a-f0-9]{64}$/.test(asset.sha256)));
   assert.equal(input.release.draft, true);
+});
+
+test("downloads use exactly the selected draft's asset IDs, then verify those bytes", async t => {
+  const input = await fixture(t);
+  const assetsDir = join(input.assetsDir, "downloaded");
+  const ids = [];
+  await downloadDraftAssets({ ...input, assetsDir, download: async (id, destination) => {
+    ids.push(id);
+    const asset = input.release.assets.find(asset => asset.id === id);
+    await writeFile(destination, await readFile(join(input.assetsDir, asset.name)));
+  } });
+  assert.deepEqual(ids, input.release.assets.map(asset => asset.id));
+  assert.equal((await verifyDraft({ ...input, assetsDir })).releaseId, releaseId);
+  await assert.rejects(downloadDraftAssets({ ...input, assetsDir, download: () => assert.fail("must not reuse a download directory") }), /EEXIST/);
+});
+
+test("wrong release IDs, duplicate asset IDs and unsafe names are rejected before downloading", async t => {
+  const input = await fixture(t);
+  const assetsDir = join(input.assetsDir, "must-not-exist");
+  for (const override of [
+    { releaseId: releaseId + 1 },
+    { release: { ...input.release, assets: input.release.assets.map(asset => ({ ...asset, id: 1 })) } },
+    { release: { ...input.release, assets: [{ ...input.release.assets[0], name: "../outside" }, ...input.release.assets.slice(1)] } }
+  ]) {
+    await assert.rejects(downloadDraftAssets({ ...input, ...override, assetsDir, download: () => assert.fail("must not download invalid metadata") }));
+  }
+  await assert.rejects(stat(assetsDir), /ENOENT/);
+});
+
+test("a failed asset download stops without fetching later assets", async t => {
+  const input = await fixture(t);
+  const ids = [];
+  await assert.rejects(downloadDraftAssets({ ...input, assetsDir: join(input.assetsDir, "partial"), download: async id => {
+    ids.push(id);
+    throw new Error("asset download failed");
+  } }), /asset download failed/);
+  assert.deepEqual(ids, [input.release.assets[0].id]);
 });
 
 test("draft verification rejects wrong identity, source, publication state, or incomplete asset sets", async t => {

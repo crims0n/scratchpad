@@ -50,12 +50,28 @@ test("every stable build selects the production identity without a beta override
   }
   assert.equal(existsSync(new URL("../.github/workflows/beta-release.yml", import.meta.url)), false);
   assert.equal(existsSync(new URL("../src-tauri/tauri.beta.conf.json", import.meta.url)), false);
-  assert.match(workflow, /releaseDraft: true/);
-  assert.match(workflow, /prerelease: false/);
-  assert.match(workflow, /releaseCommitish: \$\{\{ github.sha \}\}/);
   assert.match(workflow, /scripts\/check-stable-release.mjs/);
+  assert.match(workflow, /scripts\/prepare-stable-release.mjs/);
   assert.match(workflow, /scripts\/verify-release-draft.mjs/);
-  assert.match(workflow, /needs: \[validate, build\]/);
+  assert.match(workflow, /needs: \[validate, prepare, build\]/);
+});
+
+test("one main-only draft preparation supplies every build and finalizer; draft access has push permission", async () => {
+  const workflow = await readFile(new URL("../.github/workflows/release.yml", import.meta.url), "utf8");
+  const prepare = workflow.split("  prepare:\n")[1].split("  build:\n")[0];
+  const build = workflow.split("  build:\n")[1].split("  verify-draft:\n")[0];
+  const verify = workflow.split("  verify-draft:\n")[1];
+  for (const job of [prepare, verify]) {
+    assert.match(job, /if: github.ref == 'refs\/heads\/main'/);
+    assert.match(job, /contents: write/);
+  }
+  assert.equal((workflow.match(/node scripts\/prepare-stable-release.mjs/g) || []).length, 1);
+  assert.match(build, /releaseId: \$\{\{ needs.prepare.outputs.release_id \}\}/);
+  assert.equal((build.match(/RELEASE_ID: \$\{\{ needs.prepare.outputs.release_id \}\}/g) || []).length, 2);
+  assert.match(verify, /RELEASE_ID: \$\{\{ needs.prepare.outputs.release_id \}\}/);
+  assert.match(verify, /--release-id "\$RELEASE_ID" --download/);
+  assert.doesNotMatch(workflow, /steps\.tauri\.outputs\.releaseId|needs\.build\.outputs\.release_id|gh release download/);
+  assert.doesNotMatch(build, /tagName:|releaseName:|releaseDraft:|releaseCommitish:|releaseBody:|generateReleaseNotes:/);
 });
 
 test("only renamed release installers run the Beta transition", async () => {

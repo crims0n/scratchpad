@@ -34,7 +34,7 @@ function getTrustedDownloadUrl(rawUrl) {
   }
 }
 
-function getSha256(digest) {
+export function getSha256(digest) {
   const match = /^sha256:([a-f0-9]{64})$/i.exec(digest || "");
   return match ? match[1].toLowerCase() : null;
 }

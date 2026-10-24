@@ -6,9 +6,9 @@ The first stable candidate is **v1.0.0** (`v1.0.0`). Its version and release not
 
 1. Confirm the release-preparation PR is merged, `main` CI passes, and all version checks pass (`npm run check`).
 2. Confirm no release already uses the candidate tag, including a draft. Check any previous Stable Release run before starting another.
-3. Run **Actions → Stable Release → Run workflow**, selecting `main`, or use `gh workflow run release.yml --ref main`. Record the run URL and commit SHA.
-4. Review and approve the pending `release-signing` environment deployment for the three build jobs.
-5. Require validation, all three signed build jobs, and **Verify complete signed draft** to pass. The release must remain a draft with `prerelease: false`, tag `v1.0.0`, and the reviewed source commit. The final job downloads all eight assets, checks sizes/SHA-256 values against GitHub, checks the Linux checksum manifest, and previews website-manifest recognition of all six installers. Successful upload alone is not enough.
+3. Run **Actions → Stable Release → Run workflow**, selecting `main`, or use `gh workflow run release.yml --ref main`. Record the run URL and commit SHA. Read-only validation checks the stable version and runs the frontend/Rust checks. The main-only **Prepare one candidate draft** job has push permission to detect existing drafts, refuses any reused tag/release, and creates exactly one unpublished candidate.
+4. Record that draft's release ID. All three platform builds upload to this ID; they do not create or look up a draft by tag. Review and approve the pending `release-signing` environment deployment for the three build jobs. An empty draft already exists at this point; it is not ready to publish.
+5. Require validation, preparation, all three signed build jobs, and **Verify complete signed draft** to pass. The release must remain a draft with `prerelease: false`, tag `v1.0.0`, and the reviewed source commit. The final job has push permission to read the draft and downloads each of its eight assets by the asset IDs in that same release's metadata. It checks the release ID, sizes/SHA-256 values, Linux checksum coverage, and website-manifest recognition of all six installers. Successful upload alone is not enough.
 
 If a signing step fails, keep the release as a draft and inspect the failed job. Fix code through a PR. The workflow refuses any existing candidate tag or release (including drafts), and fails if GitHub cannot be queried. Deliberately remove a failed draft and any candidate tag only after confirming that nothing was published before rebuilding the same version; do not publish or reuse incomplete assets. Keep the failed run URL for diagnosis.
 
@@ -32,6 +32,7 @@ Read the platform signing guides for detailed checks: [macOS](macos-release-sign
 - **Upgrade:** on each platform, follow [Upgrading from beta to 1.0](transition-to-1.0.md) from a v0.8.2 installation with backed-up test data. Confirm local notes, folders/order, pins, trash, preferences, workspace connections, and MCP paths remain available. Test the MSI upgrade and the EXE installer-controlled transition separately. On macOS, remove the old Beta app bundle after verifying the new app and its data; check LaunchServices/Spotlight and the configured MCP command no longer launch the old app. Do not use an app cleaner or delete app data.
 
 Only publish the draft after recording these acceptance results and reviewing the release notes and complete asset list. Publishing updates the website's release manifest; draft builds do not replace the public downloads.
+
 ## Final 1.0 sign-off and publication
 
 Record the exact candidate commit/version and results under [#35](https://github.com/crims0n/scratchpad/issues/35). Complete the [final code review (#70)](https://github.com/crims0n/scratchpad/issues/70) and [documentation pass (#69)](https://github.com/crims0n/scratchpad/issues/69); resolve blocking findings and repeat affected acceptance checks after any candidate changes.
