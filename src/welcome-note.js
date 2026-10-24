@@ -55,7 +55,7 @@ Scratchpad is a fast, local-first place for notes, snippets, and Markdown. Every
 - Choose **Print Note…** in the Scratchpad menu, or press **Cmd/Ctrl+P**, to print the active note with Markdown formatting and a paper-friendly light palette. In split view, it prints the active pane. Cancel leaves the note unchanged.
 
 ## Check for updates (optional)
-- Open **Scratchpad menu → About Scratchpad**, then **Check for Updates…**, to look for a newer version on your release channel.
+- Open **Scratchpad menu → About Scratchpad**, then **Check for Updates…**, to look for a newer release.
 - Choose **Read release notes** to see what changed before downloading. **Download Update** opens the release page in your browser; nothing is installed automatically.
 - **Automatically check for updates** is off by default. When enabled, it checks shortly after launch and at most once every 24 hours. Checks contact GitHub Pages without sending notes or workspace data.
 - **Later** closes the panel. **Skip This Version** hides background notices for that release; a manual check can still show it again.

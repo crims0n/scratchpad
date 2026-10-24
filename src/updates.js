@@ -53,7 +53,7 @@ export function createUpdateChecker({ invoke, storage, onChange = () => {}, now 
 
   async function loadInfo() {
     const info = await invoke("get_update_info");
-    if (!info || typeof info.installedVersion !== "string" || !["beta", "stable"].includes(info.channel)) throw new Error("Missing installed version");
+    if (!info || typeof info.installedVersion !== "string") throw new Error("Missing installed version");
     state.info = info;
   }
 
@@ -135,14 +135,13 @@ export function createUpdateUi({ document, invoke, storage, closeAbout }) {
   let displayedVersion = null;
   const checker = createUpdateChecker({ invoke, storage,
     onChange(state) {
-      byId("update-channel").textContent = state.info ? (state.info.channel === "beta" ? "Beta" : "Stable") : "Unavailable";
       if (state.info) byId("about-version").textContent = state.info.installedVersion;
       byId("update-last-check").textContent = state.lastCheck ? new Date(state.lastCheck).toLocaleString() : "Never";
       byId("update-automatic").checked = state.automatic;
       byId("update-preference-error").textContent = state.preferenceError;
       const messages = {
         idle: "", checking: "Checking for updates…",
-        current: "You’re up to date on this release channel.",
+        current: "You’re up to date.",
         available: `Scratchpad ${state.release?.version} is available.`,
         skipped: `Version ${state.skippedVersion} is skipped. A manual check will show it again.`,
         error: "Unable to check for updates. Check your connection and try again."

@@ -51,8 +51,7 @@ export function buildReleaseManifest(releases, { generatedAt = new Date().toISOS
     .filter((release) => release && !release.draft && Number.isFinite(Date.parse(release.published_at)) && hasCanonicalVersion(release))
     .sort((left, right) => semver.rcompare(versionOf(left), versionOf(right)) || new Date(right.published_at) - new Date(left.published_at));
 
-  const channels = { stable: null, beta: null };
-  let latest = null;
+  const releasesByChannel = { stable: null, beta: null };
 
   for (const release of candidates) {
     const assets = (release.assets || []).flatMap((asset) => {
@@ -80,7 +79,7 @@ export function buildReleaseManifest(releases, { generatedAt = new Date().toISOS
     const tag = String(release.tag_name || "");
     const version = versionOf(release);
     const channel = release.prerelease || tag.startsWith("scratchpad-beta-v") || semver.prerelease(version) ? "beta" : "stable";
-    if (channels[channel]) continue;
+    if (releasesByChannel[channel]) continue;
     // Construct the link from a validated tag; never forward arbitrary release URLs.
     const selected = {
       tag,
@@ -92,12 +91,28 @@ export function buildReleaseManifest(releases, { generatedAt = new Date().toISOS
       url: `https://github.com/${REPOSITORY}/releases/tag/${encodeURIComponent(tag)}`,
       notes: String(release.body || "").trim()
     };
-    channels[channel] = selected;
-    latest ||= { ...selected, assets };
+    releasesByChannel[channel] = { ...selected, assets };
   }
 
-  // Keep the website's schema-1 release field; desktop clients require channels.
-  if (latest) return { schemaVersion: 1, generatedAt, repository: REPOSITORY, release: latest, channels };
+  // One release track: stable wins even when a higher prerelease exists.
+  // Before the first stable release, keep serving the published beta.
+  const latest = releasesByChannel.stable || releasesByChannel.beta;
+  if (latest) {
+    const metadata = (release) => {
+      if (!release) return null;
+      const { assets, ...selected } = release;
+      return selected;
+    };
+    const stable = metadata(releasesByChannel.stable);
+    // v0.7.x/v0.8.x clients only read channels.beta and require these two
+    // legacy flags. Point them at the real stable tag/URL; do not create a
+    // second release or change the canonical release's publication status.
+    const channels = {
+      stable,
+      beta: stable ? { ...stable, channel: "beta", prerelease: true } : metadata(releasesByChannel.beta)
+    };
+    return { schemaVersion: 1, generatedAt, repository: REPOSITORY, release: latest, channels };
+  }
   throw new Error("No published Scratchpad release with recognized installer assets was found");
 }
 

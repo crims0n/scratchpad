@@ -5,10 +5,10 @@ import test from "node:test";
 import { bootApp } from "./helpers/app-harness.js";
 
 test("About exposes release notes before downloading, skip, later, offline retry, and opt-in privacy", async () => {
-  let response = { version: "0.8.0", channel: "beta", notes: "# New features\n<img src=https://example.com/tracker onerror=alert(1)>", url: "https://github.com/crims0n/scratchpad/releases/tag/scratchpad-beta-v0.8.0" };
+  let response = { version: "1.0.0", channel: "stable", notes: "# New features\n<img src=https://example.com/tracker onerror=alert(1)>", url: "https://github.com/crims0n/scratchpad/releases/tag/v1.0.0" };
   let offline = false;
   const app = await bootApp({ handlers: {
-    get_update_info: () => ({ installedVersion: "0.7.1", channel: "beta" }),
+    get_update_info: () => ({ installedVersion: "0.8.2" }),
     check_for_updates: () => { if (offline) throw new Error("offline"); return response; }
   } });
   const el = (id) => document.getElementById(id);
@@ -22,8 +22,9 @@ test("About exposes release notes before downloading, skip, later, offline retry
   app.click("update-check-btn");
   await app.settle();
   assert.equal(el("about-modal-backdrop").style.display, "flex");
-  assert.equal(el("update-channel").textContent, "Beta");
-  assert.match(el("update-status").textContent, /0.8.0 is available/);
+  assert.equal(el("update-channel"), null);
+  assert.equal(el("about-version").textContent, "0.8.2");
+  assert.match(el("update-status").textContent, /1.0.0 is available/);
   assert.equal(el("update-release-notes").open, false);
   el("update-release-notes").querySelector("summary").click();
   assert.equal(el("update-release-notes").open, true);
