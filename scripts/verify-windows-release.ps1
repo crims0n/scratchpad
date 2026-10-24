@@ -60,7 +60,10 @@ function Test-ReleaseSignature([string]$File) {
 }
 
 function Test-InstalledFiles([string]$Directory, [string]$Package, [int]$MinimumExecutables) {
-  $files = @(Get-ChildItem -LiteralPath $Directory -Recurse -File -Include *.exe, *.dll)
+  # PowerShell 5.1 ignores -Include with -LiteralPath. Filter the results so
+  # documentation and other unsigned resources are not treated as binaries.
+  $files = @(Get-ChildItem -LiteralPath $Directory -Recurse -File |
+    Where-Object { $_.Extension -in '.exe', '.dll' })
   $executables = @($files | Where-Object Extension -eq '.exe')
   if ($executables.Count -lt $MinimumExecutables) {
     $failures.Add("${Package}: expected at least $MinimumExecutables executables, found $($executables.Count)")

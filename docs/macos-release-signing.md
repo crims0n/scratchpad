@@ -14,6 +14,8 @@ The Beta Release workflow signs the universal macOS app and DMG with a Developer
 - every executable uses the hardened runtime, the app has no entitlements, and the executable contains both `arm64` and `x86_64`;
 - the signed binary runs in `--mcp-stdio` mode on both architectures (x86_64 through Rosetta). It must print its usage error for a malformed call and report a missing agent-access token.
 
+Gatekeeper assessments must be enabled; a disabled or unreadable status fails verification. CI also fails if Rosetta is unavailable. Local verification may skip the Intel launch check when Rosetta is not installed.
+
 Website checksums come from GitHub's asset digests. GitHub calculates them on upload, so they describe the stapled DMG.
 
 ## Why the app has no entitlements
