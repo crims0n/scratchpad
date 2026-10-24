@@ -2,7 +2,12 @@
 
 ## Supported versions
 
-Scratchpad is currently in beta. Security fixes are made against the latest published prerelease and the `main` branch.
+Security fixes target the latest published stable release and the `main` branch.
+Older stable versions and pre-1.0 betas do not receive separate backports; upgrade
+to the latest stable release when one is available. Before the first stable
+release is published, fixes target the latest published beta and `main`.
+Development builds are not supported release packages. There is no separate
+ongoing beta release channel or long-term support branch.
 
 ## Agent access and recovery data
 

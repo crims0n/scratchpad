@@ -1,9 +1,9 @@
 # macOS release signing (maintainers)
 
-The Beta Release workflow signs the universal macOS app and DMG with a Developer ID Application certificate and notarizes both with Apple, so a browser-downloaded release opens without a Gatekeeper bypass.
+The Stable Release workflow signs the universal macOS app and DMG with a Developer ID Application certificate and notarizes both with Apple, so a browser-downloaded release opens without a Gatekeeper bypass.
 
 1. `scripts/setup-macos-signing.sh` imports the certificate into a temporary keychain and writes the App Store Connect API key to the runner's temp directory. It fails unless the certificate holds a valid identity matching `src-tauri/tauri.macos-signing.conf.json` and the notary service accepts the API key, so bad credentials stop the job before the build.
-2. `src-tauri/tauri.macos-signing.conf.json` sets the signing identity and the hardened runtime. It comes after `tauri.beta.conf.json` on the command line, so it replaces the beta's ad-hoc `-` identity. Tauri signs the executable and bundle with a secure timestamp, notarizes and staples the `.app`, and signs the DMG.
+2. `src-tauri/tauri.macos-signing.conf.json` sets the signing identity and the hardened runtime. It comes after `tauri.release.conf.json` on the command line. Stable packaging never applies a beta or ad-hoc signing override. Tauri signs the executable and bundle with a secure timestamp, notarizes and staples the `.app`, and signs the DMG.
 3. `scripts/finalize-macos-release.sh` downloads the DMG and `.app.tar.gz` from the draft release, notarizes and staples the DMG, and runs `scripts/verify-macos-release.sh` on both. It then replaces the draft's DMG with the stapled one and checks that GitHub's digest of the upload matches.
 4. The keychain, certificate and API key file are deleted at the end of the job, even if it fails.
 

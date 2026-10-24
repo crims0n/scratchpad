@@ -15,7 +15,7 @@ async function readJson(url) {
 
 function macosArgs(workflow) {
   const match = /- platform: macos-latest\r?\n\s+args: >-\r?\n((?:[ \t]+--.*\r?\n)+)/.exec(workflow);
-  assert.ok(match, "beta-release.yml must have a macos-latest matrix entry");
+  assert.ok(match, "release.yml must have a macos-latest matrix entry");
   return match[1].trim().split(/\s+/);
 }
 
@@ -36,14 +36,14 @@ test("signing is not part of the default or platform Tauri config", async () => 
   assert.equal(config.bundle.macOS?.signingIdentity, undefined);
 });
 
-test("the macOS beta build overrides the ad-hoc identity and notarizes", async () => {
-  const workflow = await readFile(new URL("../.github/workflows/beta-release.yml", import.meta.url), "utf8");
+test("the macOS stable build uses Developer ID signing and notarizes", async () => {
+  const workflow = await readFile(new URL("../.github/workflows/release.yml", import.meta.url), "utf8");
   const args = macosArgs(workflow);
   const configs = args.flatMap((arg, index) => (arg === "--config" ? [args[index + 1]] : []));
-  // Later configs win, so the signing config must come after the beta config
-  // that sets the ad-hoc "-" identity.
+  // Production identity first, then Developer ID signing. No ad-hoc override.
   assert.equal(configs.at(-1), signingConfigPath);
-  assert.ok(configs.indexOf("src-tauri/tauri.beta.conf.json") < configs.indexOf(signingConfigPath));
+  assert.equal(configs[0], "src-tauri/tauri.release.conf.json");
+  assert.equal(configs.some(config => config.includes("beta")), false);
 
   assert.match(workflow, /scripts\/setup-macos-signing\.sh src-tauri\/tauri\.macos-signing\.conf\.json/);
   assert.match(workflow, /scripts\/finalize-macos-release\.sh/);

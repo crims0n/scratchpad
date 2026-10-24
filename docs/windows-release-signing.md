@@ -1,6 +1,6 @@
 # Windows release signing (maintainers)
 
-The Beta Release workflow Authenticode-signs Windows builds with [Azure Artifact Signing](https://learn.microsoft.com/azure/artifact-signing/). The certificate is issued to the maintainer's verified identity. The private keys stay in Microsoft's HSMs, and no signing secret is stored in GitHub.
+The Stable Release workflow Authenticode-signs Windows builds with [Azure Artifact Signing](https://learn.microsoft.com/azure/artifact-signing/). The certificate is issued to the maintainer's verified identity. The private keys stay in Microsoft's HSMs, and no signing secret is stored in GitHub.
 
 1. `scripts/setup-windows-signing.ps1` downloads the pinned Artifact Signing dlib from nuget.org and checks its SHA-256 and Microsoft signature. It then finds an x64 SignTool and writes the dlib metadata. The metadata allows only the workload identity credential.
 2. `src-tauri/tauri.windows-signing.conf.json` sets Tauri's `signCommand` to `scripts/sign-windows.ps1`. Tauri calls it for the application executable, the NSIS plugins and uninstaller, the NSIS setup `.exe`, and the `.msi`. Each call signs with SHA-256 and a timestamp from `http://timestamp.acs.microsoft.com`. Any failure fails the build.
@@ -41,13 +41,13 @@ The `release-signing` environment holds these non-secret variables: `AZURE_TENAN
    ```
 
 5. Set the environment variables with `gh variable set <NAME> --env release-signing --body <value>`.
-6. Put the certificate's common name in `WINDOWS_SIGNING_PUBLISHER` in `.github/workflows/beta-release.yml`. Read it with `az rest --method get --url "https://management.azure.com$acct/certificateProfiles/<profile>?api-version=2024-09-30-preview" --query "properties.certificates[0].subjectName"`.
+6. Put the certificate's common name in `WINDOWS_SIGNING_PUBLISHER` in `.github/workflows/release.yml`. Read it with `az rest --method get --url "https://management.azure.com$acct/certificateProfiles/<profile>?api-version=2024-09-30-preview" --query "properties.certificates[0].subjectName"`.
 
 ## Renewal and costs
 
 - Certificates last about three days and renew automatically. Timestamps keep older signatures valid after each certificate expires.
 - The identity validation expires, and Microsoft sends reminders starting 60 days before. Renew it in the Azure portal, or certificate renewal and signing stop. If the publisher name changes, update `WINDOWS_SIGNING_PUBLISHER`.
-- The Basic SKU is billed monthly at full price; there is no proration. It includes 5,000 signatures a month, and a beta release uses about ten. Deleting the Artifact Signing account stops billing and does not invalidate files already signed.
+- The Basic SKU is billed monthly at full price; there is no proration. It includes 5,000 signatures a month, and a release uses about ten. Deleting the Artifact Signing account stops billing and does not invalidate files already signed.
 - Updating the dlib: change `$dlibVersion` and `$dlibSha256` together in `setup-windows-signing.ps1`. Use a version that has been on nuget.org for at least two weeks, and take the SHA-256 of the `.nupkg` you inspected.
 
 ## Revocation and incident response
@@ -57,7 +57,7 @@ If a token, the app registration, or the workflow may have been misused:
 1. Delete the `github-release-signing` federated credential, or remove the role assignment. Either one stops all signing immediately.
 2. Check the Artifact Signing account's signing history. You can also subscribe to signing events, see [sign history](https://learn.microsoft.com/azure/artifact-signing/how-to-sign-history).
 3. Report misuse to Microsoft through Azure Support, and ask for certificates covering the affected period to be revoked. Revocation also invalidates legitimate files signed in that period, so rebuild and re-sign those releases and say so in their release notes.
-4. Fix the cause, recreate the credential, and run a new beta release.
+4. Fix the cause, recreate the credential, and run a new stable release.
 
 Deleting a certificate profile does not revoke certificates it already issued.
 
@@ -67,4 +67,4 @@ A valid signature names the publisher in UAC and in file properties. It does not
 
 ## Testing changes to the scripts
 
-The scripts run on `windows-latest` under PowerShell 7 and are written to also work in Windows PowerShell 5.1. Given an already signed setup `.exe` and `.msi`, plus `SIGNTOOL_PATH`, `WINDOWS_SIGNING_PUBLISHER`, and `RUNNER_TEMP`, `verify-windows-release.ps1` runs locally. Signing needs the GitHub OIDC environment, so test it with a beta release run; the release stays a draft until you publish it.
+The scripts run on `windows-latest` under PowerShell 7 and are written to also work in Windows PowerShell 5.1. Given an already signed setup `.exe` and `.msi`, plus `SIGNTOOL_PATH`, `WINDOWS_SIGNING_PUBLISHER`, and `RUNNER_TEMP`, `verify-windows-release.ps1` runs locally. Signing needs the GitHub OIDC environment, so test it with a release run; the release stays a draft until you publish it.

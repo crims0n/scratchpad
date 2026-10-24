@@ -1,6 +1,6 @@
 # Linux release signing (maintainers)
 
-The Beta Release workflow signs Linux artifacts with a project GPG key:
+The Stable Release workflow signs Linux artifacts with a project GPG key:
 
 1. `scripts/import-release-signing-key.sh` imports the signing subkey, checks it belongs to the published key in `site/release-signing-key.asc`, and confirms it can sign without a prompt.
 2. The Tauri bundler embeds a signature in the AppImage (`SIGN`, `SIGN_KEY`, `APPIMAGETOOL_SIGN_PASSPHRASE`). A signing failure fails the build.
@@ -41,7 +41,7 @@ gpg --output scratchpad-release-revoke.asc --gen-revoke "$FPR"
 Then:
 
 1. Replace `FINGERPRINT-PENDING` in `site/index.html` and `docs/verify-linux-downloads.md` with the primary fingerprint, in groups of four (`gpg --fingerprint "$FPR"`, single spaces). `test/release-signing-key.test.js` checks that both match `site/release-signing-key.asc`.
-2. In **Settings → Environments**, create `release-signing` with required reviewers and deployment branches limited to `main`. The Beta Release build job runs in this environment.
+2. In **Settings → Environments**, create `release-signing` with required reviewers and deployment branches limited to `main`. The Stable Release build job runs in this environment.
 3. Add the environment secrets `RELEASE_SIGNING_GPG_PRIVATE_KEY` (contents of `signing-subkey.asc`) and `RELEASE_SIGNING_GPG_PASSPHRASE`.
 4. Securely delete `signing-subkey.asc` from the working machine.
 
