@@ -1691,6 +1691,17 @@ button.view-setting-value:hover {
   white-space: nowrap;
 }
 
+.note-format-status-text {
+  margin-left: 12px;
+  padding-left: 12px;
+  border-left: 1px solid var(--border-color);
+  white-space: nowrap;
+}
+
+.note-format-status-text[hidden] {
+  display: none;
+}
+
 .selection-count-text {
   margin-right: 12px;
   color: var(--text-secondary);
