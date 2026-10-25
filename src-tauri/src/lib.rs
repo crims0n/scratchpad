@@ -16,6 +16,8 @@ mod mcp;
 mod native_ipc_tests;
 mod note_print;
 mod recovery;
+#[cfg(test)]
+mod test_support;
 mod updates;
 mod workspace;
 pub use mcp::run_mcp_stdio;
@@ -65,9 +67,10 @@ fn write_preferences(path: &Path, preferences: &AppPreferences) -> Result<(), St
         .ok_or_else(|| "Native preferences path has no parent directory".to_string())?;
     fs::create_dir_all(parent)
         .map_err(|e| format!("Could not create native preferences directory: {e}"))?;
-    let contents = serde_json::to_vec_pretty(preferences)
+    let contents = serde_json::to_string_pretty(preferences)
         .map_err(|e| format!("Could not serialize native preferences: {e}"))?;
-    fs::write(path, contents).map_err(|e| format!("Could not write native preferences: {e}"))
+    file_export::export(path, &contents)
+        .map_err(|e| format!("Could not write native preferences: {e}"))
 }
 
 fn load_workspace_preference_from(
@@ -1219,6 +1222,74 @@ mod tests {
         assert_eq!(fs::read_to_string(&candidate).unwrap(), "unchanged");
         fs::remove_file(preferences).unwrap();
         fs::remove_file(candidate).unwrap();
+    }
+
+    #[test]
+    fn native_preferences_are_privately_replaced_and_shorter_rewrites_leave_valid_json() {
+        #[cfg(unix)]
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = crate::test_support::TestDirectory::new("private-preferences");
+        let path = directory.join("preferences.json");
+        write_preferences(
+            &path,
+            &AppPreferences {
+                last_workspace: Some("a long workspace path to be replaced".into()),
+            },
+        )
+        .unwrap();
+        #[cfg(unix)]
+        {
+            assert_eq!(
+                fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+            // Replace a read-only existing inode rather than opening it for
+            // writing or requiring permission to chmod it.
+            fs::hard_link(&path, directory.join("original.json")).unwrap();
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o400)).unwrap();
+        }
+        write_preferences(&path, &AppPreferences::default()).unwrap();
+        assert!(read_preferences(&path)
+            .unwrap()
+            .unwrap()
+            .last_workspace
+            .is_none());
+        #[cfg(unix)]
+        {
+            assert_eq!(
+                fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+            let original = directory.join("original.json");
+            assert_eq!(
+                fs::metadata(&original).unwrap().permissions().mode() & 0o777,
+                0o400
+            );
+            assert_eq!(
+                read_preferences(&original)
+                    .unwrap()
+                    .unwrap()
+                    .last_workspace
+                    .as_deref(),
+                Some("a long workspace path to be replaced")
+            );
+        }
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn failed_preference_publication_preserves_existing_data_and_cleans_staging() {
+        let directory = crate::test_support::TestDirectory::new("failed-preferences");
+        let path = directory.join("preferences.json");
+        fs::create_dir(&path).unwrap();
+        fs::write(path.join("sentinel"), "existing data").unwrap();
+        assert!(write_preferences(&path, &AppPreferences::default()).is_err());
+        assert_eq!(
+            fs::read_to_string(path.join("sentinel")).unwrap(),
+            "existing data"
+        );
+        assert_eq!(fs::read_dir(&*directory).unwrap().count(), 1);
     }
 
     #[test]
