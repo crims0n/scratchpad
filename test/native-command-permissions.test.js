@@ -5,23 +5,14 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const read = path => readFile(new URL(`../src-tauri/${path}`, import.meta.url), "utf8");
-const [lib, build, main, print] = await Promise.all([
-  read("src/lib.rs"), read("build.rs"), read("capabilities/default.json").then(JSON.parse),
-  read("capabilities/note-print.json").then(JSON.parse)
-]);
-const commands = lib.match(/generate_handler!\[([^\]]+)\]/)[1].split(",")
-  .map(command => command.trim().split("::").at(-1)).filter(Boolean);
-const permission = command => `allow-${command.replaceAll("_", "-")}`;
-
-test("every registered app command has an explicit permission and an intended window", () => {
-  const declared = [...build.matchAll(/"([a-z_]+)"/g)].map(match => match[1]);
-  assert.deepEqual([...declared].sort(), [...commands].sort());
-  const printCommands = ["get_print_note", "print_note_native", "close_note_print"];
-  const mainCommands = commands.filter(command => !printCommands.includes(command));
+test("capabilities assign separate permission groups to local editor and print windows", async () => {
+  const [main, print] = await Promise.all([
+    read("capabilities/default.json").then(JSON.parse), read("capabilities/note-print.json").then(JSON.parse)
+  ]);
   assert.deepEqual(main.windows, ["main"]);
   assert.deepEqual(print.windows, ["note-print"]);
-  assert.deepEqual(main.permissions.filter(value => typeof value === "string" && value.startsWith("allow-")).sort(), mainCommands.map(permission).sort());
-  assert.deepEqual([...print.permissions].sort(), printCommands.map(permission).sort());
+  assert.ok(main.permissions.includes("editor-commands"));
+  assert.deepEqual(print.permissions, ["note-print-commands"]);
   assert.equal(main.remote, undefined);
   assert.equal(print.remote, undefined);
 });

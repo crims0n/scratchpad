@@ -36,30 +36,31 @@ fn validate_backup(content: &str) -> Result<(), String> {
 pub fn ensure_export_destination(
     path: &Path,
     directory: &Path,
-    workspace: Option<&str>,
+    workspaces: &crate::workspace::Workspaces,
 ) -> Result<(), String> {
-    let mut protected = vec![directory.join(JOURNAL)];
-    if let Some(workspace) = workspace {
-        protected.push(PathBuf::from(workspace));
-    }
-    for source in protected {
-        if path == source
-            || fs::canonicalize(path)
-                .ok()
-                .zip(fs::canonicalize(&source).ok())
-                .is_some_and(|(destination, original)| destination == original)
-        {
-            return Err(
-                "Choose a backup file, not the open workspace or an active restore checkpoint"
-                    .into(),
-            );
-        }
+    workspaces.ensure_export_destination(path)?;
+    let source = directory.join(JOURNAL);
+    if path == source
+        || fs::canonicalize(path)
+            .ok()
+            .zip(fs::canonicalize(&source).ok())
+            .is_some_and(|(destination, original)| destination == original)
+    {
+        return Err(
+            "Choose a backup file, not the open workspace or an active restore checkpoint".into(),
+        );
     }
     Ok(())
 }
 
 // Never truncate an existing backup: stage, sync, verify, then replace it.
-pub fn export(path: &Path, content: &str) -> Result<(), String> {
+pub fn export(
+    path: &Path,
+    content: &str,
+    directory: &Path,
+    workspaces: &crate::workspace::Workspaces,
+) -> Result<(), String> {
+    ensure_export_destination(path, directory, workspaces)?;
     validate_backup(content)?;
     crate::file_export::export(path, content)
 }
@@ -239,11 +240,18 @@ mod tests {
         assert!(begin(&dir, values(), &content()).is_err());
         let target = dir.join("backup.json");
         fs::write(&target, "existing").unwrap();
-        assert!(export(&target, "{}").is_err());
+        let workspaces = crate::workspace::Workspaces::default();
+        assert!(export(&target, "{}", &dir, &workspaces).is_err());
         assert_eq!(fs::read_to_string(&target).unwrap(), "existing");
-        export(&target, &content()).unwrap();
+        export(&target, &content(), &dir, &workspaces).unwrap();
         assert_eq!(fs::read_to_string(&target).unwrap(), content());
-        assert!(export(&dir.join("missing/backup.json"), &content()).is_err());
+        assert!(export(
+            &dir.join("missing/backup.json"),
+            &content(),
+            &dir,
+            &workspaces
+        )
+        .is_err());
         fs::remove_dir_all(dir).unwrap();
     }
 
@@ -266,15 +274,12 @@ mod tests {
         let workspace = dir.join("workspace.db");
         fs::write(&workspace, "original database").unwrap();
         fs::write(dir.join(JOURNAL), "original checkpoint").unwrap();
-        assert!(ensure_export_destination(&workspace, &dir, workspace.to_str()).is_err());
-        assert!(
-            ensure_export_destination(&dir.join("./workspace.db"), &dir, workspace.to_str())
-                .is_err()
-        );
-        assert!(ensure_export_destination(&dir.join(JOURNAL), &dir, None).is_err());
-        assert!(
-            ensure_export_destination(&dir.join("backup.json"), &dir, workspace.to_str()).is_ok()
-        );
+        let workspaces = crate::workspace::Workspaces::default();
+        workspaces.authorize(&workspace, false).unwrap();
+        assert!(ensure_export_destination(&workspace, &dir, &workspaces).is_err());
+        assert!(ensure_export_destination(&dir.join("./workspace.db"), &dir, &workspaces).is_err());
+        assert!(ensure_export_destination(&dir.join(JOURNAL), &dir, &workspaces).is_err());
+        assert!(ensure_export_destination(&dir.join("backup.json"), &dir, &workspaces).is_ok());
         assert_eq!(fs::read_to_string(workspace).unwrap(), "original database");
         assert_eq!(
             fs::read_to_string(dir.join(JOURNAL)).unwrap(),

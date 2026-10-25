@@ -6,8 +6,6 @@
     "note-print"
   ],
   "permissions": [
-    "allow-close-note-print",
-    "allow-get-print-note",
-    "allow-print-note-native"
+    "note-print-commands"
   ]
 }
