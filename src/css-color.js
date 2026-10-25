@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Theme import accepts any colour the engine understands -- isValidColor asks
-// CSS.supports -- but the rest of the app could only read hex, so every other
-// form was treated as dark. A white `rgb()` theme was handed the dark palette.
+// Theme import accepts supported literal colours -- isValidColor checks the
+// input boundary before CSS.supports -- but the rest of the app could only read
+// hex, so every other form was treated as dark. A white `rgb()` theme was handed
+// the dark palette.
 //
 // Rather than reimplement CSS colour parsing (rgb, hsl, named, and whatever the
 // engine adds next), this hands the value back to the engine and reads the
 // computed colour, which engines serialise as rgb()/rgba() -- or, for a colour
 // written in CSS Color 4 notation, as that same notation. Both sRGB
-// serialisations are read here, so the set of colours that resolve is the set
-// CSS.supports admits minus the spaces sRGB cannot express, rather than a
+// serialisations are read here, so accepted theme colours resolve unless they
+// use spaces sRGB cannot express, rather than maintaining a
 // second grammar that drifts from it.
 
 // Matches the computed serialisation: "rgb(12, 34, 56)" or "rgba(12, 34, 56,

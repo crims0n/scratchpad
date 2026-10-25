@@ -18,7 +18,7 @@ import { buildNoteHtml, htmlExportFilename, HTML_EXPORT_COLORS } from "./note-ht
 import { printNoteDocument } from "./note-print.js";
 import { getNotePreview } from "./note-preview.js";
 import { createNoteFormatDetector } from "./note-format.js";
-import { ACTIVE_TEXT_PROPERTIES, DERIVED_THEME_PROPERTIES, deriveThemeSurfaceColors } from "./theme-colors.js";
+import { ACTIVE_TEXT_PROPERTIES, DERIVED_THEME_PROPERTIES, deriveThemeSurfaceColors, isValidColor } from "./theme-colors.js";
 import { createCssColorResolver, createOpaqueColorParser, isColorDark } from "./css-color.js";
 import { PRESET_THEMES } from "./preset-themes.js";
 import { compareNoteText, emptyNoteComparison } from "./note-compare.js";
@@ -5278,14 +5278,6 @@ function clearCustomThemeStyles() {
   delete root.dataset.themeStyle;
 }
 
-function isValidColor(str) {
-  if (!str || typeof str !== "string") return false;
-  const s = str.trim();
-  if (/["'<>;&\\\u0000-\u001f\u007f]/.test(s)) return false;
-  return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(s) ||
-    (typeof CSS !== "undefined" && CSS.supports("color", s));
-}
-
 function normalizeCustomTheme(theme, index = 0) {
   if (!theme || typeof theme !== "object") return null;
   if (!isValidColor(theme.background) || !isValidColor(theme.foreground)) return null;
@@ -5483,7 +5475,7 @@ function parseThemeContent(content, fileName) {
       success: true,
       theme: {
         id: "custom_" + Date.now(),
-        name: data.name || cleanName,
+        name: typeof data.name === "string" && data.name.trim() ? data.name.trim() : cleanName,
         background: bg,
         foreground: fg,
         sidebar: isValidColor(sb) ? sb : bg,
@@ -5529,7 +5521,7 @@ function parseThemeContent(content, fileName) {
       success: true,
       theme: {
         id: "custom_" + Date.now(),
-        name: kv.name || cleanName,
+        name: typeof kv.name === "string" && kv.name.trim() ? kv.name.trim() : cleanName,
         background: bg,
         foreground: fg,
         sidebar: isValidColor(sb) ? sb : bg,

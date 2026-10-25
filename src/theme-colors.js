@@ -22,6 +22,22 @@ const MIN_SECONDARY_CONTRAST = 5;
 // snippet rather than forcing both to the same near-white.
 const MIN_ACTIVE_SURFACE_HEADROOM = 8;
 
+// CSS.supports accepts deferred expressions such as var(). Imported and saved
+// themes must supply color values rather than references to ambient CSS. Keep
+// the accepted function shapes explicit, then let the engine check their color
+// grammar and support (including alpha and wide-gamut values).
+export function isValidColor(value) {
+  if (typeof value !== "string") return false;
+  const color = value.trim();
+  if (!color || /["'<>;&\\\u0000-\u001f\u007f]/.test(color) || /\/\*|\*\//.test(color)) return false;
+  if (/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(color)) return true;
+  const named = /^[a-z]+$/i.test(color);
+  const functional = /^(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch|color)\([^()]*\)$/i.test(color);
+  if ((!named && !functional) || /^(?:currentcolor|inherit|initial|unset|revert)$/i.test(color)
+    || /\bfrom\b/i.test(color) || color.includes("--")) return false;
+  return typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("color", color);
+}
+
 // Opaque hex only. A translucent colour has no contrast until it is composited
 // over whatever sits behind it, and for a theme's background or foreground that
 // backdrop isn't ours to assume -- so #RGBA and #RRGGBBAA are reported as
