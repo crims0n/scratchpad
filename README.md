@@ -215,7 +215,11 @@ A custom JSON theme requires `background` and `foreground`. Other colors receive
 }
 ```
 
-Simple TOML/key-value theme files using the same names are also accepted. Imported colors are validated before they are stored or rendered. Opaque hex, RGB, HSL, named, and `color(srgb …)` values are measured against the theme's own surfaces so secondary text remains readable; translucent or wider-gamut values are preserved without being flattened into guessed colors.
+Simple TOML/key-value theme files using the same names are also accepted. Themes can use hex and supported fixed named colors, plus literal RGB/RGBA, HSL/HSLA, HWB, Lab/LCH, Oklab/OkLCh, and `color(…)` values. CSS variables, system colors, calculations, relative colors, conditional/mixing functions, and inherited values are not applied; invalid optional colors receive defaults. Imports trim all colors and use the first supported value when a color has alternative keys such as `background` and `editor.background`. A missing, blank, or non-string imported theme name uses the file name.
+
+Previously saved themes keep their original data. If a saved theme has unsupported background or foreground colors, the picker marks it as needing updating and offers **Export original** so you can edit and reimport it. An unavailable active theme falls back to Default Dark. Importing or deleting another theme preserves these originals; reimporting a corrected theme with the same name replaces that theme explicitly.
+
+Opaque hex, RGB, HSL, named, and `color(srgb …)` values are measured against the theme's own surfaces so secondary text remains readable; translucent or wider-gamut values are preserved without being flattened into guessed colors.
 
 ## Development
 
