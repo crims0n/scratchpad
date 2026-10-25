@@ -30,7 +30,7 @@ async function print() {
 
 printButton.addEventListener("click", print);
 document.getElementById("close-btn").addEventListener("click", () => {
-  window.__TAURI__.window.getCurrentWindow().close().catch(error => {
+  invoke("close_note_print").catch(error => {
     status.textContent = "Could not close print window: " + error;
   });
 });

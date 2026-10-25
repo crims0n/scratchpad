@@ -3449,6 +3449,7 @@ name = "scratchpad"
 version = "1.0.0"
 dependencies = [
  "dirs",
+ "dunce",
  "reqwest",
  "rfd",
  "rmcp",

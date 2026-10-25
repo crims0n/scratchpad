@@ -20,7 +20,7 @@ async function boot({ snapshot = { title: "Printed <title>", content: "# Note\n\
     calls.push(command);
     if (command === "get_print_note") { if (loadError) throw loadError; return snapshot; }
     if (command === "print_note_native") return onPrint(document);
-  } }, window: { getCurrentWindow: () => ({ close: async () => { calls.push("close"); } }) } };
+  } } };
   await import(`${new URL("../src/note-print-window.js", import.meta.url).href}?test=${++instance}`);
   return { dom, calls };
 }
@@ -39,7 +39,7 @@ test("native preview sanitizes Markdown, auto-prints a ready note and retains it
   assert.equal(document.getElementById("print-status").textContent, "Close this window when finished.");
   document.getElementById("close-btn").click();
   await Promise.resolve();
-  assert.equal(app.calls.at(-1), "close");
+  assert.equal(app.calls.at(-1), "close_note_print");
 });
 
 test("native print failure reports no success and the preview supports retry", async () => {

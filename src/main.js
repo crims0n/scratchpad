@@ -612,10 +612,14 @@ async function loadRememberedWorkspacePath() {
     localStorage.removeItem("scratchpad_active_db");
     return { known: true, path: savedPath };
   } catch (err) {
+    if (err?.kind === "workspace-unavailable" || err?.kind === "legacy-workspace-unavailable") {
+      localStorage.removeItem("scratchpad_active_db");
+      return { known: true, path: null, unavailable: true };
+    }
     console.error("Failed to load native workspace preference", err);
     // Unknown even when a legacy path survives: the native preference takes
     // precedence over it and may name a different workspace.
-    return { known: false, path: legacyPath };
+    return { known: false, path: null };
   }
 }
 
@@ -710,7 +714,9 @@ async function init() {
     }
   } else {
     updateDbUiState(false);
-    if (!rememberedWorkspace.known) {
+    if (rememberedWorkspace.unavailable) {
+      showNotification("Workspace unavailable; using local notes");
+    } else if (!rememberedWorkspace.known) {
       showNotification("Workspace settings unreadable; using local notes");
     }
   }
@@ -2315,7 +2321,7 @@ async function collectionBackupAction(restoring) {
     setSavedState();
     const safetyContent = serializeBackup({ notes, folders, trash });
     if (!restoring) {
-      const path = await invoke("save_collection_backup", { content: safetyContent, dbPath: activeDbPath });
+      const path = await invoke("save_collection_backup", { content: safetyContent });
       if (path == null) return;
       if (typeof path !== "string" || !path.trim()) throw new Error("Backup file was not confirmed");
       await backupChoice(`Collection backup saved and verified:\n${path}\n\nSource: ${destination}`);
@@ -2570,7 +2576,6 @@ async function exportAsHtmlFile() {
   // Capture the note before opening a picker; no persistence or preview timing
   // is required, and switching/editing later cannot change this export.
   const { title, content } = snapshot;
-  const dbPath = activeDbPath;
   exportHtmlBtn.disabled = true;
   try {
     const style = window.getComputedStyle(document.documentElement);
@@ -2579,7 +2584,7 @@ async function exportAsHtmlFile() {
     const html = buildNoteHtml({ title, content, colors, syntaxHighlighting: syntaxHighlightingEnabled });
     const defaultName = htmlExportFilename(title);
     if (window.__TAURI__) {
-      await invoke("save_html_file_native", { content: html, defaultName, dbPath });
+      await invoke("save_html_file_native", { content: html, defaultName });
       showNotification("HTML file saved successfully");
     } else {
       const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
@@ -2612,7 +2617,7 @@ function exportAsMarkdownFile() {
   if (window.__TAURI__) {
     // Show a saving state
     saveStatus.textContent = "Exporting...";
-    invoke("save_file_native", { content: content, defaultName: fileName, dbPath: activeDbPath })
+    invoke("save_file_native", { content: content, defaultName: fileName })
       .then((path) => {
         showNotification("Saved successfully");
       })
@@ -3375,7 +3380,7 @@ async function exportLocalRecovery() {
     refreshLocalRecoveryUi();
     const defaultName = "scratchpad-local-recovery.json";
     if (window.__TAURI__) {
-      await invoke("save_recovery_file_native", { content, defaultName, dbPath: activeDbPath });
+      await invoke("save_recovery_file_native", { content, defaultName });
       status.textContent = "Recovery data exported. The local collection has not been changed.";
     } else {
       const url = URL.createObjectURL(new Blob([content], { type: "application/json;charset=utf-8" }));

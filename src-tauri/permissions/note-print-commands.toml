@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+[[permission]]
+identifier = "note-print-commands"
+description = "Only the prepared print snapshot and its own window"
+commands.allow = [
+  "close_note_print",
+  "get_print_note",
+  "print_note_native",
+]

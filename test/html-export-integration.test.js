@@ -38,7 +38,7 @@ test("export renders immediate edits rather than a stale or search-decorated pre
   assert.equal(parsed().querySelector("h1").textContent, "Immediate edit");
   assert.equal(parsed().querySelector("strong").textContent, "fresh");
   assert.equal(parsed().querySelectorAll("mark").length, 0);
-  assert.equal(exports().at(-1).args.dbPath, null);
+  assert.equal(Object.hasOwn(exports().at(-1).args, "dbPath"), false);
   assert.equal(exports().at(-1).args.defaultName, "Primary.html");
   assert.deepEqual(app.dumpStorage(), before, "export itself does not persist or mutate the collection");
   assert.match(element("save-status").textContent, /HTML file saved successfully/);
@@ -89,7 +89,7 @@ test("cancellation is quiet, failures report no success, and repeated clicks do 
   outcome = "success";
 });
 
-test("workspace export uses the open workspace's note, protects its path and leaves local data alone", async () => {
+test("workspace export uses the open note and leaves path protection to native state", async () => {
   await app.settle(700);
   const before = app.read("scratchpad_notes");
   app.click("db-connect-btn");
@@ -97,11 +97,11 @@ test("workspace export uses the open workspace's note, protects its path and lea
   app.click("export-html-btn");
   await app.settle();
   assert.equal(parsed().querySelector("h1").textContent, "Workspace body");
-  assert.equal(exports().at(-1).args.dbPath, "/tmp/export-workspace.sqlite");
+  assert.equal(Object.hasOwn(exports().at(-1).args, "dbPath"), false);
   app.click("export-btn");
   await app.settle();
   const markdown = app.invocations.findLast(item => item.command === "save_file_native");
-  assert.equal(markdown.args.dbPath, "/tmp/export-workspace.sqlite");
+  assert.equal(Object.hasOwn(markdown.args, "dbPath"), false);
   assert.equal(markdown.args.content, "# Workspace body");
   assert.deepEqual(app.read("scratchpad_notes"), before);
 });
