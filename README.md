@@ -31,7 +31,7 @@ See [release notes](RELEASE_NOTES.md) for highlights and limitations. Existing b
 
 - Multiple scratchpads with automatic saving, titles derived from the first line, and quick creation by double-clicking empty sidebar space
 - Edit, synchronized edit/preview, and full Markdown preview layouts
-- Optional format-aware editor coloring for Markdown, JSON, XML, YAML, and CSV, plus language-aware fenced-code highlighting in previews
+- Optional format-aware editor coloring for Markdown, JSON, XML, YAML, CSV, and Splunk SPL, plus language-aware fenced-code highlighting in previews
 - Optional, theme-aware source line numbers in either editor pane
 - Collapsible Markdown, JSON, XML, and YAML sections in either editor pane, with Find revealing hidden matches
 - Markdown-aware continuation for lists, task lists, blockquotes, code fences, and tables
@@ -181,7 +181,9 @@ Scratchpad keeps its Markdown assistance lightweight and works directly in the n
 
 Format detection favors ordinary text when YAML or CSV evidence is ambiguous. YAML needs typed values, nested structure, or an explicit document marker; CSV needs consistent records plus compact column headers, quoted cells, or numeric values. A Markdown heading followed only by flat mappings stays Markdown, even when that text is also valid YAML; nested structures, scalar blocks, or an explicit YAML document marker take precedence over heading-like comments. Plain string mappings or prose with commas may therefore stay TXT.
 
-Syntax highlighting is enabled by default. Open **Scratchpad menu → Appearance → Syntax highlighting** to toggle coloring in both editor panes and language-aware Preview highlighting. Editor colors follow the detected format, shown in the sidebar and in the status bar beside the cursor position for the active pane (with **highlighting off** noted when coloring is disabled): Markdown syntax, JSON keys and values, XML tags and attributes, YAML keys and values, and repeating CSV column colors. TXT stays plain; incomplete or unrecognized documents stay plain until a format is detected. Preview code highlighting requires a supported language after the opening fence, such as <code>```javascript</code>; unknown and unlabeled fences remain plain code.
+SPL is recognized from how a search starts: a leading generating command such as `| tstats` or `| makeresults`, or a search that begins with `index=`, `sourcetype=`, `source=`, `host=`, or `eventtype=` followed by a piped command or a second `field=value` term. Other notes need at least two piped SPL commands and no Markdown structure. Prose that mentions a command, Markdown tables, and Markdown notes with SPL in inline code or fences keep their usual format; label a fence <code>```spl</code> to highlight it in Preview.
+
+Syntax highlighting is enabled by default. Open **Scratchpad menu → Appearance → Syntax highlighting** to toggle coloring in both editor panes and language-aware Preview highlighting. Editor colors follow the detected format, shown in the sidebar and in the status bar beside the cursor position for the active pane (with **highlighting off** noted when coloring is disabled): Markdown syntax, JSON keys and values, XML tags and attributes, YAML keys and values, repeating CSV column colors, and SPL commands, fields, functions, macros, and comments. TXT stays plain; incomplete or unrecognized documents stay plain until a format is detected. Preview code highlighting requires a supported language after the opening fence, such as <code>```javascript</code>; unknown and unlabeled fences remain plain code.
 
 Source line numbers are off by default. Open **Scratchpad menu → Appearance → Line numbers** to show a subtle, theme-aware gutter in both editor panes; the preference is remembered between launches.
 
@@ -268,7 +270,7 @@ Linux artifacts are signed during the release using secrets in the protected `re
 | Frontend | Vanilla HTML, CSS, and JavaScript |
 | Editor | Offline-bundled CodeMirror 6 behind a note-editor adapter; selection, undo, wrapping, and gutters in both panes |
 | Markdown | Bundled Marked parser with an allowlist sanitizer |
-| Syntax highlighting | Bundled Highlight.js for JSON/XML/YAML editors and labeled preview fences; local Markdown and CSV tokenizers |
+| Syntax highlighting | Bundled Highlight.js for JSON/XML/YAML editors and labeled preview fences; local Markdown and CSV tokenizers and SPL grammar |
 | Note comparison | Bundled jsdiff with line and word-level source comparison |
 | External links | `tauri-plugin-opener`, scoped to `http`, `https`, and `mailto` |
 | Local persistence | Desktop webview local storage |

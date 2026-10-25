@@ -34,6 +34,27 @@ test("bundled grammars provide source ranges for JSON, XML, and YAML", () => {
   assert.deepEqual(colored(yaml, yamlRanges, "syntax-comment"), ["# comment"]);
 });
 
+test("bundled SPL grammar colors commands, fields, functions, strings, macros, and comments", () => {
+  const spl = 'index=web sourcetype="access" earliest=-24h ```slow```\n| eval ms=round(duration*1000, 2)\n| stats count AS hits by host\n| `my_macro(x)`';
+  const ranges = tokens(spl, { format: "SPL" });
+  assert.deepEqual(colored(spl, ranges, "syntax-literal"), ["eval", "stats", "AS", "by"]);
+  assert.deepEqual(colored(spl, ranges, "syntax-code"), ["index", "sourcetype", "earliest", "ms"]);
+  assert.deepEqual(colored(spl, ranges, "syntax-emphasis"), ["round"]);
+  assert.deepEqual(colored(spl, ranges, "syntax-string"), ['"access"']);
+  assert.deepEqual(colored(spl, ranges, "syntax-number"), ["1000", "2"]);
+  assert.deepEqual(colored(spl, ranges, "syntax-comment"), ["```slow```"]);
+  assert.deepEqual(colored(spl, ranges, "syntax-meta"), ["`my_macro(x)`"]);
+  assert.equal(colored(spl, ranges, "syntax-punctuation").length, 3);
+});
+
+test("labeled spl and splunk preview fences use the bundled SPL grammar", () => {
+  const dom = new JSDOM(`<main><pre><code class="language-spl">index=main | stats count</code></pre><pre><code class="language-splunk">| makeresults</code></pre></main>`);
+  const container = dom.window.document.querySelector("main");
+  assert.equal(highlightPreviewCode(container, highlighter), 2);
+  assert.deepEqual([...container.querySelectorAll(".hljs-keyword")].map(node => node.textContent), ["stats", "makeresults"]);
+  assert.equal(container.textContent, "index=main | stats count| makeresults");
+});
+
 test("CSV colors repeat by column, respecting quoted commas, escaped quotes, and multiline cells", () => {
   const text = 'name,description,count,extra\r\nAlice,"Hello, ""world""\n# heading",42,tail\r\n';
   const ranges = tokens(text, { format: "CSV" });

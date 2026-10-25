@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import { SPL_COMMANDS } from './spl-language.js';
+
 const xmlErrorNamespaces = new WeakMap();
 
 function isXml(source, Parser) {
@@ -126,6 +128,31 @@ function isYaml(source) {
   return (mappings >= 2 && typedValue) || (mappings >= 1 && (nested || blockScalar || explicitDocument));
 }
 
+// Commands that can begin a search with a leading pipe. "from" is left out
+// because "| from | to |" is a common Markdown table header.
+const SPL_GENERATING = /^\|[ \t]*(?:tstats|mstats|inputlookup|inputcsv|makeresults|rest|datamodel|metadata|metasearch|loadjob|savedsearch|dbinspect|eventcount|multisearch|union|gentimes)\b(?![ \t]*\|)/;
+const SPL_SEARCH_START = /^(?:search[ \t]+)?(?:index|sourcetype|source|host|eventtype)[ \t]*=[ \t]*\S/i;
+const SPL_PIPE_COMMAND = new RegExp(`\\|[ \\t]*(?:${SPL_COMMANDS.join('|')})\\b(?![ \\t]*\\|)`, 'g');
+
+// SPL is recognized from where a search starts, not from loose keywords, so
+// prose that mentions "stats" or a stray pipe stays ordinary text.
+function isSpl(source) {
+  const query = source.replace(/```[\s\S]*?```/g, ' ').trim();
+  if (SPL_GENERATING.test(query)) return true;
+  // Inline code (and macro arguments) can mention pipes without being commands.
+  const commands = query.replace(/(`+)(?!`)[^\n]*?\1(?!`)/g, ' ');
+  const pipeCommands = commands.match(SPL_PIPE_COMMAND)?.length ?? 0;
+  if (SPL_SEARCH_START.test(query)) {
+    // Without a pipe, a lone "index=3" is too ambiguous; ask for a second term.
+    const firstLineTerms = query.split('\n')[0].match(/[\w.:]+[ \t]*!?=[ \t]*(?:"[^"\n]*"|[^\s|]+)/g)?.length ?? 0;
+    return pipeCommands >= 1 || firstLineTerms >= 2;
+  }
+  // Ignore inline SPL comments, but keep multiline fence markers as Markdown
+  // evidence instead of discarding them along with triple-backtick comments.
+  const markdownSource = source.replace(/```[^\n]*?```/g, ' ');
+  return pipeCommands >= 2 && !hasMarkdownBlocks(markdownSource);
+}
+
 function hasMarkdownBlocks(source) {
   return /^ {0,3}(?:#{1,6}(?:\s|$)|`{3,}|~{3,}|>\s|[-*+]\s+\S|\d+[.)]\s+\S)/m.test(source)
     || /^\S[^\n]*\n {0,3}(?:={3,}|-{3,})[ \t]*$/m.test(source)
@@ -151,6 +178,7 @@ export function detectNoteFormat(content, Parser = globalThis.DOMParser ?? globa
   if (isYaml(source)) return 'YAML';
   // Check complete CSV records before Markdown hints inside quoted cells.
   if (isCsv(source)) return 'CSV';
+  if (isSpl(source)) return 'SPL';
   if (hasMarkdownBlocks(source)) return 'MD';
   if (/!?\[[^\]\n]+\]\([^\n)]+\)/.test(source)
     || /(`+)[^`\n]+\1|\*\*\S(?:[^\n]*?\S)?\*\*|__\S(?:[^\n]*?\S)?__|~~\S(?:[^\n]*?\S)?~~/.test(source)

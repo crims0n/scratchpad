@@ -154,3 +154,33 @@ test('caches unchanged content without leaking format across notes or revisions'
   assert.equal(getFormat(note), 'XML');
   assert.equal(parses, 3, 'the error-namespace probe is reused');
 });
+
+test('recognizes SPL from where a search starts, keeping prose and Markdown about SPL as text', () => {
+  for (const content of [
+    'index=main sourcetype=access_combined | stats count by host',
+    'index=web sourcetype=access_combined status=500',
+    'search index=web error | timechart span=1h count',
+    '| tstats count where index=* by sourcetype',
+    '| makeresults\n| eval now=now()',
+    '"connection refused" | stats count by host | sort - count',
+    'error ```ignore | stats count``` | stats count by host | sort - count',
+    'error | `my_macro(x)` | stats count by host | sort - count',
+    '```Failed logins```\nindex=auth action=failure\n| stats count by user'
+  ]) assert.equal(detect(content), 'SPL', content);
+  for (const content of [
+    'index=_internal',
+    'We set index=3 yesterday.',
+    'Use the | stats command | and stuff',
+    'error OR fail* | top limit=5 host'
+  ]) assert.equal(detect(content), 'TXT', content);
+  for (const content of [
+    '| from | to |\n| --- | --- |\n| a | b |',
+    '| name | stats |\n| --- | --- |\n| a | b |',
+    '# Splunk notes\n\nRun `| stats count` then `| sort - count`.',
+    'Run `| stats count` then `| sort - count`.',
+    'Use `index=web | stats count | sort - count` to see the busiest hosts.',
+    'Use ``index=web | stats count | sort - count`` to see the busiest hosts.',
+    '```text\nNotes\n```\nerror | stats count | sort - count',
+    '```spl\nindex=main | stats count\n```\nThat is the query.'
+  ]) assert.equal(detect(content), 'MD', content);
+});
