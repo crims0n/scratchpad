@@ -16,7 +16,7 @@ The Stable Release workflow signs the universal macOS app and DMG with a Develop
 
 Gatekeeper assessments must be enabled; a disabled or unreadable status fails verification. CI also fails if Rosetta is unavailable. Local verification may skip the Intel launch check when Rosetta is not installed.
 
-After verification, the job saves the final files and a separate record of their sizes and SHA-256 hashes as workflow artifacts. A dedicated upload job with repository write permission checks both files against the record, uploads them to the prepared draft, and checks the upload digests. It downloads the final assets by ID and saves a snapshot for the read-only final check. Both checks require the files to match the signing record for the same release ID, source commit and workflow run. Website checksums come from GitHub's final upload digests.
+After verification, the job saves the final files and a separate record of their sizes and SHA-256 hashes as workflow artifacts. A dedicated upload job with repository write permission checks both files against the record, uploads them to the prepared draft, and checks the upload digests. It downloads the final assets by ID and saves a snapshot for the read-only snapshot check. Both checks require the files to match the signing record for the same release ID, source commit and workflow run. A final dependency-free job reads the live draft after snapshot verification and confirms its identity, unpublished state, asset IDs, sizes and digests still match. Website checksums come from GitHub's final upload digests.
 
 ## Why the app has no entitlements
 
@@ -90,5 +90,5 @@ CI cannot test a real download or the editor UI. Before publishing a release, on
 ## Testing changes to the scripts
 
 - `verify-macos-release.sh --team <TEAMID> <file.dmg|file.app.tar.gz|file.app>...` runs locally on any Mac.
-- `finalize-macos-release.sh --assets-dir DIR` notarizes and verifies local assets, then replaces the local DMG with its stapled bytes. It never contacts GitHub; `--no-upload` remains a compatibility no-op. It needs the `MACOS_SIGNING_*` and `APPLE_API_*` variables it documents.
+- `finalize-macos-release.sh --assets-dir DIR` notarizes and verifies local assets, then replaces the local DMG with its stapled bytes. It never contacts GitHub. It needs the `MACOS_SIGNING_*` and `APPLE_API_*` variables it documents.
 - `setup-macos-signing.sh` changes the user keychain search list, so run it only on CI runners.

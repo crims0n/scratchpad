@@ -4,6 +4,9 @@ import { execFileSync } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+export const releasePublicKey = fileURLToPath(new URL("../site/release-signing-key.asc", import.meta.url));
 
 export async function verifyLinuxAssets({ assetsDir, verified, publicKey }) {
   const checksums = (await readFile(join(assetsDir, "SHA256SUMS"), "utf8")).trim().split(/\r?\n/);

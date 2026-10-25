@@ -3,19 +3,17 @@
 #
 # Sign and verify local Linux assets, then place SHA256SUMS and its signature
 # beside those packages. No GitHub token or draft access is used.
-# Usage: sign-linux-release.sh <public-key.asc> --assets-dir DIR [--no-upload]
+# Usage: sign-linux-release.sh <public-key.asc> --assets-dir DIR
 # Env: SIGNING_KEY_FINGERPRINT (primary fingerprint of the imported key)
-# --no-upload is retained as a compatibility no-op; this script never uploads.
 
 set -euo pipefail
 
-public_key=${1:?usage: sign-linux-release.sh <public-key.asc> --assets-dir DIR [--no-upload]}
+public_key=${1:?usage: sign-linux-release.sh <public-key.asc> --assets-dir DIR}
 shift
 assets_dir=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --assets-dir) assets_dir=${2:?--assets-dir needs a directory}; shift 2 ;;
-    --no-upload) shift ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done

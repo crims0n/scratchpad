@@ -356,12 +356,14 @@ jobs:
           overwrite: true
 
   verify-draft:
-    name: Verify complete signed draft
+    name: Verify downloaded signed draft
     needs: [validate, prepare, upload-draft]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-22.04
     permissions:
       contents: read
+    outputs:
+      verified_draft: ${{ steps.verify.outputs.verified_draft }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -393,6 +395,7 @@ jobs:
           digest-mismatch: error
 
       - name: Verify final downloaded bytes and website recognition
+        id: verify
         env:
           RELEASE_ID: ${{ needs.prepare.outputs.release_id }}
           RELEASE_VERSION: ${{ needs.validate.outputs.version }}
@@ -403,3 +406,30 @@ jobs:
             --version "$RELEASE_VERSION" --commit "$GITHUB_SHA" \
             --release-id "$RELEASE_ID" \
             --evidence-dir "$RUNNER_TEMP/release-verification"
+
+  confirm-draft:
+    name: Confirm current signed draft
+    needs: [validate, prepare, verify-draft]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    permissions:
+      # Reading a draft requires push access. No npm packages run in this job.
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Confirm live draft identity and verified asset metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.prepare.outputs.release_id }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          VERIFIED_DRAFT: ${{ needs.verify-draft.outputs.verified_draft }}
+        run: node scripts/confirm-release-draft.mjs

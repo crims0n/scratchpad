@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { stageReleaseAssets } from "../scripts/stage-release-assets.mjs";
 import { platformAssetNames } from "../scripts/release-verification.mjs";
 
@@ -61,4 +63,14 @@ test("staging rejects symbolic links to package files", { skip: process.platform
   await rm(input.artifactPaths[0]);
   await symlink(input.artifactPaths[1], input.artifactPaths[0]);
   await assert.rejects(stageReleaseAssets(input), /regular built artifact/);
+});
+
+test("local finalizers reject the obsolete no-upload flag", { skip: process.platform === "win32" }, () => {
+  for (const [name, args] of [["finalize-macos-release", []], ["sign-linux-release", ["unused-public-key.asc"]]]) {
+    const script = fileURLToPath(new URL(`../scripts/${name}.sh`, import.meta.url));
+    const result = spawnSync("bash", [script, ...args, "--no-upload"], { encoding: "utf8" });
+    assert.ifError(result.error);
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /Unknown argument: --no-upload/);
+  }
 });

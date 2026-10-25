@@ -6,7 +6,7 @@ The Stable Release workflow signs Linux artifacts with a project GPG key:
 2. The Tauri bundler embeds a signature in the AppImage (`SIGN`, `SIGN_KEY`, `APPIMAGETOOL_SIGN_PASSPHRASE`). A signing failure fails the build.
 3. `scripts/sign-linux-release.sh <key> --assets-dir DIR` uses the staged local AppImage and `.deb`, checks that the AppImage's embedded signature comes from the published key, writes and signs `SHA256SUMS`, and verifies it with only the published key. It also confirms that modified checksums and modified packages fail. It places `SHA256SUMS` and `SHA256SUMS.asc` beside those packages. It has no GitHub token or draft access.
 
-The Linux job saves the verified files and a separate record of their sizes and SHA-256 hashes as workflow artifacts. A dedicated upload job with repository write permission checks the files against that record, uploads them to the prepared draft, checks upload digests, and downloads the final files by ID. A read-only final job verifies the resulting snapshot. Both jobs require all four files to match the signing record for the same release ID, source commit and workflow run. It also independently verifies the downloaded `SHA256SUMS.asc` with only the checked-in public key. Website checksums come from GitHub's final upload digests.
+The Linux job saves the verified files and a separate record of their sizes and SHA-256 hashes as workflow artifacts. A dedicated upload job with repository write permission checks the files against that record, uploads them to the prepared draft, checks upload digests, and downloads the final files by ID. A read-only verification job verifies the resulting snapshot. Both jobs require all four files to match the signing record for the same release ID, source commit and workflow run. It also independently verifies the downloaded `SHA256SUMS.asc` with only the checked-in public key. A final dependency-free job reads the live draft after snapshot verification and confirms its identity, unpublished state, asset IDs, sizes and digests still match. Website checksums come from GitHub's final upload digests.
 
 User-facing instructions are in [verify-linux-downloads.md](verify-linux-downloads.md).
 
@@ -73,4 +73,4 @@ If the primary key is compromised, import the revocation certificate, publish th
 
 ## Testing changes to the scripts
 
-Both scripts run on Ubuntu 22.04 (the release runner). `sign-linux-release.sh <key> --assets-dir DIR` signs and verifies a local AppImage and `.deb`, then places the checksum files in that directory. It never contacts GitHub; `--no-upload` remains a compatibility no-op.
+Both scripts run on Ubuntu 22.04 (the release runner). `sign-linux-release.sh <key> --assets-dir DIR` signs and verifies a local AppImage and `.deb`, then places the checksum files in that directory. It never contacts GitHub.

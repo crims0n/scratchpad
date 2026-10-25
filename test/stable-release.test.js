@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { copyFile, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { stableRelease, assertReleaseAvailable } from "../scripts/check-stable-release.mjs";
@@ -13,6 +13,7 @@ import { expectedAssets, downloadDraftAssets, verifyDraft } from "../scripts/ver
 import { prepareDraft } from "../scripts/prepare-stable-release.mjs";
 import { platformAssetNames, platforms, recordVerification } from "../scripts/release-verification.mjs";
 import { uploadVerifiedDraft } from "../scripts/upload-release-draft.mjs";
+import { confirmVerifiedDraft } from "../scripts/confirm-release-draft.mjs";
 
 // Public test key and signature only; the disposable private key was deleted.
 const publicKey = fileURLToPath(new URL("./fixtures/release-verification/public-key.asc", import.meta.url));
@@ -267,8 +268,8 @@ async function uploadFixture(t, initialAssets = []) {
       remote.assets = remote.assets.filter(asset => asset.id !== id);
       bytes.delete(id);
     },
-    uploadAsset: async (file, name) => {
-      calls.push(["upload", name]);
+    uploadAsset: async (file, name, type) => {
+      calls.push(["upload", name, type]);
       assert.equal(remote.assets.some(asset => asset.name === name), false);
       const content = await readFile(file);
       const asset = { ...input.release.assets.find(asset => asset.name === name), id: nextId++,
@@ -290,6 +291,10 @@ test("the uploader verifies signed handoffs, uploads eight files, and snapshots 
   assert.equal(result.assets.length, 8);
   assert.equal(remote.draft, true);
   assert.equal(calls.filter(([op]) => op === "upload").length, 8);
+  assert.equal(calls.find(([op, name]) => op === "upload" && name.endsWith(".dmg"))[2], "application/x-apple-diskimage");
+  for (const name of ["SHA256SUMS", "SHA256SUMS.asc"]) {
+    assert.equal(calls.find(([op, file]) => op === "upload" && file === name)[2], "text/plain");
+  }
   assert.equal(calls.some(([op]) => op === "delete"), false);
   assert.deepEqual(calls.filter(([op]) => op === "download").map(([, id]) => id), remote.assets.map(asset => asset.id));
   const release = JSON.parse(await readFile(join(input.snapshotDir, "release.json"), "utf8"));
@@ -334,6 +339,36 @@ test("a partial-upload retry keeps matching files and replaces only stale expect
   assert.deepEqual(calls.filter(([op]) => op === "delete"), [["delete", stale.id]]);
   assert.equal(calls.filter(([op]) => op === "upload").length, 7);
   assert.equal(remote.assets.find(asset => asset.name === matching.name).id, matching.id);
+});
+
+test("a retry waits for an existing upload's delayed digest and retains matching files", async t => {
+  const { input, remote, calls } = await uploadFixture(t);
+  remote.assets = structuredClone(input.release.assets);
+  const pending = remote.assets[0];
+  const digest = pending.digest;
+  pending.digest = null;
+  let polls = 0;
+  input.github.asset = async id => {
+    assert.equal(id, pending.id);
+    if (++polls === 2) pending.digest = digest;
+    return structuredClone(pending);
+  };
+  await uploadVerifiedDraft(input);
+  assert.equal(polls, 2);
+  assert.equal(calls.some(([op]) => op === "upload" || op === "delete"), false);
+});
+
+test("a retry leaves existing bytes intact when their digest stays unavailable", async t => {
+  const { input, remote, calls } = await uploadFixture(t);
+  remote.assets = structuredClone(input.release.assets);
+  remote.assets[0].digest = null;
+  const before = structuredClone(remote.assets);
+  let sleeps = 0;
+  input.sleep = async () => { sleeps++; };
+  await assert.rejects(uploadVerifiedDraft(input), /digest unavailable; retry later/);
+  assert.equal(sleeps, 6);
+  assert.deepEqual(remote.assets, before);
+  assert.equal(calls.some(([op]) => op === "upload" || op === "delete"), false);
 });
 
 test("upload failures leave a recoverable draft, and a new attempt resumes without reuploading matching bytes", async t => {
@@ -390,6 +425,18 @@ test("GitHub digest availability is bounded and a mismatching upload stops befor
   assert.equal(missing.remote.assets.length, 1);
 });
 
+test("missing or substituted asset responses fail clearly while waiting for a digest", async t => {
+  for (const response of [undefined, null, { id: 777, name: "other.exe", digest: `sha256:${"0".repeat(64)}` }]) {
+    const { input, calls } = await uploadFixture(t);
+    const upload = input.github.uploadAsset;
+    input.github.uploadAsset = async (...args) => ({ ...await upload(...args), digest: null });
+    input.github.asset = async () => response;
+    await assert.rejects(uploadVerifiedDraft(input), /Upload does not match signature-checked bytes: .*missing or changed asset/);
+    assert.equal(calls.filter(([op]) => op === "upload").length, 1);
+    assert.equal(calls.some(([op]) => op === "download"), false);
+  }
+});
+
 test("changed final metadata, downloaded bytes, or publication state cannot produce a verification snapshot", async t => {
   for (const mode of ["metadata", "download", "publication"]) {
     const { input, remote } = await uploadFixture(t);
@@ -420,12 +467,85 @@ test("a stale snapshot directory is rejected before mutating the draft", async t
   assert.ok(calls.every(([op]) => op === "release"));
 });
 
-test("both write-privileged entry points load with only repository scripts and Node builtins", async t => {
+test("all write-privileged entry points load with only repository scripts and Node builtins", async t => {
   const root = await mkdtemp(join(tmpdir(), "scratchpad-no-npm-"));
   t.after(() => rm(root, { recursive: true, force: true }));
-  for (const name of ["check-stable-release", "prepare-stable-release", "release-verification", "release-signature", "upload-release-draft"]) {
+  for (const name of ["check-stable-release", "prepare-stable-release", "release-verification", "release-signature", "upload-release-draft", "confirm-release-draft"]) {
     await copyFile(new URL(`../scripts/${name}.mjs`, import.meta.url), join(root, `${name}.mjs`));
   }
   execFileSync(process.execPath, ["--input-type=module", "-e",
-    "await import('./prepare-stable-release.mjs'); await import('./upload-release-draft.mjs');"], { cwd: root, stdio: "pipe" });
+    "await import('./prepare-stable-release.mjs'); await import('./upload-release-draft.mjs'); await import('./confirm-release-draft.mjs');"], { cwd: root, stdio: "pipe" });
+});
+
+test("final confirmation reads the live draft after snapshot verification and allows harmless metadata edits", async t => {
+  const input = await fixture(t);
+  const { verification } = await verifyDraft(input);
+  assert.equal(verification.runId, runId);
+  assert.equal(verification.release.assets.some(asset => "browser_download_url" in asset), false);
+  let reads = 0;
+  const result = await confirmVerifiedDraft({ ...input, repository: "crims0n/scratchpad", verification,
+    github: { release: async () => {
+      reads++;
+      return { ...input.release, body: "edited release notes", assets: [...input.release.assets].reverse() };
+    } } });
+  assert.equal(reads, 1);
+  assert.equal(result.assets.length, 8);
+});
+
+test("final confirmation rejects drift in the live draft even when the downloaded snapshot still verifies", async t => {
+  const input = await fixture(t);
+  const { verification } = await verifyDraft(input);
+  const first = input.release.assets[0];
+  for (const change of [{ id: releaseId + 1 }, { draft: false }, { prerelease: true }, { target_commitish: "b".repeat(40) },
+    { tag_name: "v2.0.0" }, { assets: input.release.assets.slice(1) },
+    { assets: [...input.release.assets, { id: 999, name: "extra.exe" }] },
+    ...[{ id: 999 }, { digest: `sha256:${"0".repeat(64)}` }, { size: first.size + 1 }, { state: "new" }]
+      .map(fields => ({ assets: [{ ...first, ...fields }, ...input.release.assets.slice(1)] }))]) {
+    await assert.rejects(confirmVerifiedDraft({ ...input, repository: "crims0n/scratchpad", verification,
+      github: { release: async () => ({ ...input.release, ...change }) } }));
+  }
+  assert.equal((await verifyDraft(input)).assets.length, 8);
+});
+
+test("final confirmation requires a valid verified result from the selected candidate and workflow run", async t => {
+  const input = await fixture(t);
+  const { verification } = await verifyDraft(input);
+  const github = { release: () => assert.fail("must reject before fetching the draft") };
+  for (const override of [{ verification: undefined }, { verification: { ...verification, schemaVersion: 2 } },
+    { verification: { ...verification, runId: "999" } }, { releaseId: 999 }, { commit: "b".repeat(40) },
+    { version: "1.0.1" }, { repository: "../other" }]) {
+    await assert.rejects(confirmVerifiedDraft({ ...input, repository: "crims0n/scratchpad", verification, github, ...override }));
+  }
+});
+
+test("a failed live-draft query cannot report confirmation success", async t => {
+  const input = await fixture(t);
+  const { verification } = await verifyDraft(input);
+  await assert.rejects(confirmVerifiedDraft({ ...input, repository: "crims0n/scratchpad", verification,
+    github: { release: async () => { throw new Error("GitHub unavailable"); } } }), /GitHub unavailable/);
+});
+
+test("the confirmation command reads the prepared draft by ID and reports live confirmation only on success", { skip: process.platform === "win32" }, async t => {
+  const input = await fixture(t);
+  const { verification } = await verifyDraft(input);
+  const root = await mkdtemp(join(tmpdir(), "scratchpad-confirm-draft-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const releaseFile = join(root, "release.json");
+  const summary = join(root, "summary.md");
+  await writeFile(releaseFile, JSON.stringify(input.release));
+  await writeFile(join(root, "gh"), '#!/bin/sh\n[ "$1" = api ] && [ "$2" = repos/crims0n/scratchpad/releases/123 ] || exit 2\ncat "$TEST_RELEASE_JSON"\n', { mode: 0o755 });
+  const script = fileURLToPath(new URL("../scripts/confirm-release-draft.mjs", import.meta.url));
+  const options = { encoding: "utf8", stdio: "pipe", env: { ...process.env,
+    PATH: `${root}${delimiter}${process.env.PATH}`, TEST_RELEASE_JSON: releaseFile, GITHUB_REF: "refs/heads/main",
+    GITHUB_REPOSITORY: "crims0n/scratchpad", RELEASE_ID: String(releaseId), RELEASE_VERSION: input.version,
+    GITHUB_SHA: commit, GITHUB_RUN_ID: runId, VERIFIED_DRAFT: JSON.stringify(verification), GITHUB_STEP_SUMMARY: summary } };
+  assert.match(execFileSync(process.execPath, [script], options), /Confirmed current stable draft/);
+  assert.match(await readFile(summary, "utf8"), /Checked GitHub at .*all eight current asset IDs/);
+  await rm(summary);
+  await writeFile(releaseFile, JSON.stringify({ ...input.release, draft: false }));
+  assert.throws(() => execFileSync(process.execPath, [script], options), /unpublished stable/);
+  await assert.rejects(stat(summary), /ENOENT/);
+  assert.throws(() => execFileSync(process.execPath, [script], {
+    ...options, env: { ...options.env, GITHUB_REF: "refs/heads/feature" }
+  }), /must run from main/);
 });

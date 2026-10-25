@@ -25,6 +25,10 @@ export function expectedAssets(version) {
   return platforms.flatMap(platform => platformAssetNames(version, platform));
 }
 
+export function assertReleaseRepository(repository) {
+  if (!/^[a-z0-9-]+\/[a-z0-9_.-]+$/i.test(repository || "")) throw new Error("Invalid release repository");
+}
+
 export function draftAssets({ release, releaseId, version, commit, complete = true }) {
   const { tag, name } = stableRelease(version);
   if (!Number.isSafeInteger(releaseId) || releaseId <= 0 || release?.id !== releaseId) throw new Error("Draft ID does not match the prepared release");
@@ -48,6 +52,19 @@ export function draftAssets({ release, releaseId, version, commit, complete = tr
     }
   }
   return assets;
+}
+
+export function assertDraftUnchanged({ release, verifiedRelease, releaseId, version, commit }) {
+  const identity = { releaseId, version, commit };
+  const verified = draftAssets({ ...identity, release: verifiedRelease });
+  const current = draftAssets({ ...identity, release });
+  for (const asset of verified) {
+    const latest = current.find(file => file.name === asset.name);
+    if (latest.id !== asset.id || latest.size !== asset.size || latest.digest.toLowerCase() !== asset.digest.toLowerCase()) {
+      throw new Error(`Final draft metadata changed: ${asset.name}`);
+    }
+  }
+  return current;
 }
 
 export async function downloadDraftAssets({ release, releaseId, version, commit, assetsDir, download }) {

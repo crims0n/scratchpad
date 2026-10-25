@@ -3,17 +3,35 @@
 import { execFileSync } from "node:child_process";
 import { mkdir, open, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 import { assertMainBranch } from "./check-stable-release.mjs";
-import { draftAssets, downloadDraftAssets, expectedAssets, hashFile, verifyEvidence } from "./release-verification.mjs";
-import { verifyLinuxAssets } from "./release-signature.mjs";
+import { assertDraftUnchanged, assertReleaseRepository, draftAssets, downloadDraftAssets, expectedAssets, hashFile, verifyEvidence } from "./release-verification.mjs";
+import { releasePublicKey, verifyLinuxAssets } from "./release-signature.mjs";
 
-const publicKey = fileURLToPath(new URL("../site/release-signing-key.asc", import.meta.url));
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+async function waitForDigest({ asset, name, github, sleep }) {
+  const id = asset.id;
+  for (let attempt = 0; !asset.digest && attempt < 6; attempt += 1) {
+    await sleep(5000);
+    asset = await github.asset(id);
+    if (asset?.id !== id || asset.name !== name) {
+      throw new Error(`Upload does not match signature-checked bytes: ${name} (missing or changed asset)`);
+    }
+  }
+  if (!asset.digest) throw new Error(`Upload does not match signature-checked bytes: ${name} (digest unavailable; retry later)`);
+  return asset;
+}
+
+function contentType(name) {
+  if (name.endsWith(".dmg")) return "application/x-apple-diskimage";
+  if (name === "SHA256SUMS" || name === "SHA256SUMS.asc") return "text/plain";
+  return "application/octet-stream";
+}
+
 export async function uploadVerifiedDraft({ repository, releaseId, version, commit, runId, assetsDir, evidence,
-  snapshotDir, github, key = publicKey, sleep = delay }) {
-  if (!/^[a-z0-9-]+\/[a-z0-9_.-]+$/i.test(repository || "")) throw new Error("Invalid release repository");
+  snapshotDir, github, key = releasePublicKey, sleep = delay }) {
+  assertReleaseRepository(repository);
   const names = expectedAssets(version).sort();
   if (JSON.stringify((await readdir(assetsDir)).sort()) !== JSON.stringify(names)) {
     throw new Error("Workflow artifacts must contain exactly the eight release files");
@@ -28,20 +46,22 @@ export async function uploadVerifiedDraft({ repository, releaseId, version, comm
   // Reject a stale destination before making any GitHub changes.
   await mkdir(snapshotDir);
   for (const file of verified) {
-    const old = existing.find(asset => asset.name === file.name);
+    let old = existing.find(asset => asset.name === file.name);
+    if (old?.state === "uploaded" && old.size === file.size && !old.digest) {
+      // An interrupted upload may already have the right bytes. Wait for
+      // GitHub's digest, and leave the file in place if it is still unknown.
+      old = await waitForDigest({ asset: old, name: file.name, github, sleep });
+    }
     if (old?.state === "uploaded" && old.size === file.size && old.digest?.toLowerCase() === `sha256:${file.sha256}`) continue;
     // Recheck the candidate before a replacement, including on a retry after
     // partial uploads. Never clobber a published or retargeted release.
     draftAssets({ ...identity, release: await github.release(), complete: false });
     if (old) await github.deleteAsset(old.id);
-    let uploaded = await github.uploadAsset(join(assetsDir, file.name), file.name);
+    let uploaded = await github.uploadAsset(join(assetsDir, file.name), file.name, contentType(file.name));
     if (!Number.isSafeInteger(uploaded?.id) || uploaded.id <= 0 || uploaded.name !== file.name) {
       throw new Error(`Invalid upload response: ${file.name}`);
     }
-    for (let attempt = 0; !uploaded.digest && attempt < 6; attempt += 1) {
-      await sleep(5000);
-      uploaded = await github.asset(uploaded.id);
-    }
+    uploaded = await waitForDigest({ asset: uploaded, name: file.name, github, sleep });
     if (uploaded.state !== "uploaded" || uploaded.name !== file.name || uploaded.size !== file.size
       || uploaded.digest?.toLowerCase() !== `sha256:${file.sha256}`) {
       throw new Error(`Upload does not match signature-checked bytes: ${file.name}`);
@@ -65,13 +85,7 @@ export async function uploadVerifiedDraft({ repository, releaseId, version, comm
   // Do not report success if the candidate was published or changed while
   // its bytes were being downloaded and verified.
   const snapshotRelease = await github.release();
-  const current = draftAssets({ ...identity, release: snapshotRelease });
-  for (const asset of assets) {
-    const latest = current.find(file => file.name === asset.name);
-    if (latest.id !== asset.id || latest.size !== asset.size || latest.digest.toLowerCase() !== asset.digest.toLowerCase()) {
-      throw new Error(`Final draft metadata changed: ${asset.name}`);
-    }
-  }
+  assertDraftUnchanged({ ...identity, release: snapshotRelease, verifiedRelease: finalRelease });
   await writeFile(join(snapshotDir, "release.json"), `${JSON.stringify(snapshotRelease, null, 2)}\n`, { flag: "wx" });
   return { releaseId, assets: downloaded };
 }
@@ -79,7 +93,6 @@ export async function uploadVerifiedDraft({ repository, releaseId, version, comm
 async function main() {
   assertMainBranch(process.env.GITHUB_REF);
   const repository = process.env.GITHUB_REPOSITORY;
-  if (!/^[a-z0-9-]+\/[a-z0-9_.-]+$/i.test(repository || "")) throw new Error("Invalid release repository");
   const releaseId = Number(process.env.RELEASE_ID);
   const api = args => {
     const output = execFileSync("gh", ["api", ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
@@ -95,7 +108,7 @@ async function main() {
       release: () => api([`repos/${repository}/releases/${releaseId}`]),
       asset: id => api([`repos/${repository}/releases/assets/${id}`]),
       deleteAsset: id => api(["--method", "DELETE", `repos/${repository}/releases/assets/${id}`]),
-      uploadAsset: (file, name) => api(["--method", "POST", "-H", "Content-Type: application/octet-stream",
+      uploadAsset: (file, name, type) => api(["--method", "POST", "-H", `Content-Type: ${type}`,
         `https://uploads.github.com/repos/${repository}/releases/${releaseId}/assets?name=${encodeURIComponent(name)}`, "--input", file]),
       downloadAsset: async (id, destination) => {
         const file = await open(destination, "wx");

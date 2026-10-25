@@ -3,10 +3,9 @@
 #
 # Finalize and verify local macOS release assets, then replace the staged DMG
 # with its notarized/stapled bytes. No GitHub token or draft access is used.
-# Usage: finalize-macos-release.sh --assets-dir DIR [--no-upload]
+# Usage: finalize-macos-release.sh --assets-dir DIR
 # Env: MACOS_SIGNING_IDENTITY, MACOS_SIGNING_TEAM_ID, MACOS_SIGNING_KEYCHAIN,
 #      APPLE_API_KEY, APPLE_API_ISSUER, APPLE_API_KEY_PATH
-# --no-upload is retained as a compatibility no-op; this script never uploads.
 
 set -euo pipefail
 
@@ -14,7 +13,6 @@ assets_dir=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --assets-dir) assets_dir=${2:?--assets-dir needs a directory}; shift 2 ;;
-    --no-upload) shift ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done

@@ -2,17 +2,17 @@
 
 import { appendFile, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 import { stableRelease } from "./check-stable-release.mjs";
 import { buildReleaseManifest, getSha256 } from "./generate-release-manifest.mjs";
 import { expectedAssets, hashFile, verifyEvidence, draftAssets } from "./release-verification.mjs";
+import { releasePublicKey, verifyLinuxAssets } from "./release-signature.mjs";
 
 export { expectedAssets, downloadDraftAssets } from "./release-verification.mjs";
-import { verifyLinuxAssets } from "./release-signature.mjs";
 export { verifyLinuxSignature } from "./release-signature.mjs";
 
 export async function verifyDraft({ release, releaseId, version, commit, assetsDir, evidence, runId,
-  publicKey = fileURLToPath(new URL("../site/release-signing-key.asc", import.meta.url)) }) {
+  publicKey = releasePublicKey }) {
   const assets = draftAssets({ release, releaseId, version, commit });
   const { tag } = stableRelease(version);
   const expected = expectedAssets(version).sort();
@@ -38,7 +38,13 @@ export async function verifyDraft({ release, releaseId, version, commit, assetsD
     || new Set(preview.release.assets.map(asset => asset.platform)).size !== 3) {
     throw new Error("Published-manifest preview does not recognize all six installers and hashes");
   }
-  return { releaseId, tag, commit, assets: verified };
+  // Pass only validated identity/upload fields to the final live check.
+  const verification = { schemaVersion: 1, runId, release: {
+    id: release.id, tag_name: release.tag_name, name: release.name, target_commitish: release.target_commitish,
+    draft: release.draft, prerelease: release.prerelease,
+    assets: assets.map(({ id, name, state, size, digest }) => ({ id, name, state, size, digest }))
+  } };
+  return { releaseId, tag, commit, assets: verified, verification };
 }
 
 async function main() {
@@ -55,7 +61,8 @@ async function main() {
   const input = { release, releaseId: Number(argument("--release-id")), assetsDir: argument("--assets-dir"),
     version: argument("--version"), commit: argument("--commit"), evidence, runId: process.env.GITHUB_RUN_ID };
   const result = await verifyDraft(input);
-  const summary = `## Verified stable draft ${result.tag}\n\nRelease ID: ${result.releaseId}. Source: \`${result.commit}\`. All eight downloaded assets match the files recorded after this run's platform signing checks. The downloaded Linux checksum signature verifies with the release public key. The release remains a draft for installed-package acceptance. Six installer assets are recognized by the website manifest.\n\n| Asset | SHA-256 |\n| --- | --- |\n${result.assets.map(asset => `| ${asset.name} | \`${asset.sha256}\` |`).join("\n")}\n`;
+  if (process.env.GITHUB_OUTPUT) await appendFile(process.env.GITHUB_OUTPUT, `verified_draft=${JSON.stringify(result.verification)}\n`);
+  const summary = `## Verified downloaded snapshot ${result.tag}\n\nRelease ID: ${result.releaseId}. Source: \`${result.commit}\`. All eight downloaded assets match the files recorded after this run's platform signing checks. The downloaded Linux checksum signature verifies with the release public key. Six installer assets are recognized by the website manifest. The final confirmation job must still check the current draft on GitHub.\n\n| Asset | SHA-256 |\n| --- | --- |\n${result.assets.map(asset => `| ${asset.name} | \`${asset.sha256}\` |`).join("\n")}\n`;
   process.stdout.write(summary);
   if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, summary);
 }
