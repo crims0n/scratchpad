@@ -108,3 +108,29 @@ test('status bar names the detected format of the focused pane and notes when hi
   getAppElement('editor').dispatchEvent(new app.dom.window.Event('focus'));
   assert.equal(status.textContent, 'JSON');
 });
+
+test('format status follows the active secondary note through primary debounces and dropdown changes', async () => {
+  const app = await bootApp({ instance: 4, storage: { scratchpad_notes: [
+    { id: 'json', title: 'JSON note', content: '{"enabled": true}', updatedAt: 3, isTitleLocked: true },
+    { id: 'csv', title: 'CSV note', content: 'name,age\nAlice,30', updatedAt: 2, isTitleLocked: true },
+    { id: 'md', title: 'Markdown note', content: '# Heading', updatedAt: 1, isTitleLocked: true }
+  ] } });
+  const status = document.getElementById('note-format-status');
+  app.click('split-note-btn');
+  const primary = getAppElement('editor');
+  const secondary = getAppElement('secondary-editor');
+  primary.dispatchEvent(new app.dom.window.Event('focus'));
+  primary.value = '{"enabled": false}';
+  primary.dispatchEvent(new app.dom.window.Event('input'));
+  secondary.dispatchEvent(new app.dom.window.Event('focus'));
+  assert.equal(status.textContent, 'CSV');
+  await app.settle(250);
+  assert.equal(status.textContent, 'CSV', 'a pending primary update must respect the active secondary pane');
+
+  const secondarySelect = document.getElementById('secondary-note-select');
+  secondarySelect.value = 'md';
+  secondarySelect.dispatchEvent(new app.dom.window.Event('change', { bubbles: true }));
+  assert.equal(secondary.value, '# Heading');
+  assert.equal(status.textContent, 'Markdown', 'selecting another secondary note updates the format without refocusing');
+  assert.equal(status.title, 'Detected format: Markdown');
+});
