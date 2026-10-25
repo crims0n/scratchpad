@@ -15,6 +15,7 @@ test("both editors follow detected formats through edits, Find, Compare, toggles
     ["YAML", "name: Scratchpad\nenabled: true", ".syntax-key"],
     ["CSV", 'name,description\nAlice,"# heading, **literal**"', ".syntax-csv-1"],
     ["MD", "# Heading\n**strong**", ".syntax-heading"],
+    ["SPL", "index=web status=500\n| stats count by host", ".syntax-literal"],
     ["TXT", "Meeting: Friday", null]
   ];
   const notes = fixtures.map(([format, content], index) => ({

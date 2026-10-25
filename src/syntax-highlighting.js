@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import { splLanguage } from "./spl-language.js";
+
 const SYNTAX_CLASSES = new Set([
   "syntax-code",
   "syntax-code-block",
@@ -19,7 +21,7 @@ const SYNTAX_CLASSES = new Set([
   "syntax-csv-2"
 ]);
 
-const FORMAT_LANGUAGES = { JSON: "json", XML: "xml", YAML: "yaml" };
+const FORMAT_LANGUAGES = { JSON: "json", XML: "xml", YAML: "yaml", SPL: "spl" };
 const TOKEN_CLASSES = {
   "hljs-attr": "syntax-key",
   "hljs-attribute": "syntax-key",
@@ -34,8 +36,22 @@ const TOKEN_CLASSES = {
   "hljs-punctuation": "syntax-punctuation",
   "hljs-bullet": "syntax-punctuation",
   "hljs-symbol": "syntax-number",
-  "hljs-type": "syntax-literal"
+  "hljs-type": "syntax-literal",
+  "hljs-built_in": "syntax-emphasis",
+  "hljs-variable": "syntax-code"
 };
+
+const splRegistered = new WeakSet();
+
+// Register the bundled SPL grammar with whichever Highlight.js instance the
+// editor, Preview, export, or print window was given.
+function withSplLanguage(highlighter) {
+  if (highlighter && typeof highlighter === "object" && !splRegistered.has(highlighter)) {
+    splRegistered.add(highlighter);
+    if (!highlighter.getLanguage?.("spl")) highlighter.registerLanguage?.("spl", splLanguage);
+  }
+  return highlighter;
+}
 
 const HIGHLIGHT_ENTITIES = {
   "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#x27;": "'"
@@ -182,7 +198,7 @@ function buildFormatClasses(text, format, highlighter) {
   if (format === "MD") return buildMarkdownClasses(text);
   if (format === "CSV") return buildCsvClasses(text);
   const language = FORMAT_LANGUAGES[format];
-  if (!language || !highlighter?.getLanguage?.(language)) return [];
+  if (!language || !withSplLanguage(highlighter)?.getLanguage?.(language)) return [];
 
   try {
     const result = highlighter.highlight(text, { language, ignoreIllegals: true });
@@ -288,6 +304,7 @@ function normalizeDecorations(decorations, textLength) {
 
 export function highlightPreviewCode(container, highlighter, enabled = true) {
   if (!enabled || !container || !highlighter) return 0;
+  withSplLanguage(highlighter);
   let highlightedCount = 0;
 
   for (const code of container.querySelectorAll("pre > code")) {
