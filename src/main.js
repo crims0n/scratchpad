@@ -117,6 +117,7 @@ const previewWrapper = document.getElementById("preview-wrapper");
 const markdownPreview = document.getElementById("markdown-preview");
 const wordCharCount = document.getElementById("word-char-count");
 const cursorPosition = document.getElementById("cursor-position");
+const noteFormatStatus = document.getElementById("note-format-status");
 const selectionCount = document.getElementById("selection-count");
 const saveStatus = document.getElementById("save-status");
 const mcpStatus = document.getElementById("mcp-status");
@@ -875,6 +876,7 @@ function clearEmptyCollectionUi() {
 }
 
 const getNoteFormat = createNoteFormatDetector();
+const FORMAT_NAMES = { MD: "Markdown", TXT: "Plain Text" };
 
 function createNoteListItem(note) {
     const item = document.createElement("li");
@@ -1723,6 +1725,7 @@ function updateWordCharCount() {
   // Always update global count on the left
   wordCharCount.textContent = `${totalWords} word${totalWords !== 1 ? 's' : ''} • ${totalChars} character${totalChars !== 1 ? 's' : ''}`;
   updateCursorPositionForText(primaryEditor);
+  updateFormatStatusForText(primaryEditor);
 
   const start = primaryEditor.selectionStart;
   const end = primaryEditor.selectionEnd;
@@ -1901,6 +1904,7 @@ function applySyntaxHighlighting(value, { persist = true, render = true } = {}) 
     updateMarkdownPreview();
     updateSecondaryMarkdownPreview();
   }
+  updateFormatStatusForText(activePane === "secondary" ? secondaryEditor : primaryEditor);
 }
 
 function loadViewPreferences() {
@@ -4918,6 +4922,7 @@ function updateWordCharCountForText(el) {
   
   wordCharCount.textContent = `${totalWords} word${totalWords !== 1 ? 's' : ''} • ${totalChars} character${totalChars !== 1 ? 's' : ''}`;
   updateCursorPositionForText(el);
+  updateFormatStatusForText(el);
 
   const start = el.selectionStart;
   const end = el.selectionEnd;
@@ -4944,6 +4949,22 @@ function updateCursorPositionForText(el) {
 
   cursorPosition.textContent = `Ln ${position.line}, Col ${position.column}`;
   cursorPosition.title = `Line ${position.line}, column ${position.column}`;
+}
+
+// Show the detected format of the note in the given pane, so it is clear
+// which colors the editor applies and when highlighting is turned off.
+function updateFormatStatusForText(el) {
+  const noteId = el === secondaryEditor ? secondaryNoteId : activeNoteId;
+  const note = notes.find(n => n.id === noteId);
+  noteFormatStatus.hidden = !note;
+  if (!note) return;
+  const format = getNoteFormat(note);
+  const name = FORMAT_NAMES[format] ?? format;
+  const highlightingOff = !syntaxHighlightingEnabled && format !== "TXT";
+  noteFormatStatus.textContent = highlightingOff ? `${name} • highlighting off` : name;
+  noteFormatStatus.title = highlightingOff
+    ? `Detected format: ${name}. Syntax highlighting is off (Scratchpad menu → Appearance).`
+    : `Detected format: ${name}`;
 }
 
 function moveNoteUp(noteId) {
