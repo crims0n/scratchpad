@@ -67,7 +67,7 @@ test("one main-only draft preparation supplies every build and finalizer; draft 
   }
   assert.equal((workflow.match(/node scripts\/prepare-stable-release.mjs/g) || []).length, 1);
   assert.match(build, /releaseId: \$\{\{ needs.prepare.outputs.release_id \}\}/);
-  assert.equal((build.match(/RELEASE_ID: \$\{\{ needs.prepare.outputs.release_id \}\}/g) || []).length, 2);
+  assert.equal((build.match(/RELEASE_ID: \$\{\{ needs.prepare.outputs.release_id \}\}/g) || []).length, 3);
   assert.match(verify, /RELEASE_ID: \$\{\{ needs.prepare.outputs.release_id \}\}/);
   assert.match(verify, /--release-id "\$RELEASE_ID" --download/);
   assert.doesNotMatch(workflow, /steps\.tauri\.outputs\.releaseId|needs\.build\.outputs\.release_id|gh release download/);

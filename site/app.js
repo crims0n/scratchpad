@@ -19,7 +19,9 @@ const elements = {
   platformHint: document.getElementById("platform-hint"),
   downloads: document.getElementById("platform-downloads"),
   notes: document.getElementById("release-notes"),
-  downloadStatus: document.getElementById("download-status")
+  downloadStatus: document.getElementById("download-status"),
+  transitionLabel: document.getElementById("transition-label"),
+  transitionDetail: document.getElementById("transition-detail")
 };
 
 function createElement(tag, className, text) {
@@ -70,6 +72,10 @@ function renderManifest(manifest) {
   elements.releaseBadge.textContent = releaseLabel;
   elements.releaseDate.textContent = formatPublishedDate(release.publishedAt);
   elements.releaseDate.dateTime = release.publishedAt;
+  if (release.prerelease === false && Number(release.version.split(".")[0]) >= 1) {
+    elements.transitionLabel.textContent = "Upgrading from beta?";
+    elements.transitionDetail.textContent = " before installing the stable release.";
+  }
 
   if (primaryAsset) {
     elements.primaryDownload.href = primaryAsset.url;

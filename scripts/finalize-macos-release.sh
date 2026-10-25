@@ -111,3 +111,8 @@ if [[ "$upload" -eq 1 ]]; then
 else
   echo "Stapled DMG left at $work/assets/$dmg"
 fi
+
+# Hash the exact local files just verified, including the final stapled DMG.
+if [[ -n "${VERIFICATION_EVIDENCE_PATH:-}" ]]; then
+  node "$scripts/release-verification.mjs" macos "$dmg" "$archive"
+fi

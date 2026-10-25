@@ -9,7 +9,7 @@ export function stableRelease(version) {
   if (!parsed || parsed.major < 1 || parsed.prerelease.length || parsed.build.length || parsed.version !== version) {
     throw new Error("Stable releases require a canonical version of 1.0.0 or later without prerelease/build suffixes");
   }
-  return { version, tag: `v${version}` };
+  return { version, tag: `v${version}`, name: `Scratchpad v${version}` };
 }
 
 export function assertMainBranch(ref) {
@@ -32,7 +32,7 @@ async function main() {
   assertMainBranch(process.env.GITHUB_REF);
   const config = JSON.parse(await readFile(new URL("../src-tauri/tauri.conf.json", import.meta.url), "utf8"));
   const release = stableRelease(config.version);
-  process.stdout.write(`version=${release.version}\ntag=${release.tag}\n`);
+  process.stdout.write(`version=${release.version}\n`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

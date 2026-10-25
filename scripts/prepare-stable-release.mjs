@@ -19,7 +19,7 @@ export async function prepareDraft({ ref, repository, version, commit, body, api
   assertReleaseAvailable(release.tag, refs, pages.flat());
   const draft = await api([`repos/${repository}/releases`], {
     tag_name: release.tag,
-    name: `Scratchpad v${release.version}`,
+    name: release.name,
     body,
     draft: true,
     prerelease: false,
@@ -27,7 +27,7 @@ export async function prepareDraft({ ref, repository, version, commit, body, api
     generate_release_notes: true
   });
   if (!Number.isSafeInteger(draft?.id) || draft.id <= 0 || draft.tag_name !== release.tag
-    || draft.name !== `Scratchpad v${release.version}` || draft.target_commitish !== commit
+    || draft.name !== release.name || draft.target_commitish !== commit
     || draft.draft !== true || draft.prerelease !== false) {
     throw new Error("GitHub did not return the expected candidate draft; inspect releases before retrying");
   }
