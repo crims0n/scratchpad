@@ -139,13 +139,18 @@ const SPL_PIPE_COMMAND = new RegExp(`\\|[ \\t]*(?:${SPL_COMMANDS.join('|')})\\b(
 function isSpl(source) {
   const query = source.replace(/```[\s\S]*?```/g, ' ').trim();
   if (SPL_GENERATING.test(query)) return true;
-  const pipeCommands = query.match(SPL_PIPE_COMMAND)?.length ?? 0;
+  // Inline code (and macro arguments) can mention pipes without being commands.
+  const commands = query.replace(/(`+)(?!`)[^\n]*?\1(?!`)/g, ' ');
+  const pipeCommands = commands.match(SPL_PIPE_COMMAND)?.length ?? 0;
   if (SPL_SEARCH_START.test(query)) {
     // Without a pipe, a lone "index=3" is too ambiguous; ask for a second term.
     const firstLineTerms = query.split('\n')[0].match(/[\w.:]+[ \t]*!?=[ \t]*(?:"[^"\n]*"|[^\s|]+)/g)?.length ?? 0;
     return pipeCommands >= 1 || firstLineTerms >= 2;
   }
-  return pipeCommands >= 2 && !hasMarkdownBlocks(query);
+  // Ignore inline SPL comments, but keep multiline fence markers as Markdown
+  // evidence instead of discarding them along with triple-backtick comments.
+  const markdownSource = source.replace(/```[^\n]*?```/g, ' ');
+  return pipeCommands >= 2 && !hasMarkdownBlocks(markdownSource);
 }
 
 function hasMarkdownBlocks(source) {

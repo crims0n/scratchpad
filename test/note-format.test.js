@@ -163,6 +163,8 @@ test('recognizes SPL from where a search starts, keeping prose and Markdown abou
     '| tstats count where index=* by sourcetype',
     '| makeresults\n| eval now=now()',
     '"connection refused" | stats count by host | sort - count',
+    'error ```ignore | stats count``` | stats count by host | sort - count',
+    'error | `my_macro(x)` | stats count by host | sort - count',
     '```Failed logins```\nindex=auth action=failure\n| stats count by user'
   ]) assert.equal(detect(content), 'SPL', content);
   for (const content of [
@@ -175,6 +177,10 @@ test('recognizes SPL from where a search starts, keeping prose and Markdown abou
     '| from | to |\n| --- | --- |\n| a | b |',
     '| name | stats |\n| --- | --- |\n| a | b |',
     '# Splunk notes\n\nRun `| stats count` then `| sort - count`.',
+    'Run `| stats count` then `| sort - count`.',
+    'Use `index=web | stats count | sort - count` to see the busiest hosts.',
+    'Use ``index=web | stats count | sort - count`` to see the busiest hosts.',
+    '```text\nNotes\n```\nerror | stats count | sort - count',
     '```spl\nindex=main | stats count\n```\nThat is the query.'
   ]) assert.equal(detect(content), 'MD', content);
 });
