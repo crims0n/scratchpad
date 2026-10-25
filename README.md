@@ -62,6 +62,8 @@ Pending workspace changes are flushed before the desktop window closes; if that 
 
 Workspace access is limited to files chosen through the native workspace dialog or restored from native preferences. A missing remembered workspace is not recreated automatically. When upgrading from an older version that stored its workspace choice in browser storage, Scratchpad asks once before reopening that file; declining returns to local notes, and you can open the workspace later from the menu.
 
+On macOS and Linux, newly created workspace files are readable and writable only by their owner (`0600`); SQLite creates new journal/WAL files with the database's permissions. Existing workspace permissions are preserved, including intentional sharing. Native preferences are saved through a verified, synced replacement file with owner-only permissions, then renamed into place. Windows files inherit their folder's normal access controls. These permissions do not encrypt notes or securely erase deleted content. If a workspace symlink's target is missing, select the intended target file directly.
+
 Disconnecting revokes native access to the workspace; connecting another revokes the previous workspace once the switch completes. Exports cannot overwrite any workspace opened during the current app session, including one you have disconnected. An invalid or missing legacy workspace choice is reported once and cleared after native preferences are saved; reconnect it from the menu when available. Missing workspaces already recorded in native preferences remain remembered for a later launch, so a temporarily disconnected drive can reconnect.
 
 Scratchpad has no analytics, advertising, accounts, or sync service. Markdown is parsed on-device, preview HTML is sanitized, and remote images are blocked so merely previewing a note does not contact an image host. Links in the preview open in your default browser rather than inside the app; following one is an explicit network action and may contact that destination.
@@ -215,7 +217,11 @@ A custom JSON theme requires `background` and `foreground`. Other colors receive
 }
 ```
 
-Simple TOML/key-value theme files using the same names are also accepted. Imported colors are validated before they are stored or rendered. Opaque hex, RGB, HSL, named, and `color(srgb …)` values are measured against the theme's own surfaces so secondary text remains readable; translucent or wider-gamut values are preserved without being flattened into guessed colors.
+Simple TOML/key-value theme files using the same names are also accepted. Themes can use hex and supported fixed named colors, plus literal RGB/RGBA, HSL/HSLA, HWB, Lab/LCH, Oklab/OkLCh, and `color(…)` values. CSS variables, system colors, calculations, relative colors, conditional/mixing functions, and inherited values are not applied; invalid optional colors receive defaults. Imports trim all colors and use the first supported value when a color has alternative keys such as `background` and `editor.background`. A missing, blank, or non-string imported theme name uses the file name.
+
+Previously saved themes keep their original data. If a saved theme has unsupported background or foreground colors, the picker marks it as needing updating and offers **Export original** so you can edit and reimport it. An unavailable active theme falls back to Default Dark. Importing or deleting another theme preserves these originals; reimporting a corrected theme with the same name replaces that theme explicitly.
+
+Opaque hex, RGB, HSL, named, and `color(srgb …)` values are measured against the theme's own surfaces so secondary text remains readable; translucent or wider-gamut values are preserved without being flattened into guessed colors.
 
 ## Development
 
