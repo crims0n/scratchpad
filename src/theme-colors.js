@@ -22,6 +22,27 @@ const MIN_SECONDARY_CONTRAST = 5;
 // snippet rather than forcing both to the same near-white.
 const MIN_ACTIVE_SURFACE_HEADROOM = 8;
 
+// Fixed sRGB named colors from https://www.w3.org/TR/css-color-4/#named-colors,
+// plus transparent. System colors and currentcolor depend on ambient state.
+const NAMED_COLORS = new Set(`
+  aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet
+  brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan
+  darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta darkolivegreen
+  darkorange darkorchid darkred darksalmon darkseagreen darkslateblue darkslategray darkslategrey
+  darkturquoise darkviolet deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite
+  forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray green greenyellow grey honeydew
+  hotpink indianred indigo ivory khaki lavender lavenderblush lawngreen lemonchiffon lightblue
+  lightcoral lightcyan lightgoldenrodyellow lightgray lightgreen lightgrey lightpink lightsalmon
+  lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime limegreen
+  linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen
+  mediumslateblue mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream mistyrose
+  moccasin navajowhite navy oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen
+  paleturquoise palevioletred papayawhip peachpuff peru pink plum powderblue purple rebeccapurple
+  red rosybrown royalblue saddlebrown salmon sandybrown seagreen seashell sienna silver skyblue
+  slateblue slategray slategrey snow springgreen steelblue tan teal thistle tomato turquoise
+  violet wheat white whitesmoke yellow yellowgreen transparent
+`.trim().split(/\s+/));
+
 // CSS.supports accepts deferred expressions such as var(). Imported and saved
 // themes must supply color values rather than references to ambient CSS. Keep
 // the accepted function shapes explicit, then let the engine check their color
@@ -31,10 +52,9 @@ export function isValidColor(value) {
   const color = value.trim();
   if (!color || /["'<>;&\\\u0000-\u001f\u007f]/.test(color) || /\/\*|\*\//.test(color)) return false;
   if (/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(color)) return true;
-  const named = /^[a-z]+$/i.test(color);
+  const named = NAMED_COLORS.has(color.toLowerCase());
   const functional = /^(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch|color)\([^()]*\)$/i.test(color);
-  if ((!named && !functional) || /^(?:currentcolor|inherit|initial|unset|revert)$/i.test(color)
-    || /\bfrom\b/i.test(color) || color.includes("--")) return false;
+  if ((!named && !functional) || /\bfrom\b/i.test(color) || color.includes("--")) return false;
   return typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("color", color);
 }
 

@@ -6,6 +6,16 @@ import { bootApp } from "./helpers/app-harness.js";
 import { isValidColor } from "../src/theme-colors.js";
 
 let selected;
+const originalThemes = [
+  { id: "unsafe-saved", name: "Unsafe", background: "var(--other)", foreground: "#fff" },
+  ...["color-mix(in srgb, #222, #000)", "light-dark(white, black)", "rgb(calc(20) 20 20)",
+    "rgb(from red r g b)", "Canvas"].map((background, index) => ({
+    id: `legacy-${index}`, name: `Legacy ${index}`, background, foreground: "#fff", extra: { keep: true }
+  })),
+  { id: "safe-saved", name: "Safe", background: "#101010", foreground: "#f0f0f0",
+    sidebar: "url(https://example.test/image)", accent: "calc(1)",
+    border: "env(other)", selection: "attr(data-color)" }
+];
 const app = await bootApp({
   // Model the permissive response to deferred CSS expressions. The app must
   // reject these before relying on the browser's color grammar validation.
@@ -13,12 +23,7 @@ const app = await bootApp({
   handlers: { import_file_native: () => selected },
   storage: {
     scratchpad_active_theme: "unsafe-saved",
-    scratchpad_custom_themes: [
-      { id: "unsafe-saved", name: "Unsafe", background: "var(--other)", foreground: "#fff" },
-      { id: "safe-saved", name: "Safe", background: "#101010", foreground: "#f0f0f0",
-        sidebar: "url(https://example.test/image)", accent: "calc(1)",
-        border: "env(other)", selection: "attr(data-color)" }
-    ]
+    scratchpad_custom_themes: originalThemes
   }
 });
 
@@ -31,22 +36,42 @@ async function importTheme(theme, title = "imported_theme.json") {
 const alerts = () => app.invocations.filter(call => call.command === "show_alert_dialog");
 const saved = () => app.read("scratchpad_custom_themes");
 
-test("saved themes reject deferred colors and fall back safely when the active theme is invalid", () => {
+test("saved themes remain intact on upgrade while unsupported required colors cannot be applied", () => {
   assert.equal(app.storage.getItem("scratchpad_active_theme"), "default-dark");
   assert.equal(document.documentElement.classList.contains("theme-dark"), true);
-  const themes = saved();
-  assert.deepEqual(themes.map(theme => theme.id), ["safe-saved"]);
-  assert.equal(themes[0].sidebar, "#101010");
-  assert.equal(themes[0].accent, "#3b82f6");
-  assert.equal(themes[0].border, "rgba(128,128,128,0.2)");
-  assert.equal(themes[0].selection, "rgba(59,130,246,0.2)");
+  assert.equal(app.storage.getItem("scratchpad_custom_themes"), JSON.stringify(originalThemes));
+  assert.equal(document.getElementById("theme-recovery-notice").hidden, false);
+  const unavailable = [...document.querySelectorAll(".theme-card-unavailable")];
+  assert.equal(unavailable.length, 6);
+  for (const card of unavailable) {
+    assert.equal(card.getAttribute("role"), "group");
+    assert.equal(card.querySelector("[style]"), null);
+    card.click();
+    assert.equal(app.storage.getItem("scratchpad_active_theme"), "default-dark");
+  }
+});
+
+test("unsupported themes can be exported with their original colors and extra fields", async t => {
+  let blob;
+  const downloads = [];
+  t.mock.method(URL, "createObjectURL", value => { blob = value; return "blob:original-theme"; });
+  t.mock.method(URL, "revokeObjectURL", () => {});
+  t.mock.method(app.dom.window.HTMLAnchorElement.prototype, "click", function () { downloads.push(this.download); });
+  const cards = [...document.querySelectorAll(".theme-card-unavailable")];
+  for (const [index, card] of cards.entries()) {
+    card.querySelector(".theme-recover-export").click();
+    assert.deepEqual(JSON.parse(await blob.text()), originalThemes[index]);
+  }
+  assert.equal(downloads.length, 6);
+  assert.equal(app.storage.getItem("scratchpad_custom_themes"), JSON.stringify(originalThemes));
 });
 
 test("invalid required colors leave the active theme and stored themes unchanged", async () => {
   const expressions = ["var(--other)", "VAR(--other, red)", "url(https://example.test/image)",
     "attr(data-color)", "env(other)", "calc(1)", "rgb(from red r g b)",
     "rgb(var(--channels))", "light-dark(white, black)", "color-mix(in srgb, red, blue)",
-    "currentColor", "inherit", "red; padding: 0", 'red\" onmouseover=\"alert(1)',
+    "currentColor", "inherit", "Canvas", "CanvasText", "Highlight", "AccentColor", "ButtonFace",
+    "red; padding: 0", 'red\" onmouseover=\"alert(1)',
     "r\\65 d", "rgb(1/**/ 2 3)", "color(--custom-profile 0.1 0.2 0.3)"];
   const stored = app.storage.getItem("scratchpad_custom_themes");
   const active = app.storage.getItem("scratchpad_active_theme");
@@ -57,6 +82,8 @@ test("invalid required colors leave the active theme and stored themes unchanged
       await importTheme({ name: "Invalid", background: "#101010", foreground: "#f0f0f0", [field]: expression });
       assert.equal(alerts().length, before + 1, `${field}: ${expression}`);
       assert.equal(alerts().at(-1).args.title, "Invalid Theme File");
+      assert.match(alerts().at(-1).args.message, /fixed named colors.*RGB\/HSL\/HWB/);
+      assert.match(alerts().at(-1).args.message, /CSS variables, system colors, calculations/);
       assert.equal(app.storage.getItem("scratchpad_custom_themes"), stored);
       assert.equal(app.storage.getItem("scratchpad_active_theme"), active);
       assert.equal(document.documentElement.style.cssText, styles);
@@ -128,4 +155,94 @@ test("non-hex literals still require browser support, while non-string colors ar
     assert.equal(isValidColor(value), false);
   }
   assert.equal(isValidColor("#abcdef80"), true);
+});
+
+test("only fixed named colors pass even when the browser accepts system colors", () => {
+  for (const value of ["Canvas", "CanvasText", "Highlight", "AccentColor", "AccentColorText", "ButtonFace",
+    "ButtonBorder", "ButtonText", "Field", "FieldText", "GrayText", "LinkText", "Mark", "MarkText",
+    "SelectedItem", "SelectedItemText", "VisitedText", "ActiveText", "ActiveBorder", "WindowText", "Menu", "Background"]) {
+    assert.equal(isValidColor(value), false, value);
+  }
+  for (const value of ["RebeccaPurple", "aliceblue", "darkgrey", "lightgoldenrodyellow", "yellowgreen", "transparent"]) {
+    assert.equal(isValidColor(value), true, value);
+  }
+});
+
+test("JSON and key-value imports trim every color before it is stored or applied", async () => {
+  const values = { name: "Trimmed", background: "\n#101010 ", foreground: "\twhite ", sidebar: " #252526 ",
+    accent: " rgb(1 2 3) ", border: " rgba(1, 2, 3, 0.5) ", selection: " hsl(120 50% 50%) " };
+  await importTheme(values);
+  const expected = Object.fromEntries(Object.entries(values).map(([key, value]) => [key, value.trim()]));
+  for (const [key, value] of Object.entries(expected)) assert.equal(saved().find(theme => theme.name === "Trimmed")[key], value);
+  assert.equal(document.documentElement.style.getPropertyValue("--bg-app"), "#101010");
+
+  await importTheme('name = "Trimmed KV"\nbackground = "  #101010  " # comment\nforeground = " white "\nsidebar = #252526\naccent = " rgb(1 2 3) "\nborder = " rgba(1, 2, 3, 0.5) "\nselection = " hsl(120 50% 50%) "', "trimmed.toml");
+  const kv = saved().find(theme => theme.name === "Trimmed KV");
+  assert.ok(kv);
+  for (const [key, value] of Object.entries(expected)) if (key !== "name") assert.equal(kv[key], value);
+});
+
+test("valid alias colors are used when higher-priority fields are unsupported", async () => {
+  const before = alerts().length;
+  const colors = { background: "var(--other)", "editor.background": " #101010 ", foreground: "CanvasText",
+    "editor.foreground": " #f0f0f0 ", sidebar: "var(--other)", "sideBar.background": " #252526 ",
+    accent: "calc(1)", "editorCursor.foreground": " #ff0000 ", border: "env(other)", "panel.border": " #222222 ",
+    selection: "light-dark(white, black)", "editor.selectionBackground": " #333333 " };
+  const expected = { background: "#101010", foreground: "#f0f0f0", sidebar: "#252526", accent: "#ff0000",
+    border: "#222222", selection: "#333333" };
+  await importTheme({ name: "Aliases", colors });
+  for (const [key, value] of Object.entries(expected)) assert.equal(saved().find(theme => theme.name === "Aliases")[key], value);
+  const kv = Object.entries(colors).map(([key, value]) => `${key} = "${value}"`).join("\n");
+  await importTheme(`name = "Aliases KV"\n${kv}`, "aliases.toml");
+  for (const [key, value] of Object.entries(expected)) assert.equal(saved().find(theme => theme.name === "Aliases KV")[key], value);
+  assert.equal(alerts().length, before);
+});
+
+test("unrelated imports and theme deletions preserve all original saved theme fields", async () => {
+  for (const original of originalThemes) assert.deepEqual(saved().find(theme => theme.id === original.id), original);
+  const card = [...document.querySelectorAll(".theme-card")]
+    .find(card => card.querySelector(".theme-card-name")?.textContent === "reusable");
+  assert.ok(card);
+  card.querySelector(".theme-card-delete").click();
+  assert.equal(saved().some(theme => theme.name === "reusable"), false);
+  for (const original of originalThemes) assert.deepEqual(saved().find(theme => theme.id === original.id), original);
+});
+
+test("a corrected reimport explicitly replaces one unsupported theme and leaves the others recoverable", async () => {
+  await importTheme({ name: "Legacy 0", background: "#101010", foreground: "#f0f0f0" });
+  const matches = saved().filter(theme => theme.name === "Legacy 0");
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0].background, "#101010");
+  assert.equal(document.querySelectorAll(".theme-card-unavailable").length, 5);
+  for (const original of originalThemes.filter(theme => theme.id !== "legacy-0")) {
+    assert.deepEqual(saved().find(theme => theme.id === original.id), original);
+  }
+});
+
+test("a failed storage write keeps the active theme, picker and original records unchanged", async t => {
+  const before = app.storage.getItem("scratchpad_custom_themes");
+  const active = app.storage.getItem("scratchpad_active_theme");
+  const grid = document.getElementById("theme-grid").textContent;
+  const original = app.dom.window.Storage.prototype.setItem;
+  t.mock.method(app.dom.window.Storage.prototype, "setItem", function (key, value) {
+    if (key === "scratchpad_custom_themes") throw new Error("storage full");
+    return original.call(this, key, value);
+  });
+  await importTheme({ name: "Failed import", background: "#101010", foreground: "#f0f0f0" });
+  assert.equal(app.storage.getItem("scratchpad_custom_themes"), before);
+  assert.equal(app.storage.getItem("scratchpad_active_theme"), active);
+  assert.equal(document.getElementById("theme-grid").textContent, grid);
+  assert.equal(alerts().at(-1).args.title, "Theme Import Error");
+});
+
+test("restart preserves original theme records and exposes unsupported themes for recovery again", async () => {
+  const storage = app.dumpStorage();
+  const before = storage.scratchpad_custom_themes;
+  const next = await bootApp({ instance: 2, globals: { CSS: { supports: () => true } },
+    storage: { ...storage, scratchpad_active_theme: "legacy-1" } });
+  assert.equal(next.storage.getItem("scratchpad_custom_themes"), before);
+  assert.equal(next.storage.getItem("scratchpad_active_theme"), "default-dark");
+  assert.equal(document.querySelectorAll(".theme-card-unavailable").length, 5);
+  assert.equal(document.getElementById("theme-recovery-notice").hidden, false);
+  assert.deepEqual(next.read("scratchpad_custom_themes").find(theme => theme.id === "safe-saved"), originalThemes.at(-1));
 });

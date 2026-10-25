@@ -292,6 +292,8 @@ let aboutModalPreviousFocus = null;
 let isMcpConfigModalOpen = false;
 let mcpConfigModalPreviousFocus = null;
 let customThemes = [];
+let storedCustomThemes = [];
+let unavailableCustomThemes = [];
 let activeThemeId = "default-dark";
 let findMatches = [];
 let activeMatchIndex = -1;
@@ -5154,10 +5156,8 @@ function loadSavedThemes() {
     if (saved) {
       const parsedThemes = JSON.parse(saved);
       if (Array.isArray(parsedThemes)) {
-        customThemes = parsedThemes
-          .map((theme, index) => normalizeCustomTheme(theme, index))
-          .filter(Boolean);
-        localStorage.setItem("scratchpad_custom_themes", JSON.stringify(customThemes));
+        storedCustomThemes = parsedThemes;
+        refreshCustomThemes();
       }
     }
   } catch (e) {}
@@ -5278,21 +5278,64 @@ function clearCustomThemeStyles() {
   delete root.dataset.themeStyle;
 }
 
-function normalizeCustomTheme(theme, index = 0) {
-  if (!theme || typeof theme !== "object") return null;
-  if (!isValidColor(theme.background) || !isValidColor(theme.foreground)) return null;
+function customThemeName(name, fallback) {
+  return typeof name === "string" && name.trim() ? name.trim() : fallback;
+}
+
+function customThemeId(id, index) {
+  return typeof id === "string" && id ? id : `custom_saved_${index}`;
+}
+
+function firstThemeColor(...values) {
+  return values.find(isValidColor)?.trim();
+}
+
+function normalizeCustomTheme(theme, index = 0, fallbackName = `Custom Theme ${index + 1}`) {
+  if (!theme || typeof theme !== "object" || Array.isArray(theme)) return null;
+  const colors = theme.colors || theme;
+  if (typeof colors !== "object" || Array.isArray(colors)) return null;
+  const background = firstThemeColor(colors.background, colors["editor.background"], colors.bg, colors.editor_bg);
+  const foreground = firstThemeColor(colors.foreground, colors["editor.foreground"], colors.fg, colors.editor_text);
+  if (!background || !foreground) return null;
 
   return {
-    id: typeof theme.id === "string" && theme.id ? theme.id : `custom_saved_${index}`,
-    name: typeof theme.name === "string" && theme.name.trim() ? theme.name.trim() : `Custom Theme ${index + 1}`,
-    background: theme.background.trim(),
-    foreground: theme.foreground.trim(),
-    sidebar: isValidColor(theme.sidebar) ? theme.sidebar.trim() : theme.background.trim(),
-    accent: isValidColor(theme.accent) ? theme.accent.trim() : "#3b82f6",
-    border: isValidColor(theme.border) ? theme.border.trim() : "rgba(128,128,128,0.2)",
-    selection: isValidColor(theme.selection) ? theme.selection.trim() : "rgba(59,130,246,0.2)",
+    id: customThemeId(theme.id, index),
+    name: customThemeName(theme.name, fallbackName),
+    background,
+    foreground,
+    sidebar: firstThemeColor(colors.sidebar, colors["sideBar.background"], colors["sidebar.background"],
+      colors.sidebar_bg, colors["activityBar.background"], colors["activitybar.background"]) || background,
+    accent: firstThemeColor(colors.accent, colors.cursor, colors["activityBar.foreground"],
+      colors["activitybar.foreground"], colors["editorCursor.foreground"], colors["editorcursor.foreground"]) || "#3b82f6",
+    border: firstThemeColor(colors.border, colors["panel.border"], colors["sideBar.border"], colors["sidebar.border"]) || "rgba(128,128,128,0.2)",
+    selection: firstThemeColor(colors.selection, colors["editor.selectionBackground"], colors["editor.selectionbackground"],
+      colors["list.activeSelectionBackground"], colors["list.activeselectionbackground"]) || "rgba(59,130,246,0.2)",
     isCustom: true
   };
+}
+
+function refreshCustomThemes() {
+  customThemes = [];
+  unavailableCustomThemes = [];
+  storedCustomThemes.forEach((original, index) => {
+    const theme = normalizeCustomTheme(original, index);
+    if (theme) {
+      customThemes.push(theme);
+      // Keep generated IDs stable across later imports/deletions. Loading
+      // never rewrites storage, and original color/name fields stay intact.
+      if (original.id !== theme.id) storedCustomThemes[index] = { ...original, id: theme.id };
+    } else {
+      unavailableCustomThemes.push({ original, name: customThemeName(original?.name, `Custom Theme ${index + 1}`) });
+    }
+  });
+}
+
+function saveCustomThemes(themes) {
+  // Preserve original records, including unsupported optional colors, until
+  // the user explicitly replaces or deletes that particular theme.
+  localStorage.setItem("scratchpad_custom_themes", JSON.stringify(themes));
+  storedCustomThemes = themes;
+  refreshCustomThemes();
 }
 
 async function promptImportError(title, message) {
@@ -5308,6 +5351,7 @@ async function promptImportError(title, message) {
 function renderThemeGrid() {
   if (!themeGrid) return;
   themeGrid.innerHTML = "";
+  document.getElementById("theme-recovery-notice").hidden = unavailableCustomThemes.length === 0;
 
   const allThemes = [...PRESET_THEMES, ...customThemes];
 
@@ -5368,11 +5412,33 @@ function renderThemeGrid() {
 
     themeGrid.appendChild(card);
   });
+
+  unavailableCustomThemes.forEach(({ original, name }) => {
+    const card = document.createElement("div");
+    card.className = "theme-card theme-card-unavailable";
+    card.setAttribute("role", "group");
+    card.setAttribute("aria-label", `${name} theme needs updating`);
+    const heading = document.createElement("span");
+    heading.className = "theme-card-name";
+    heading.textContent = name;
+    const message = document.createElement("p");
+    message.className = "theme-recovery-message";
+    message.textContent = "Needs updating. Export the original theme to edit its colors and reimport it.";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "theme-action-btn theme-recover-export";
+    button.textContent = "Export original";
+    button.setAttribute("aria-label", `Export original ${name} theme`);
+    button.addEventListener("click", () => exportThemeData(original, name));
+    card.append(heading, message, button);
+    // Unsupported colors are never used in CSS or preview markup.
+    themeGrid.appendChild(card);
+  });
 }
 
 function deleteCustomTheme(themeId) {
-  customThemes = customThemes.filter(t => t.id !== themeId);
-  localStorage.setItem("scratchpad_custom_themes", JSON.stringify(customThemes));
+  saveCustomThemes(storedCustomThemes.filter((theme, index) =>
+    customThemeId(theme?.id, index) !== themeId));
   if (activeThemeId === themeId) {
     applyTheme("default-dark");
   } else {
@@ -5425,117 +5491,44 @@ async function processImportedTheme(content, fileName) {
   if (!result.success) {
     await promptImportError(
       "Invalid Theme File",
-      `Could not import "${fileName}".\n\nReason: ${result.error}\n\nPlease ensure your file is a valid JSON or TOML color scheme with valid HEX or RGB color codes for "background" and "foreground".`
+      `Could not import "${fileName}".\n\nReason: ${result.error}\n\nUse a JSON or TOML/key-value theme with explicit colors for "background" and "foreground": hex, fixed named colors, RGB/HSL/HWB, Lab/LCH, Oklab/OkLCh, or color(…). CSS variables, system colors, calculations, and other expressions are not supported.`
     );
     return;
   }
 
   const theme = result.theme;
-  const existingIdx = customThemes.findIndex(t => t.id === theme.id || t.name.toLowerCase() === theme.name.toLowerCase());
-  if (existingIdx !== -1) {
-    customThemes[existingIdx] = theme;
-  } else {
-    customThemes.push(theme);
-  }
+  const existingIdx = storedCustomThemes.findIndex((saved, index) =>
+    customThemeId(saved?.id, index) === theme.id
+    || customThemeName(saved?.name, `Custom Theme ${index + 1}`).toLowerCase() === theme.name.toLowerCase());
+  const updated = [...storedCustomThemes];
+  if (existingIdx !== -1) updated[existingIdx] = theme;
+  else updated.push(theme);
 
-  localStorage.setItem("scratchpad_custom_themes", JSON.stringify(customThemes));
+  saveCustomThemes(updated);
   applyTheme(theme.id);
 }
 
 function parseThemeContent(content, fileName) {
-  const cleanName = fileName.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
-
-  // 1. Try JSON
+  const cleanName = fileName.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ").trim() || "Imported Theme";
+  let data;
   try {
-    const data = JSON.parse(content);
-    if (typeof data !== "object" || data === null) {
-      return { success: false, error: "Root JSON is not an object" };
+    data = JSON.parse(content);
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      return { success: false, error: "Root JSON must be a theme object" };
     }
-
-    const colors = data.colors || data;
-    const bg = colors.background || colors["editor.background"] || colors.bg || colors.editor_bg;
-    const fg = colors.foreground || colors["editor.foreground"] || colors.fg || colors.editor_text;
-
-    if (!bg || !fg) {
-      return { success: false, error: "Missing required 'background' or 'foreground' color properties" };
-    }
-    if (!isValidColor(bg)) {
-      return { success: false, error: `Invalid background color value: "${bg}"` };
-    }
-    if (!isValidColor(fg)) {
-      return { success: false, error: `Invalid foreground color value: "${fg}"` };
-    }
-
-    const sb = colors.sidebar || colors["sideBar.background"] || colors.sidebar_bg || colors["activityBar.background"] || bg;
-    const accent = colors.accent || colors.cursor || colors["activityBar.foreground"] || colors["editorCursor.foreground"] || "#3b82f6";
-    const border = colors.border || colors["panel.border"] || colors["sideBar.border"] || "rgba(128,128,128,0.2)";
-    const sel = colors.selection || colors["editor.selectionBackground"] || colors["list.activeSelectionBackground"] || "rgba(59,130,246,0.2)";
-
-    return {
-      success: true,
-      theme: {
-        id: "custom_" + Date.now(),
-        name: typeof data.name === "string" && data.name.trim() ? data.name.trim() : cleanName,
-        background: bg,
-        foreground: fg,
-        sidebar: isValidColor(sb) ? sb : bg,
-        accent: isValidColor(accent) ? accent : "#3b82f6",
-        border: isValidColor(border) ? border : "rgba(128,128,128,0.2)",
-        selection: isValidColor(sel) ? sel : "rgba(59,130,246,0.2)",
-        isCustom: true
-      }
-    };
-  } catch (e) {
-    // If not valid JSON, proceed to TOML / Key-Value check
-  }
-
-  // 2. Try TOML / Key-Value / Alacritty / Ghostty style
-  const lines = content.split("\n");
-  const kv = {};
-  for (const line of lines) {
-    const clean = line.trim();
-    if (!clean || clean.startsWith("#")) continue;
-    const match = clean.match(/^([a-zA-Z0-9_.-]+)\s*[:=]\s*["']?([^"'\r\n#]+)["']?/);
-    if (match) {
-      kv[match[1].toLowerCase()] = match[2].trim();
+  } catch (error) {
+    // Simple TOML / key-value / Alacritty / Ghostty style.
+    data = {};
+    for (const line of content.split("\n")) {
+      const match = line.trim().match(/^([a-zA-Z0-9_.-]+)\s*[:=]\s*(?:"([^"]*)"|'([^']*)'|(#[0-9a-fA-F]+|[^#]*?))\s*(?:#.*)?$/);
+      if (match) data[match[1].toLowerCase()] = (match[2] ?? match[3] ?? match[4]).trim();
     }
   }
 
-  const bg = kv.background || kv.bg || kv.editor_bg;
-  const fg = kv.foreground || kv.fg || kv.editor_text;
-
-  if (bg && fg) {
-    if (!isValidColor(bg)) {
-      return { success: false, error: `Invalid background color value: "${bg}"` };
-    }
-    if (!isValidColor(fg)) {
-      return { success: false, error: `Invalid foreground color value: "${fg}"` };
-    }
-
-    const sb = kv.sidebar || kv.sidebar_bg || bg;
-    const accent = kv.accent || kv.cursor || "#3b82f6";
-    const border = kv.border || "rgba(128,128,128,0.2)";
-    const sel = kv.selection || "rgba(59,130,246,0.2)";
-
-    return {
-      success: true,
-      theme: {
-        id: "custom_" + Date.now(),
-        name: typeof kv.name === "string" && kv.name.trim() ? kv.name.trim() : cleanName,
-        background: bg,
-        foreground: fg,
-        sidebar: isValidColor(sb) ? sb : bg,
-        accent: isValidColor(accent) ? accent : "#3b82f6",
-        border: isValidColor(border) ? border : "rgba(128,128,128,0.2)",
-        selection: isValidColor(sel) ? sel : "rgba(59,130,246,0.2)",
-        isCustom: true
-      }
-    };
-  }
-
-  return { 
-    success: false, 
-    error: "File could not be parsed as valid JSON or TOML/Key-Value color scheme with valid 'background' and 'foreground' color codes" 
+  const theme = normalizeCustomTheme({ ...data, id: "custom_" + Date.now() }, 0, cleanName);
+  return theme ? { success: true, theme } : {
+    success: false,
+    error: "Missing or unsupported background/foreground colors; provide at least one supported value for each"
   };
 }
 
@@ -5553,12 +5546,16 @@ function exportCurrentTheme() {
     selection: active.selection
   };
 
-  const jsonStr = JSON.stringify(exportData, null, 2);
+  exportThemeData(exportData, active.name);
+}
+
+function exportThemeData(data, name) {
+  const jsonStr = JSON.stringify(data, null, 2);
   const blob = new Blob([jsonStr], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${active.name.toLowerCase().replace(/\s+/g, "-")}-theme.json`;
+  a.download = `${name.toLowerCase().replace(/\s+/g, "-")}-theme.json`;
   a.click();
   URL.revokeObjectURL(url);
 }

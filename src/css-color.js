@@ -1,17 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Theme import accepts supported literal colours -- isValidColor checks the
-// input boundary before CSS.supports -- but the rest of the app could only read
-// hex, so every other form was treated as dark. A white `rgb()` theme was handed
-// the dark palette.
+// isValidColor gates theme input shapes and asks CSS.supports about browser
+// support. This module separately resolves accepted values for classification
+// and contrast, using the browser's computed color rather than a conversion
+// grammar for every input notation.
 //
-// Rather than reimplement CSS colour parsing (rgb, hsl, named, and whatever the
-// engine adds next), this hands the value back to the engine and reads the
-// computed colour, which engines serialise as rgb()/rgba() -- or, for a colour
-// written in CSS Color 4 notation, as that same notation. Both sRGB
-// serialisations are read here, so accepted theme colours resolve unless they
-// use spaces sRGB cannot express, rather than maintaining a
-// second grammar that drifts from it.
+// We read computed rgb()/rgba() and color(srgb ...). Other computed notations,
+// including lab(), lch(), oklab(), oklch() and color(display-p3 ...), remain
+// unmeasurable here. They retain the documented dark classification fallback;
+// contrast derivation leaves them unchanged. Acceptance does not imply that a
+// color can be measured or classified as light by this resolver.
 
 // Matches the computed serialisation: "rgb(12, 34, 56)" or "rgba(12, 34, 56,
 // 0.5)". Modern engines may emit the space-separated form, so both are read.

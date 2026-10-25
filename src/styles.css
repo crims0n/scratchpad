@@ -2963,6 +2963,18 @@ kbd {
   gap: 14px;
 }
 
+.theme-recovery-notice,
+.theme-recovery-message {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin: 0 0 14px;
+}
+
+.theme-recovery-message {
+  margin: 0;
+}
+
 .theme-card {
   background-color: var(--editor-bg);
   border: 2px solid var(--border-color);
@@ -2981,6 +2993,16 @@ kbd {
   transform: translateY(-2px);
   border-color: var(--accent-color);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+.theme-card-unavailable {
+  cursor: default;
+}
+
+.theme-card-unavailable:hover {
+  transform: none;
+  border-color: var(--border-color);
+  box-shadow: none;
 }
 
 .theme-card:focus-visible,
