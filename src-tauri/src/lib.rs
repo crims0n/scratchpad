@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use std::fs;
+use std::io::Write;
+#[cfg(unix)]
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use tauri::Manager;
 #[cfg(target_os = "macos")]
@@ -67,7 +70,21 @@ fn write_preferences(path: &Path, preferences: &AppPreferences) -> Result<(), St
         .map_err(|e| format!("Could not create native preferences directory: {e}"))?;
     let contents = serde_json::to_vec_pretty(preferences)
         .map_err(|e| format!("Could not serialize native preferences: {e}"))?;
-    fs::write(path, contents).map_err(|e| format!("Could not write native preferences: {e}"))
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create(true).truncate(false);
+    #[cfg(unix)]
+    options.mode(0o600);
+    let mut file = options
+        .open(path)
+        .map_err(|e| format!("Could not open native preferences: {e}"))?;
+    // Preferences are app-owned, unlike portable workspace files. Restrict
+    // older preference files too, before replacing their contents.
+    #[cfg(unix)]
+    file.set_permissions(fs::Permissions::from_mode(0o600))
+        .map_err(|e| format!("Could not restrict native preferences: {e}"))?;
+    file.set_len(0)
+        .and_then(|()| file.write_all(&contents))
+        .map_err(|e| format!("Could not write native preferences: {e}"))
 }
 
 fn load_workspace_preference_from(
@@ -1219,6 +1236,39 @@ mod tests {
         assert_eq!(fs::read_to_string(&candidate).unwrap(), "unchanged");
         fs::remove_file(preferences).unwrap();
         fs::remove_file(candidate).unwrap();
+    }
+
+    #[test]
+    fn native_preferences_are_private_and_shorter_rewrites_leave_valid_json() {
+        let path = temporary_db_path("private-preferences").with_extension("json");
+        write_preferences(
+            &path,
+            &AppPreferences {
+                last_workspace: Some("a long workspace path to be replaced".into()),
+            },
+        )
+        .unwrap();
+        #[cfg(unix)]
+        {
+            assert_eq!(
+                fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+            // Existing app-owned preferences are tightened on their next write.
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+        }
+        write_preferences(&path, &AppPreferences::default()).unwrap();
+        assert!(read_preferences(&path)
+            .unwrap()
+            .unwrap()
+            .last_workspace
+            .is_none());
+        #[cfg(unix)]
+        assert_eq!(
+            fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        fs::remove_file(path).unwrap();
     }
 
     #[test]

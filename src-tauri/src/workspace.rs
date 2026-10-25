@@ -4,6 +4,32 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+fn open_connection(
+    path: &Path,
+    mut flags: rusqlite::OpenFlags,
+) -> Result<rusqlite::Connection, String> {
+    if flags.contains(rusqlite::OpenFlags::SQLITE_OPEN_CREATE) {
+        // Precreate only new files. SQLite's Unix VFS gives new journal/WAL
+        // files the database's mode, so there is no per-save permission work.
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        match options.open(path) {
+            Ok(file) => drop(file),
+            // A file that appeared after the native choice is existing data:
+            // do not truncate it or change its sharing permissions.
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(error) => return Err(error.to_string()),
+        }
+        flags.remove(rusqlite::OpenFlags::SQLITE_OPEN_CREATE);
+    }
+    rusqlite::Connection::open_with_flags(path, flags).map_err(|error| error.to_string())
+}
+
 #[derive(Default)]
 struct Grants {
     current: Option<PathBuf>,
@@ -93,15 +119,13 @@ impl Workspaces {
     }
 
     pub(crate) fn open(&self, path: &str) -> Result<rusqlite::Connection, String> {
-        self.open_with(path, |path, flags| {
-            rusqlite::Connection::open_with_flags(path, flags)
-        })
+        self.open_with(path, open_connection)
     }
 
     fn open_with(
         &self,
         path: &str,
-        open: impl FnOnce(&Path, rusqlite::OpenFlags) -> rusqlite::Result<rusqlite::Connection>,
+        open: impl FnOnce(&Path, rusqlite::OpenFlags) -> Result<rusqlite::Connection, String>,
     ) -> Result<rusqlite::Connection, String> {
         let path = canonical_path(Path::new(path))?;
         let creation = self
@@ -136,6 +160,92 @@ mod tests {
         let path = std::env::temp_dir().join(format!("scratchpad-grants-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir(&path).unwrap();
         path.canonicalize().unwrap()
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn new_workspaces_and_sidecars_are_private_but_existing_workspace_modes_are_preserved() {
+        use std::os::unix::fs::PermissionsExt;
+
+        for existing in [false, true] {
+            for journal_mode in ["PERSIST", "WAL"] {
+                let directory = directory();
+                let path = directory.join("workspace.sqlite");
+                let expected_mode = if existing { 0o640 } else { 0o600 };
+                if existing {
+                    std::fs::write(&path, "").unwrap();
+                    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(expected_mode))
+                        .unwrap();
+                }
+                let workspaces = Workspaces::default();
+                workspaces.authorize(&path, !existing).unwrap();
+                let connection = workspaces.open(path.to_str().unwrap()).unwrap();
+                connection
+                    .execute_batch(&format!(
+                        "PRAGMA journal_mode={journal_mode};
+                         CREATE TABLE test (body TEXT);
+                         INSERT INTO test VALUES ('keep this note');"
+                    ))
+                    .unwrap();
+                let suffixes: &[&str] = if journal_mode == "WAL" {
+                    &["", "-wal", "-shm"]
+                } else {
+                    &["", "-journal"]
+                };
+                for suffix in suffixes {
+                    let file = directory.join(format!("workspace.sqlite{suffix}"));
+                    assert_eq!(
+                        std::fs::metadata(&file).unwrap().permissions().mode() & 0o777,
+                        expected_mode,
+                        "unexpected permissions for {}",
+                        file.display()
+                    );
+                }
+                drop(connection);
+                let reopened = workspaces.open(path.to_str().unwrap()).unwrap();
+                let body: String = reopened
+                    .query_row("SELECT body FROM test", [], |row| row.get(0))
+                    .unwrap();
+                assert_eq!(body, "keep this note");
+                drop(reopened);
+                std::fs::remove_dir_all(directory).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn a_file_appearing_after_the_native_choice_is_not_truncated_or_restricted() {
+        let directory = directory();
+        let path = directory.join("appeared.sqlite");
+        let workspaces = Workspaces::default();
+        workspaces.authorize(&path, true).unwrap();
+        let external = rusqlite::Connection::open(&path).unwrap();
+        external
+            .execute_batch(
+                "CREATE TABLE test (body TEXT); INSERT INTO test VALUES ('existing note');",
+            )
+            .unwrap();
+        drop(external);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o640)).unwrap();
+        }
+        let connection = workspaces.open(path.to_str().unwrap()).unwrap();
+        let body: String = connection
+            .query_row("SELECT body FROM test", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(body, "existing note");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                0o640
+            );
+        }
+        drop(connection);
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]
@@ -229,7 +339,7 @@ mod tests {
                 "SQLite opens must not hold the global grants lock"
             );
             assert!(flags.contains(rusqlite::OpenFlags::SQLITE_OPEN_CREATE));
-            Err(rusqlite::Error::InvalidQuery)
+            Err("simulated SQLite open failure".into())
         });
         assert!(result.is_err());
         assert!(!path.exists());
