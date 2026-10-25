@@ -89,7 +89,10 @@ pub async fn open_note_print(
 }
 
 #[tauri::command]
-pub fn get_print_note(app: AppHandle, window: WebviewWindow) -> Result<PrintNote, String> {
+pub fn get_print_note<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    window: WebviewWindow<R>,
+) -> Result<PrintNote, String> {
     require_window(window.label(), PRINT_WINDOW)?;
     app.state::<PrintState>()
         .0
@@ -106,6 +109,12 @@ pub fn print_note_native(window: WebviewWindow) -> Result<(), String> {
     // Linux, and window.print() in WebView2 on Windows. This is the note-only
     // top-level webview, not the editor or an embedded frame.
     window.print().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn close_note_print<R: tauri::Runtime>(window: WebviewWindow<R>) -> Result<(), String> {
+    require_window(window.label(), PRINT_WINDOW)?;
+    window.close().map_err(|error| error.to_string())
 }
 
 #[cfg(test)]

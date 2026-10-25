@@ -1,7 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "note-print",
-  "description": "Allow the note-only print window to close itself; no opener or editor window access.",
-  "windows": ["note-print"],
-  "permissions": ["core:default", "core:window:allow-close"]
+  "description": "Read and print the prepared note snapshot; no collection or workspace access",
+  "windows": [
+    "note-print"
+  ],
+  "permissions": [
+    "allow-close-note-print",
+    "allow-get-print-note",
+    "allow-print-note-native"
+  ]
 }

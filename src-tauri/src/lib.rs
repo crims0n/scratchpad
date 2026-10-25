@@ -15,7 +15,10 @@ mod mcp;
 mod note_print;
 mod recovery;
 mod updates;
+mod workspace;
+mod workspace_commands;
 pub use mcp::run_mcp_stdio;
+use workspace::Workspaces;
 
 const PREFERENCES_FILE_NAME: &str = "scratchpad-preferences.json";
 
@@ -54,12 +57,30 @@ fn write_preferences(path: &Path, preferences: &AppPreferences) -> Result<(), St
 fn load_workspace_preference_from(
     path: &Path,
     legacy_path: Option<String>,
+    confirm_legacy: impl FnOnce(&Path) -> bool,
 ) -> Result<Option<String>, String> {
     if let Some(preferences) = read_preferences(path)? {
         return Ok(preferences.last_workspace);
     }
 
-    let migrated_path = legacy_path.filter(|value| !value.is_empty());
+    // A webview preference is only a hint, never a native file grant. Ask once
+    // before migrating it; ordinary native-preference restores need no prompt.
+    let migrated_path = match legacy_path.filter(|value| !value.is_empty()) {
+        Some(value) => {
+            let candidate = PathBuf::from(value);
+            if !candidate.is_absolute() || !candidate.is_file() {
+                return Err(
+                    "Previous workspace is unavailable. Open it again from the Scratchpad menu."
+                        .into(),
+                );
+            }
+            let candidate = candidate
+                .canonicalize()
+                .map_err(|error| error.to_string())?;
+            confirm_legacy(&candidate).then(|| candidate.to_string_lossy().into_owned())
+        }
+        None => None,
+    };
     write_preferences(
         path,
         &AppPreferences {
@@ -79,13 +100,38 @@ fn preferences_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 #[tauri::command]
 fn load_workspace_preference(
     app: tauri::AppHandle,
+    workspaces: tauri::State<'_, Workspaces>,
     legacy_path: Option<String>,
 ) -> Result<Option<String>, String> {
-    load_workspace_preference_from(&preferences_path(&app)?, legacy_path)
+    let saved = load_workspace_preference_from(&preferences_path(&app)?, legacy_path, |path| {
+        rfd::MessageDialog::new()
+            .set_title("Reopen previous workspace?")
+            .set_description(format!("Scratchpad found this workspace in its previous settings:\n\n{}\n\nReopen it and remember this choice?", path.display()))
+            .set_buttons(rfd::MessageButtons::YesNo)
+            .show() == rfd::MessageDialogResult::Yes
+    })?;
+    saved
+        .map(|path| {
+            workspaces
+                .authorize(Path::new(&path), false)
+                .map(|path| path.to_string_lossy().into_owned())
+        })
+        .transpose()
 }
 
 #[tauri::command]
-fn set_last_workspace(app: tauri::AppHandle, db_path: Option<String>) -> Result<(), String> {
+fn set_last_workspace(
+    app: tauri::AppHandle,
+    workspaces: tauri::State<'_, Workspaces>,
+    db_path: Option<String>,
+) -> Result<(), String> {
+    let db_path = db_path
+        .map(|path| {
+            workspaces
+                .require(Path::new(&path))
+                .map(|path| path.to_string_lossy().into_owned())
+        })
+        .transpose()?;
     write_preferences(
         &preferences_path(&app)?,
         &AppPreferences {
@@ -345,9 +391,11 @@ fn complete_local_restore(app: tauri::AppHandle) -> Result<(), String> {
     backup::complete(&backup::directory(&app)?)
 }
 
-#[tauri::command]
-fn workspace_collection_initialized(db_path: String) -> Result<bool, String> {
-    let conn = rusqlite::Connection::open(db_path).map_err(|error| error.to_string())?;
+fn workspace_collection_initialized(
+    workspaces: &Workspaces,
+    db_path: String,
+) -> Result<bool, String> {
+    let conn = workspaces.open(&db_path)?;
     ensure_workspace_schema(&conn)?;
     let exists: bool = conn.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='collection_metadata')", [], |row| row.get(0))
         .map_err(|error| error.to_string())?;
@@ -455,7 +503,7 @@ fn import_file_native() -> Result<Option<ImportedFile>, String> {
 
 // Database commands
 #[tauri::command]
-fn select_db_file() -> Result<Option<String>, String> {
+fn select_db_file(workspaces: tauri::State<'_, Workspaces>) -> Result<Option<String>, String> {
     const OPEN_EXISTING: &str = "Open Existing Workspace";
     const CREATE_NEW: &str = "Create New Workspace";
     const CANCEL: &str = "Cancel";
@@ -470,6 +518,8 @@ fn select_db_file() -> Result<Option<String>, String> {
         ))
         .show();
 
+    let allow_create = matches!(&choice, rfd::MessageDialogResult::Custom(action) if action == CREATE_NEW)
+        || choice == rfd::MessageDialogResult::No;
     let file_path = match choice {
         rfd::MessageDialogResult::Custom(action) if action == OPEN_EXISTING => {
             rfd::FileDialog::new()
@@ -496,12 +546,17 @@ fn select_db_file() -> Result<Option<String>, String> {
         _ => None,
     };
 
-    Ok(file_path.map(|path| path.to_string_lossy().to_string()))
+    file_path
+        .map(|path| {
+            workspaces
+                .authorize(&path, allow_create)
+                .map(|path| path.to_string_lossy().into_owned())
+        })
+        .transpose()
 }
 
-#[tauri::command]
-fn load_db_notes(db_path: String) -> Result<Vec<Note>, String> {
-    let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
+fn load_db_notes(workspaces: &Workspaces, db_path: String) -> Result<Vec<Note>, String> {
+    let conn = workspaces.open(&db_path)?;
     ensure_workspace_schema(&conn)?;
 
     let mut stmt = conn
@@ -535,9 +590,13 @@ fn load_db_notes(db_path: String) -> Result<Vec<Note>, String> {
     Ok(notes)
 }
 
-#[tauri::command]
-fn save_note_db(db_path: String, note: Note, sort_order: i64) -> Result<(), String> {
-    let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
+fn save_note_db(
+    workspaces: &Workspaces,
+    db_path: String,
+    note: Note,
+    sort_order: i64,
+) -> Result<(), String> {
+    let conn = workspaces.open(&db_path)?;
     ensure_workspace_schema(&conn)?;
 
     conn.execute(
@@ -568,9 +627,8 @@ fn save_note_db(db_path: String, note: Note, sort_order: i64) -> Result<(), Stri
     Ok(())
 }
 
-#[tauri::command]
-fn save_notes_db(db_path: String, notes: Vec<Note>) -> Result<(), String> {
-    let mut conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
+fn save_notes_db(workspaces: &Workspaces, db_path: String, notes: Vec<Note>) -> Result<(), String> {
+    let mut conn = workspaces.open(&db_path)?;
     ensure_workspace_schema(&conn)?;
 
     let transaction = conn.transaction().map_err(|e| e.to_string())?;
@@ -607,9 +665,8 @@ fn save_notes_db(db_path: String, notes: Vec<Note>) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
-fn load_db_folders(db_path: String) -> Result<Vec<Folder>, String> {
-    let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
+fn load_db_folders(workspaces: &Workspaces, db_path: String) -> Result<Vec<Folder>, String> {
+    let conn = workspaces.open(&db_path)?;
     ensure_workspace_schema(&conn)?;
 
     let mut stmt = conn
@@ -631,9 +688,8 @@ fn load_db_folders(db_path: String) -> Result<Vec<Folder>, String> {
     Ok(folders)
 }
 
-#[tauri::command]
-fn load_db_trash(db_path: String) -> Result<Vec<TrashEntry>, String> {
-    let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
+fn load_db_trash(workspaces: &Workspaces, db_path: String) -> Result<Vec<TrashEntry>, String> {
+    let conn = workspaces.open(&db_path)?;
     ensure_workspace_schema(&conn)?;
     let mut stmt = conn
         .prepare("SELECT entry FROM trash ORDER BY rowid")
@@ -647,9 +703,12 @@ fn load_db_trash(db_path: String) -> Result<Vec<TrashEntry>, String> {
     .collect()
 }
 
-#[tauri::command]
-fn save_folders_db(db_path: String, folders: Vec<Folder>) -> Result<(), String> {
-    let mut conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
+fn save_folders_db(
+    workspaces: &Workspaces,
+    db_path: String,
+    folders: Vec<Folder>,
+) -> Result<(), String> {
+    let mut conn = workspaces.open(&db_path)?;
     ensure_workspace_schema(&conn)?;
 
     let transaction = conn.transaction().map_err(|e| e.to_string())?;
@@ -672,8 +731,8 @@ fn save_folders_db(db_path: String, folders: Vec<Folder>) -> Result<(), String> 
     Ok(())
 }
 
-#[tauri::command]
 fn save_workspace_db(
+    workspaces: &Workspaces,
     db_path: String,
     notes: Vec<Note>,
     folders: Vec<Folder>,
@@ -693,7 +752,7 @@ fn save_workspace_db(
             }
         }
     }
-    let mut conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
+    let mut conn = workspaces.open(&db_path)?;
     ensure_workspace_schema(&conn)?;
 
     let transaction = conn.transaction().map_err(|e| e.to_string())?;
@@ -830,11 +889,22 @@ fn handle_macos_menu_event<R: Runtime>(app: &AppHandle<R>, event: tauri::menu::M
     }
 }
 
+fn is_main_navigation_allowed(url: &tauri::Url) -> bool {
+    let local = (url.scheme() == "tauri" && url.host_str() == Some("localhost"))
+        || (matches!(url.scheme(), "http" | "https") && url.host_str() == Some("tauri.localhost"));
+    local
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.port().is_none()
+        && matches!(url.path(), "" | "/" | "/index.html")
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run(context: tauri::Context<tauri::Wry>) {
     let builder = tauri::Builder::default()
         .manage(mcp::McpState::default())
         .manage(note_print::PrintState::default())
+        .manage(Workspaces::default())
         .on_window_event(|window, event| {
             // The frontend destroys main only after pending saves succeed.
             // A print preview must not keep an editor-less process alive;
@@ -853,6 +923,18 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
         // plugin sends them to the user's browser instead. Its capability scope
         // limits it to the same schemes the Markdown sanitizer allows.
         .plugin(tauri_plugin_opener::init())
+        .plugin(
+            tauri::plugin::Builder::<tauri::Wry>::new("navigation-guard")
+                .on_navigation(|webview, url| {
+                    if webview.label() == "main" {
+                        is_main_navigation_allowed(url)
+                    } else {
+                        // The print window has its own, narrower page guard.
+                        webview.label() == "note-print"
+                    }
+                })
+                .build(),
+        )
         .invoke_handler(tauri::generate_handler![
             updates::get_update_info,
             updates::check_for_updates,
@@ -864,6 +946,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             note_print::open_note_print,
             note_print::get_print_note,
             note_print::print_note_native,
+            note_print::close_note_print,
             save_recovery_file_native,
             save_collection_backup,
             read_collection_backup,
@@ -871,19 +954,19 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             begin_local_restore,
             read_local_restore,
             complete_local_restore,
-            workspace_collection_initialized,
+            workspace_commands::workspace_collection_initialized,
             archive_local_recovery,
             has_local_recovery_copies,
             read_local_recovery_copies,
             import_file_native,
             select_db_file,
-            load_db_notes,
-            load_db_folders,
-            load_db_trash,
-            save_note_db,
-            save_notes_db,
-            save_folders_db,
-            save_workspace_db,
+            workspace_commands::load_db_notes,
+            workspace_commands::load_db_folders,
+            workspace_commands::load_db_trash,
+            workspace_commands::save_note_db,
+            workspace_commands::save_notes_db,
+            workspace_commands::save_folders_db,
+            workspace_commands::save_workspace_db,
             show_alert_dialog,
             mcp::update_mcp_snapshot,
             mcp::update_mcp_note,
@@ -930,6 +1013,102 @@ mod tests {
             id: id.to_string(),
             name: name.to_string(),
         }
+    }
+
+    #[test]
+    fn every_database_operation_rejects_unchosen_paths_before_touching_a_file() {
+        let path = temporary_db_path("unauthorized");
+        let db_path = path.to_string_lossy().into_owned();
+        let workspaces = Workspaces::default();
+        for existing in [false, true] {
+            if existing {
+                fs::write(&path, "do not modify this file").unwrap();
+            }
+            assert!(workspace_collection_initialized(&workspaces, db_path.clone()).is_err());
+            assert!(load_db_notes(&workspaces, db_path.clone()).is_err());
+            assert!(load_db_folders(&workspaces, db_path.clone()).is_err());
+            assert!(load_db_trash(&workspaces, db_path.clone()).is_err());
+            assert!(save_note_db(&workspaces, db_path.clone(), note("one", "body", 1), 0).is_err());
+            assert!(save_notes_db(&workspaces, db_path.clone(), vec![]).is_err());
+            assert!(save_folders_db(&workspaces, db_path.clone(), vec![]).is_err());
+            assert!(
+                save_workspace_db(&workspaces, db_path.clone(), vec![], vec![], Some(vec![]))
+                    .is_err()
+            );
+            if existing {
+                assert_eq!(
+                    fs::read_to_string(&path).unwrap(),
+                    "do not modify this file"
+                );
+            } else {
+                assert!(!path.exists());
+            }
+        }
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn main_navigation_stays_on_the_packaged_editor() {
+        for url in [
+            "tauri://localhost",
+            "tauri://localhost/",
+            "tauri://localhost/index.html#note",
+            "http://tauri.localhost/index.html",
+            "https://tauri.localhost/",
+        ] {
+            assert!(is_main_navigation_allowed(&url.parse().unwrap()), "{url}");
+        }
+        for url in [
+            "https://example.com/",
+            "https://tauri.localhost.example.com/index.html",
+            "http://localhost/index.html",
+            "http://127.0.0.1/index.html",
+            "tauri://localhost/note-print.html",
+            "tauri://localhost/main.js",
+            "file:///index.html",
+            "data:text/html,hello",
+            "javascript:alert(1)",
+            "about:blank",
+            "tauri://user@localhost/index.html",
+            "http://tauri.localhost:1234/index.html",
+        ] {
+            assert!(!is_main_navigation_allowed(&url.parse().unwrap()), "{url}");
+        }
+    }
+
+    #[test]
+    fn legacy_workspace_preferences_need_confirmation_and_cannot_create_files() {
+        let preferences = temporary_db_path("legacy-declined").with_extension("json");
+        let candidate = temporary_db_path("legacy-candidate");
+        assert!(load_workspace_preference_from(
+            &preferences,
+            Some(candidate.to_string_lossy().into_owned()),
+            |_| panic!("missing files must not be offered")
+        )
+        .is_err());
+        assert!(!candidate.exists());
+        assert!(!preferences.exists());
+        fs::write(&candidate, "unchanged").unwrap();
+        let result = load_workspace_preference_from(
+            &preferences,
+            Some(candidate.to_string_lossy().into_owned()),
+            |offered| {
+                assert_eq!(offered, candidate.canonicalize().unwrap());
+                false
+            },
+        )
+        .unwrap();
+        assert!(result.is_none());
+        assert!(load_workspace_preference_from(
+            &preferences,
+            Some(candidate.to_string_lossy().into_owned()),
+            |_| panic!("a declined migration must not prompt again")
+        )
+        .unwrap()
+        .is_none());
+        assert_eq!(fs::read_to_string(&candidate).unwrap(), "unchanged");
+        fs::remove_file(preferences).unwrap();
+        fs::remove_file(candidate).unwrap();
     }
 
     #[test]
@@ -990,9 +1169,15 @@ mod tests {
     #[test]
     fn migrates_legacy_workspace_once_and_respects_an_explicit_disconnect() {
         let path = temporary_db_path("native-preferences").with_extension("json");
-        let legacy_path = "/tmp/legacy-workspace.db".to_string();
+        let legacy_file = temporary_db_path("legacy-workspace");
+        fs::write(&legacy_file, "").unwrap();
+        let legacy_path = legacy_file
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
 
-        let migrated = load_workspace_preference_from(&path, Some(legacy_path.clone()))
+        let migrated = load_workspace_preference_from(&path, Some(legacy_path.clone()), |_| true)
             .expect("legacy preference should migrate");
         assert_eq!(migrated, Some(legacy_path));
 
@@ -1007,41 +1192,48 @@ mod tests {
         let stale_legacy = load_workspace_preference_from(
             &path,
             Some("/tmp/stale-origin-workspace.db".to_string()),
+            |_| panic!("native preferences must take precedence"),
         )
         .expect("native preference should take precedence");
         assert_eq!(stale_legacy, None);
 
         std::fs::remove_file(path).expect("temporary preferences should be removable");
+        fs::remove_file(legacy_file).unwrap();
     }
 
     #[test]
     fn saves_the_complete_workspace_in_sidebar_order() {
         let path = temporary_db_path("ordered-workspace");
+        let workspaces = Workspaces::default();
+        workspaces.authorize(&path, true).unwrap();
         let db_path = path.to_string_lossy().into_owned();
 
         save_notes_db(
+            &workspaces,
             db_path.clone(),
             vec![note("older", "left", 1), note("newer", "right", 2)],
         )
         .expect("workspace should save");
 
         save_note_db(
+            &workspaces,
             db_path.clone(),
             note("newer", "edited in secondary pane", 3),
             1,
         )
         .expect("secondary note should save independently");
 
-        let loaded = load_db_notes(db_path.clone()).expect("workspace should load");
+        let loaded = load_db_notes(&workspaces, db_path.clone()).expect("workspace should load");
         assert_eq!(loaded[0].id, "older");
         assert_eq!(loaded[1].content, "edited in secondary pane");
 
         let mut pinned_note = loaded[1].clone();
         pinned_note.is_pinned = true;
         let reordered = vec![pinned_note, loaded[0].clone()];
-        save_notes_db(db_path.clone(), reordered.clone()).expect("workspace should resave");
+        save_notes_db(&workspaces, db_path.clone(), reordered.clone())
+            .expect("workspace should resave");
 
-        let loaded = load_db_notes(db_path).expect("workspace should load");
+        let loaded = load_db_notes(&workspaces, db_path).expect("workspace should load");
         assert_eq!(loaded.len(), 2);
         assert_eq!(loaded[0].id, "newer");
         assert_eq!(loaded[0].content, "edited in secondary pane");
@@ -1054,16 +1246,20 @@ mod tests {
     #[test]
     fn saves_folders_and_note_assignments_in_sidebar_order() {
         let path = temporary_db_path("folder-workspace");
+        let workspaces = Workspaces::default();
+        workspaces.authorize(&path, true).unwrap();
         let db_path = path.to_string_lossy().into_owned();
         let folders = vec![folder("work", "Work"), folder("personal", "Personal")];
-        save_folders_db(db_path.clone(), folders).expect("folders should save");
+        save_folders_db(&workspaces, db_path.clone(), folders).expect("folders should save");
 
         let mut assigned = note("assigned", "in work", 1);
         assigned.folder_id = Some("work".to_string());
-        save_notes_db(db_path.clone(), vec![assigned]).expect("assigned note should save");
+        save_notes_db(&workspaces, db_path.clone(), vec![assigned])
+            .expect("assigned note should save");
 
-        let loaded_folders = load_db_folders(db_path.clone()).expect("folders should load");
-        let loaded_notes = load_db_notes(db_path.clone()).expect("notes should load");
+        let loaded_folders =
+            load_db_folders(&workspaces, db_path.clone()).expect("folders should load");
+        let loaded_notes = load_db_notes(&workspaces, db_path.clone()).expect("notes should load");
         assert_eq!(loaded_folders[0].id, "work");
         assert_eq!(loaded_folders[1].name, "Personal");
         assert_eq!(loaded_notes[0].folder_id.as_deref(), Some("work"));
@@ -1074,6 +1270,8 @@ mod tests {
     #[test]
     fn trash_deletion_and_restore_are_atomic_and_survive_other_saves() {
         let path = temporary_db_path("trash-workspace");
+        let workspaces = Workspaces::default();
+        workspaces.authorize(&path, true).unwrap();
         let db_path = path.to_string_lossy().into_owned();
         let original = note("original", "recover the full body", 1);
         let entry = TrashEntry {
@@ -1083,6 +1281,7 @@ mod tests {
             folder_name: None,
         };
         save_workspace_db(
+            &workspaces,
             db_path.clone(),
             vec![original.clone()],
             vec![],
@@ -1092,6 +1291,7 @@ mod tests {
         // A duplicate recovery ID fails after the active rows have been replaced;
         // the entire transaction must roll back, retaining the live note.
         assert!(save_workspace_db(
+            &workspaces,
             db_path.clone(),
             vec![],
             vec![],
@@ -1099,46 +1299,81 @@ mod tests {
         )
         .is_err());
         assert_eq!(
-            load_db_notes(db_path.clone()).unwrap()[0].content,
+            load_db_notes(&workspaces, db_path.clone()).unwrap()[0].content,
             original.content
         );
-        assert!(load_db_trash(db_path.clone()).unwrap().is_empty());
-        save_workspace_db(db_path.clone(), vec![], vec![], Some(vec![entry.clone()])).unwrap();
-        assert!(load_db_notes(db_path.clone()).unwrap().is_empty());
+        assert!(load_db_trash(&workspaces, db_path.clone())
+            .unwrap()
+            .is_empty());
+        save_workspace_db(
+            &workspaces,
+            db_path.clone(),
+            vec![],
+            vec![],
+            Some(vec![entry.clone()]),
+        )
+        .unwrap();
+        assert!(load_db_notes(&workspaces, db_path.clone())
+            .unwrap()
+            .is_empty());
         assert_eq!(
-            load_db_trash(db_path.clone()).unwrap()[0].note.content,
+            load_db_trash(&workspaces, db_path.clone()).unwrap()[0]
+                .note
+                .content,
             original.content
         );
         save_workspace_db(
+            &workspaces,
             db_path.clone(),
             vec![note("other", "typed", 3)],
             vec![],
             None,
         )
         .unwrap();
-        assert_eq!(load_db_trash(db_path.clone()).unwrap().len(), 1);
+        assert_eq!(
+            load_db_trash(&workspaces, db_path.clone()).unwrap().len(),
+            1
+        );
         // An invalid restored folder cannot remove the recovery entry.
         let mut invalid = original.clone();
         invalid.folder_id = Some("missing".into());
-        assert!(save_workspace_db(db_path.clone(), vec![invalid], vec![], Some(vec![])).is_err());
-        assert_eq!(load_db_trash(db_path.clone()).unwrap().len(), 1);
+        assert!(save_workspace_db(
+            &workspaces,
+            db_path.clone(),
+            vec![invalid],
+            vec![],
+            Some(vec![])
+        )
+        .is_err());
+        assert_eq!(
+            load_db_trash(&workspaces, db_path.clone()).unwrap().len(),
+            1
+        );
         save_workspace_db(
+            &workspaces,
             db_path.clone(),
             vec![original.clone()],
             vec![],
             Some(vec![]),
         )
         .unwrap();
-        assert_eq!(load_db_notes(db_path.clone()).unwrap()[0].id, original.id);
-        assert!(load_db_trash(db_path.clone()).unwrap().is_empty());
+        assert_eq!(
+            load_db_notes(&workspaces, db_path.clone()).unwrap()[0].id,
+            original.id
+        );
+        assert!(load_db_trash(&workspaces, db_path.clone())
+            .unwrap()
+            .is_empty());
         std::fs::remove_file(path).unwrap();
     }
 
     #[test]
     fn collection_backup_round_trip_includes_order_pins_trash_and_initialized_empty_workspaces() {
         let path = temporary_db_path("backup-round-trip");
+        let workspaces = Workspaces::default();
+        workspaces.authorize(&path, true).unwrap();
         let db_path = path.to_string_lossy().into_owned();
-        assert!(!workspace_collection_initialized(db_path.clone()).unwrap());
+        assert!(!workspace_collection_initialized(&workspaces, db_path.clone()).unwrap());
         let mut pinned = note("pinned", "Unicode 🐈", 5);
         pinned.is_pinned = true;
         pinned.folder_id = Some("f".into());
@@ -1159,6 +1394,7 @@ mod tests {
             .to_string();
         let parsed: serde_json::Value = serde_json::from_str(&serialized).unwrap();
         save_workspace_db(
+            &workspaces,
             db_path.clone(),
             serde_json::from_value(parsed["collection"]["notes"].clone()).unwrap(),
             serde_json::from_value(parsed["collection"]["folders"].clone()).unwrap(),
@@ -1166,29 +1402,41 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            serde_json::json!({ "notes": load_db_notes(db_path.clone()).unwrap(),
-            "folders": load_db_folders(db_path.clone()).unwrap(), "trash": load_db_trash(db_path.clone()).unwrap() }),
+            serde_json::json!({ "notes": load_db_notes(&workspaces, db_path.clone()).unwrap(),
+            "folders": load_db_folders(&workspaces, db_path.clone()).unwrap(), "trash": load_db_trash(&workspaces, db_path.clone()).unwrap() }),
             expected
         );
-        assert!(workspace_collection_initialized(db_path.clone()).unwrap());
-        save_workspace_db(db_path.clone(), vec![], vec![], Some(trash)).unwrap();
-        assert!(load_db_notes(db_path.clone()).unwrap().is_empty());
-        assert_eq!(load_db_trash(db_path.clone()).unwrap().len(), 1);
-        save_workspace_db(db_path.clone(), vec![], vec![], Some(vec![])).unwrap();
-        assert!(workspace_collection_initialized(db_path.clone()).unwrap());
-        assert!(load_db_notes(db_path.clone()).unwrap().is_empty());
-        assert!(load_db_folders(db_path.clone()).unwrap().is_empty());
-        assert!(load_db_trash(db_path).unwrap().is_empty());
+        assert!(workspace_collection_initialized(&workspaces, db_path.clone()).unwrap());
+        save_workspace_db(&workspaces, db_path.clone(), vec![], vec![], Some(trash)).unwrap();
+        assert!(load_db_notes(&workspaces, db_path.clone())
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            load_db_trash(&workspaces, db_path.clone()).unwrap().len(),
+            1
+        );
+        save_workspace_db(&workspaces, db_path.clone(), vec![], vec![], Some(vec![])).unwrap();
+        assert!(workspace_collection_initialized(&workspaces, db_path.clone()).unwrap());
+        assert!(load_db_notes(&workspaces, db_path.clone())
+            .unwrap()
+            .is_empty());
+        assert!(load_db_folders(&workspaces, db_path.clone())
+            .unwrap()
+            .is_empty());
+        assert!(load_db_trash(&workspaces, db_path).unwrap().is_empty());
         fs::remove_file(path).unwrap();
     }
 
     #[test]
     fn workspace_structure_save_is_atomic() {
         let path = temporary_db_path("atomic-workspace");
+        let workspaces = Workspaces::default();
+        workspaces.authorize(&path, true).unwrap();
         let db_path = path.to_string_lossy().into_owned();
         let mut original_note = note("original", "keep me", 1);
         original_note.folder_id = Some("original-folder".to_string());
         save_workspace_db(
+            &workspaces,
             db_path.clone(),
             vec![original_note],
             vec![folder("original-folder", "Original")],
@@ -1197,6 +1445,7 @@ mod tests {
         .expect("initial workspace should save");
 
         let failed = save_workspace_db(
+            &workspaces,
             db_path.clone(),
             vec![note("replacement", "must roll back", 2)],
             vec![folder("duplicate", "One"), folder("duplicate", "Two")],
@@ -1206,11 +1455,14 @@ mod tests {
 
         let mut orphan = note("orphan", "must not save", 3);
         orphan.folder_id = Some("missing".into());
-        assert!(save_workspace_db(db_path.clone(), vec![orphan], vec![], None).is_err());
+        assert!(
+            save_workspace_db(&workspaces, db_path.clone(), vec![orphan], vec![], None).is_err()
+        );
 
-        let loaded_notes = load_db_notes(db_path.clone()).expect("original notes should remain");
+        let loaded_notes =
+            load_db_notes(&workspaces, db_path.clone()).expect("original notes should remain");
         let loaded_folders =
-            load_db_folders(db_path.clone()).expect("original folders should remain");
+            load_db_folders(&workspaces, db_path.clone()).expect("original folders should remain");
         assert_eq!(loaded_notes.len(), 1);
         assert_eq!(loaded_notes[0].id, "original");
         assert_eq!(loaded_notes[0].content, "keep me");
@@ -1223,6 +1475,8 @@ mod tests {
     #[test]
     fn migrates_existing_databases_without_ordering_columns() {
         let path = temporary_db_path("migration");
+        let workspaces = Workspaces::default();
+        workspaces.authorize(&path, true).unwrap();
         let db_path = path.to_string_lossy().into_owned();
         let connection = rusqlite::Connection::open(&db_path).expect("database should open");
         connection
@@ -1239,7 +1493,7 @@ mod tests {
             .expect("legacy schema should be created");
         drop(connection);
 
-        let loaded = load_db_notes(db_path).expect("legacy schema should migrate");
+        let loaded = load_db_notes(&workspaces, db_path).expect("legacy schema should migrate");
         assert!(loaded.is_empty());
 
         let connection = rusqlite::Connection::open(&path).expect("database should reopen");

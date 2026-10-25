@@ -1,5 +1,48 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 fn main() {
-    tauri_build::build()
+    tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
+        tauri_build::AppManifest::new().commands(&[
+            "get_update_info",
+            "check_for_updates",
+            "open_update_release",
+            "load_workspace_preference",
+            "set_last_workspace",
+            "save_file_native",
+            "save_html_file_native",
+            "open_note_print",
+            "get_print_note",
+            "print_note_native",
+            "close_note_print",
+            "save_recovery_file_native",
+            "save_collection_backup",
+            "read_collection_backup",
+            "preserve_collection_backup",
+            "begin_local_restore",
+            "read_local_restore",
+            "complete_local_restore",
+            "workspace_collection_initialized",
+            "archive_local_recovery",
+            "has_local_recovery_copies",
+            "read_local_recovery_copies",
+            "import_file_native",
+            "select_db_file",
+            "load_db_notes",
+            "load_db_folders",
+            "load_db_trash",
+            "save_note_db",
+            "save_notes_db",
+            "save_folders_db",
+            "save_workspace_db",
+            "show_alert_dialog",
+            "update_mcp_snapshot",
+            "update_mcp_note",
+            "get_mcp_connection_info",
+            "start_mcp_server",
+            "set_mcp_permissions",
+            "complete_mcp_write",
+            "stop_mcp_server",
+        ]),
+    ))
+    .expect("could not build application permissions");
 }
