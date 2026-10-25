@@ -2,16 +2,22 @@
 
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { stableRelease, assertReleaseAvailable } from "../scripts/check-stable-release.mjs";
 import { expectedAssets, downloadDraftAssets, verifyDraft } from "../scripts/verify-release-draft.mjs";
 import { prepareDraft } from "../scripts/prepare-stable-release.mjs";
+import { platformAssetNames, platforms, recordVerification } from "../scripts/release-verification.mjs";
+
+// Public test key and signature only; the disposable private key was deleted.
+const publicKey = fileURLToPath(new URL("./fixtures/release-verification/public-key.asc", import.meta.url));
 
 test("only canonical stable versions starting at 1.0.0 can create releases", () => {
-  assert.deepEqual(stableRelease("1.0.0"), { version: "1.0.0", tag: "v1.0.0" });
+  assert.deepEqual(stableRelease("1.0.0"), { version: "1.0.0", tag: "v1.0.0", name: "Scratchpad v1.0.0" });
   assert.equal(stableRelease("2.10.3").tag, "v2.10.3");
   for (const invalid of ["0.8.2", "1.0.0-beta.1", "1.0.0+build", "v1.0.0", " 1.0.0 ", "1.0", "01.0.0", "garbage", undefined]) {
     assert.throws(() => stableRelease(invalid), /Stable releases require/);
@@ -29,6 +35,7 @@ test("existing tags and draft releases block reuse; malformed responses fail clo
 
 const commit = "a".repeat(40);
 const releaseId = 123;
+const runId = "456";
 
 function preparation({ refs = [], pages = [[]], errorAt = 0, response = {} } = {}) {
   const calls = [];
@@ -43,7 +50,7 @@ function preparation({ refs = [], pages = [[]], errorAt = 0, response = {} } = {
 
 test("preparation checks availability then creates exactly one unpublished draft for the source commit", async () => {
   const { input, calls } = preparation();
-  assert.deepEqual(await prepareDraft(input), { version: "1.0.0", tag: "v1.0.0", releaseId });
+  assert.deepEqual(await prepareDraft(input), { version: "1.0.0", tag: "v1.0.0", name: "Scratchpad v1.0.0", releaseId });
   assert.equal(calls.length, 3);
   const writes = calls.filter(call => call.body);
   assert.equal(writes.length, 1);
@@ -83,6 +90,7 @@ async function fixture(t) {
   const contents = new Map(names.map(name => [name, Buffer.from(`final signed bytes for ${name}`)]));
   contents.set("SHA256SUMS", Buffer.from(names.filter(name => /_amd64\.(AppImage|deb)$/.test(name))
     .map(name => `${digest(contents.get(name))}  ${name}`).join("\n") + "\n"));
+  contents.set("SHA256SUMS.asc", await readFile(new URL("./fixtures/release-verification/SHA256SUMS.asc", import.meta.url)));
   const assets = [];
   for (const [name, bytes] of contents) {
     await writeFile(join(assetsDir, name), bytes);
@@ -90,7 +98,10 @@ async function fixture(t) {
       browser_download_url: `https://github.com/crims0n/scratchpad/releases/download/v1.0.0/${name}` });
   }
   const release = { id: releaseId, tag_name: "v1.0.0", name: "Scratchpad v1.0.0", target_commitish: commit, draft: true, prerelease: false, assets };
-  return { release, releaseId, assetsDir, version: "1.0.0", commit };
+  const version = "1.0.0";
+  const evidence = await Promise.all(platforms.map(platform => recordVerification({ platform,
+    files: platformAssetNames(version, platform).map(name => join(assetsDir, name)), releaseId, version, commit, runId })));
+  return { release, releaseId, assetsDir, version, commit, runId, evidence, publicKey };
 }
 
 test("complete draft verification hashes all eight final files and recognizes the stable installers", async t => {
@@ -168,4 +179,68 @@ test("draft verification requires uploaded assets, valid digests, and exact Linu
   await writeFile(join(input.assetsDir, manifest.name), wrong);
   Object.assign(manifest, { size: wrong.length, digest: `sha256:${digest(wrong)}` });
   await assert.rejects(verifyDraft(input), /Signed Linux manifest/);
+});
+
+test("replacing any uploaded file cannot pass by updating GitHub's digest", async t => {
+  const input = await fixture(t);
+  for (const asset of input.release.assets) {
+    const original = await readFile(join(input.assetsDir, asset.name));
+    const replacement = Buffer.from(`unverified replacement for ${asset.name}`);
+    await writeFile(join(input.assetsDir, asset.name), replacement);
+    const release = { ...input.release, assets: input.release.assets.map(file => file.name === asset.name
+      ? { ...file, size: replacement.length, digest: `sha256:${digest(replacement)}` } : file) };
+    await assert.rejects(verifyDraft({ ...input, release }), /signature-checked bytes|Signed Linux manifest/);
+    await writeFile(join(input.assetsDir, asset.name), original);
+  }
+});
+
+test("verification records must cover all platforms from this candidate and run", async t => {
+  const input = await fixture(t);
+  for (const evidence of [undefined, [], input.evidence.slice(1), [input.evidence[0], input.evidence[0], input.evidence[2]]]) {
+    await assert.rejects(verifyDraft({ ...input, evidence }), /one verification record per platform/);
+  }
+  for (const override of [{ releaseId: releaseId + 1 }, { commit: "b".repeat(40) }, { version: "1.0.1" },
+    { runId: "999" }, { schemaVersion: 2 }, { assets: input.evidence[0].assets.slice(1) }]) {
+    const evidence = [{ ...input.evidence[0], ...override }, ...input.evidence.slice(1)];
+    await assert.rejects(verifyDraft({ ...input, evidence }), /Verification evidence/);
+  }
+});
+
+test("a recorded Linux signature must still cryptographically verify with the public key", async t => {
+  const input = await fixture(t);
+  const name = "SHA256SUMS.asc";
+  const bytes = Buffer.from("not a GPG signature");
+  await writeFile(join(input.assetsDir, name), bytes);
+  Object.assign(input.release.assets.find(asset => asset.name === name), { size: bytes.length, digest: `sha256:${digest(bytes)}` });
+  Object.assign(input.evidence.find(record => record.platform === "linux").assets.find(asset => asset.name === name),
+    { size: bytes.length, sha256: digest(bytes) });
+  await assert.rejects(verifyDraft(input), /checksum signature did not verify/);
+});
+
+test("a valid signature from an untrusted key is rejected", async t => {
+  const input = await fixture(t);
+  await assert.rejects(verifyDraft({ ...input, publicKey: fileURLToPath(new URL("../site/release-signing-key.asc", import.meta.url)) }),
+    /checksum signature did not verify/);
+});
+
+test("platform records reject incomplete files and missing candidate identity", async t => {
+  const input = await fixture(t);
+  const platform = "windows";
+  const files = platformAssetNames(input.version, platform).map(name => join(input.assetsDir, name));
+  for (const override of [{ files: files.slice(1) }, { files: [files[0], files[0]] }, { platform: "other" },
+    { releaseId: 0 }, { runId: undefined }, { commit: "main" }]) {
+    await assert.rejects(recordVerification({ ...input, platform, files, ...override }));
+  }
+});
+
+test("the platform recording command writes candidate provenance and refuses an existing record", async t => {
+  const input = await fixture(t);
+  const output = join(input.assetsDir, "evidence", "windows.json");
+  const args = [fileURLToPath(new URL("../scripts/release-verification.mjs", import.meta.url)), "windows",
+    ...platformAssetNames(input.version, "windows").map(name => join(input.assetsDir, name))];
+  const options = { env: { ...process.env, VERIFICATION_EVIDENCE_PATH: output, RELEASE_ID: String(releaseId),
+    RELEASE_VERSION: input.version, GITHUB_SHA: commit, GITHUB_RUN_ID: runId }, stdio: "pipe" };
+  execFileSync(process.execPath, args, options);
+  assert.deepEqual(JSON.parse(await readFile(output, "utf8")), input.evidence.find(record => record.platform === "windows"));
+  assert.throws(() => execFileSync(process.execPath, args, options), /EEXIST/);
 });

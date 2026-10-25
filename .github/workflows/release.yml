@@ -16,7 +16,6 @@ jobs:
     runs-on: ubuntu-22.04
     outputs:
       version: ${{ steps.version.outputs.version }}
-      tag: ${{ steps.version.outputs.tag }}
 
     steps:
       - name: Check out repository
@@ -114,6 +113,9 @@ jobs:
   build:
     name: Build signed release (${{ matrix.platform }})
     needs: [validate, prepare]
+    env:
+      RELEASE_ID: ${{ needs.prepare.outputs.release_id }}
+      RELEASE_VERSION: ${{ needs.validate.outputs.version }}
     permissions:
       contents: write
       # Windows signing exchanges GitHub OIDC tokens for Azure Artifact Signing
@@ -234,6 +236,7 @@ jobs:
           # The common name on the Artifact Signing certificate. Changing it is
           # a reviewed code change, not a settings change.
           WINDOWS_SIGNING_PUBLISHER: Patrick McDowell
+          VERIFICATION_EVIDENCE_PATH: ${{ runner.temp }}/release-verification/${{ matrix.platform }}.json
         run: |
           $paths = @($env:ARTIFACT_PATHS | ConvertFrom-Json)
           $setup = @($paths | Where-Object { $_ -like '*-setup.exe' })
@@ -242,6 +245,8 @@ jobs:
             throw "Expected one NSIS setup and one MSI, got: $($paths -join ', ')"
           }
           ./scripts/verify-windows-release.ps1 -Setup $setup[0] -Msi $msi[0]
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/release-verification.mjs windows $setup[0] $msi[0]
 
       - name: Notarize and verify macOS release
         if: matrix.platform == 'macos-latest'
@@ -254,6 +259,7 @@ jobs:
           APPLE_API_ISSUER: ${{ vars.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ vars.APPLE_API_KEY }}
           APPLE_API_KEY_PATH: ${{ steps.macos_signing.outputs.api_key_path }}
+          VERIFICATION_EVIDENCE_PATH: ${{ runner.temp }}/release-verification/${{ matrix.platform }}.json
         run: scripts/finalize-macos-release.sh
 
       - name: Remove macOS signing keychain
@@ -268,6 +274,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_ID: ${{ needs.prepare.outputs.release_id }}
           SIGNING_KEY_FINGERPRINT: ${{ steps.signing_key.outputs.fingerprint }}
+          VERIFICATION_EVIDENCE_PATH: ${{ runner.temp }}/release-verification/${{ matrix.platform }}.json
         run: scripts/sign-linux-release.sh site/release-signing-key.asc
 
       - name: Remove release-signing key
@@ -275,6 +282,14 @@ jobs:
         run: |
           gpgconf --kill gpg-agent || true
           rm -rf "$HOME/.gnupg"
+
+      - name: Save hashes of signature-checked files
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-verification-${{ matrix.platform }}
+          path: ${{ runner.temp }}/release-verification/${{ matrix.platform }}.json
+          if-no-files-found: error
+          overwrite: true
 
   verify-draft:
     name: Verify complete signed draft
@@ -299,6 +314,14 @@ jobs:
       - name: Install verification dependencies
         run: npm ci --ignore-scripts
 
+      - name: Download platform verification records from this run
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: release-verification-*
+          path: ${{ runner.temp }}/release-verification
+          merge-multiple: true
+          digest-mismatch: error
+
       - name: Download and verify final draft assets
         env:
           GH_TOKEN: ${{ github.token }}
@@ -310,4 +333,5 @@ jobs:
             --release "$RUNNER_TEMP/release.json" \
             --assets-dir "$RUNNER_TEMP/release-assets" \
             --version "$RELEASE_VERSION" --commit "$GITHUB_SHA" \
-            --release-id "$RELEASE_ID" --download
+            --release-id "$RELEASE_ID" --download \
+            --evidence-dir "$RUNNER_TEMP/release-verification"

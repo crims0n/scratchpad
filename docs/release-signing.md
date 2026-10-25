@@ -6,7 +6,7 @@ The Stable Release workflow signs Linux artifacts with a project GPG key:
 2. The Tauri bundler embeds a signature in the AppImage (`SIGN`, `SIGN_KEY`, `APPIMAGETOOL_SIGN_PASSPHRASE`). A signing failure fails the build.
 3. `scripts/sign-linux-release.sh` downloads the AppImage and `.deb` from the draft release, checks that the AppImage's embedded signature comes from the published key, writes and signs `SHA256SUMS`, and verifies it with only the published key. It also confirms that modified checksums and modified packages fail. It then uploads `SHA256SUMS` and `SHA256SUMS.asc` to the draft.
 
-Website checksums come from GitHub's asset digests, which GitHub calculates after upload. They therefore always describe the final, signed files.
+The Linux job records the size and SHA-256 of the verified local packages, checksum manifest and signature in a workflow artifact. The final draft check requires all four downloads to match that record for the same release ID, source commit and workflow run. It also independently verifies the downloaded `SHA256SUMS.asc` with only the checked-in public key. Website checksums come from GitHub's final upload digests.
 
 User-facing instructions are in [verify-linux-downloads.md](verify-linux-downloads.md).
 

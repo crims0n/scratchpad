@@ -16,7 +16,7 @@ The Stable Release workflow signs the universal macOS app and DMG with a Develop
 
 Gatekeeper assessments must be enabled; a disabled or unreadable status fails verification. CI also fails if Rosetta is unavailable. Local verification may skip the Intel launch check when Rosetta is not installed.
 
-Website checksums come from GitHub's asset digests. GitHub calculates them on upload, so they describe the stapled DMG.
+After verification and the stapled DMG upload, the job records the size and SHA-256 of the verified local DMG and app archive in a workflow artifact. The final draft check requires both downloads to match that record for the same release ID, source commit and workflow run. Website checksums come from GitHub's final upload digests.
 
 ## Why the app has no entitlements
 

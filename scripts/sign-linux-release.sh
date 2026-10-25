@@ -29,6 +29,7 @@ done
 
 fingerprint=${SIGNING_KEY_FINGERPRINT:?SIGNING_KEY_FINGERPRINT must be set}
 public_key=$(realpath "$public_key")
+scripts=$(cd "$(dirname "$0")" && pwd)
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/linux-release.XXXXXX")
 mkdir -p "$work/assets" "$work/verify"
 echo "Working in $work"
@@ -122,3 +123,8 @@ if [[ "$upload" -eq 1 ]]; then
 fi
 
 cat SHA256SUMS
+
+# Record the same local packages, manifest and signature that passed above.
+if [[ -n "${VERIFICATION_EVIDENCE_PATH:-}" ]]; then
+  node "$scripts/release-verification.mjs" linux "$appimage" "$deb" SHA256SUMS SHA256SUMS.asc
+fi

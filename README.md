@@ -218,6 +218,7 @@ Simple TOML/key-value theme files using the same names are also accepted. Import
 - Node.js 20 or newer
 - Rust 1.98.0 (also declared in `rust-toolchain.toml`)
 - The dependencies in the [Tauri prerequisites guide](https://tauri.app/start/prerequisites/)
+- GnuPG (`gpg` and `gpgv`) for the release-verification tests in `npm run check`; tests use only a disposable public test key and signature
 
 ### Run locally
 
