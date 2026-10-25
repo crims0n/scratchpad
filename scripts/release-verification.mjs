@@ -2,8 +2,8 @@
 
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, stat, writeFile } from "node:fs/promises";
-import { basename, dirname } from "node:path";
+import { lstat, mkdir, writeFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { stableRelease } from "./check-stable-release.mjs";
 
@@ -25,8 +25,58 @@ export function expectedAssets(version) {
   return platforms.flatMap(platform => platformAssetNames(version, platform));
 }
 
+export function assertReleaseRepository(repository) {
+  if (!/^[a-z0-9-]+\/[a-z0-9_.-]+$/i.test(repository || "")) throw new Error("Invalid release repository");
+}
+
+export function draftAssets({ release, releaseId, version, commit, complete = true }) {
+  const { tag, name } = stableRelease(version);
+  if (!Number.isSafeInteger(releaseId) || releaseId <= 0 || release?.id !== releaseId) throw new Error("Draft ID does not match the prepared release");
+  if (!/^[a-f0-9]{40}$/.test(commit || "") || release.target_commitish !== commit) throw new Error("Draft must target the reviewed source commit");
+  if (release.tag_name !== tag || release.name !== name || release.draft !== true || release.prerelease !== false) {
+    throw new Error("Expected an unpublished stable Scratchpad draft with the candidate version");
+  }
+  const expected = expectedAssets(version).sort();
+  const assets = release.assets;
+  if (!Array.isArray(assets) || assets.some(asset => !expected.includes(asset?.name))
+    || new Set(assets.map(asset => asset.name)).size !== assets.length
+    || (complete && JSON.stringify(assets.map(asset => asset.name).sort()) !== JSON.stringify(expected))) {
+    throw new Error("Draft must contain exactly the six stable installers and two Linux checksum/signature files");
+  }
+  const ids = new Set();
+  for (const asset of assets) {
+    if (!Number.isSafeInteger(asset.id) || asset.id <= 0 || ids.has(asset.id)) throw new Error("Invalid or duplicate draft asset ID");
+    ids.add(asset.id);
+    if (complete && (asset.state !== "uploaded" || !Number.isSafeInteger(asset.size) || asset.size <= 0 || !/^sha256:[a-f0-9]{64}$/i.test(asset.digest || ""))) {
+      throw new Error(`Missing final upload metadata/digest: ${asset.name}`);
+    }
+  }
+  return assets;
+}
+
+export function assertDraftUnchanged({ release, verifiedRelease, releaseId, version, commit }) {
+  const identity = { releaseId, version, commit };
+  const verified = draftAssets({ ...identity, release: verifiedRelease });
+  const current = draftAssets({ ...identity, release });
+  for (const asset of verified) {
+    const latest = current.find(file => file.name === asset.name);
+    if (latest.id !== asset.id || latest.size !== asset.size || latest.digest.toLowerCase() !== asset.digest.toLowerCase()) {
+      throw new Error(`Final draft metadata changed: ${asset.name}`);
+    }
+  }
+  return current;
+}
+
+export async function downloadDraftAssets({ release, releaseId, version, commit, assetsDir, download }) {
+  const assets = draftAssets({ release, releaseId, version, commit });
+  // A fresh directory prevents files from another draft or rerun being mixed
+  // in. Exact allowlisted names and positive IDs are checked before any I/O.
+  await mkdir(assetsDir);
+  for (const asset of assets) await download(asset.id, join(assetsDir, asset.name));
+}
+
 export async function hashFile(file) {
-  const info = await stat(file);
+  const info = await lstat(file);
   if (!info.isFile() || info.size <= 0) throw new Error(`Missing or empty release file: ${file}`);
   const hash = createHash("sha256");
   for await (const chunk of createReadStream(file)) hash.update(chunk);

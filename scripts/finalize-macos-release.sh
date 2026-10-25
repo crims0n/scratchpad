@@ -1,31 +1,24 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Finishes the macOS release. Tauri signs, notarizes and staples the app, but
-# only signs the DMG. This script downloads the DMG and app archive exactly as
-# uploaded to the draft release, makes sure the DMG carries the Developer ID
-# signature, notarizes and staples it, verifies both artifacts with
-# verify-macos-release.sh, then replaces the draft's DMG with the stapled one
-# and checks GitHub's digest of the upload matches.
-#
-# Usage: finalize-macos-release.sh [--assets-dir DIR] [--no-upload]
-#   --assets-dir  use already-downloaded assets in DIR instead of the release
-#   --no-upload   leave the stapled DMG in the work directory
-# Env:   MACOS_SIGNING_IDENTITY, MACOS_SIGNING_TEAM_ID, MACOS_SIGNING_KEYCHAIN
-#        APPLE_API_KEY, APPLE_API_ISSUER, APPLE_API_KEY_PATH
-#        RELEASE_ID, GITHUB_REPOSITORY, GH_TOKEN  (unless --assets-dir/--no-upload)
+# Finalize and verify local macOS release assets, then replace the staged DMG
+# with its notarized/stapled bytes. No GitHub token or draft access is used.
+# Usage: finalize-macos-release.sh --assets-dir DIR
+# Env: MACOS_SIGNING_IDENTITY, MACOS_SIGNING_TEAM_ID, MACOS_SIGNING_KEYCHAIN,
+#      APPLE_API_KEY, APPLE_API_ISSUER, APPLE_API_KEY_PATH
 
 set -euo pipefail
 
 assets_dir=""
-upload=1
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --assets-dir) assets_dir=${2:?--assets-dir needs a directory}; shift 2 ;;
-    --no-upload) upload=0; shift ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
+
+: "${assets_dir:?--assets-dir must select local release assets}"
+assets_dir=$(cd "$assets_dir" && pwd)
 
 : "${MACOS_SIGNING_IDENTITY:?MACOS_SIGNING_IDENTITY must be set}" "${MACOS_SIGNING_TEAM_ID:?MACOS_SIGNING_TEAM_ID must be set}"
 : "${APPLE_API_KEY:?APPLE_API_KEY must be set}" "${APPLE_API_ISSUER:?APPLE_API_ISSUER must be set}" "${APPLE_API_KEY_PATH:?APPLE_API_KEY_PATH must be set}"
@@ -39,17 +32,8 @@ fail() {
   exit 1
 }
 
-# 1. Fetch the final assets (exactly what users will download).
-if [[ -n "$assets_dir" ]]; then
-  cp "$assets_dir"/*_universal.dmg "$assets_dir"/*_universal.app.tar.gz "$work/assets/"
-else
-  : "${RELEASE_ID:?RELEASE_ID must be set}" "${GITHUB_REPOSITORY:?GITHUB_REPOSITORY must be set}"
-  gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
-    --jq '.assets[] | select(.name | test("_universal\\.(dmg|app\\.tar\\.gz)$")) | "\(.id)\t\(.name)"' \
-    | while IFS=$'\t' read -r id name; do
-        gh api -H "Accept: application/octet-stream" "repos/$GITHUB_REPOSITORY/releases/assets/$id" > "$work/assets/$name"
-      done
-fi
+# 1. Copy only the staged platform packages into an isolated work directory.
+cp "$assets_dir"/*_universal.dmg "$assets_dir"/*_universal.app.tar.gz "$work/assets/"
 
 cd "$work/assets"
 shopt -s nullglob
@@ -88,31 +72,13 @@ xcrun stapler staple "$dmg"
 # 4. Verify the stapled DMG and the app archive before anything is replaced.
 "$scripts/verify-macos-release.sh" --team "$MACOS_SIGNING_TEAM_ID" "$dmg" "$archive"
 
-# 5. Replace the draft's DMG. Published checksums come from GitHub's digest of
-# this upload, so confirm it describes the stapled file.
-if [[ "$upload" -eq 1 ]]; then
-  : "${RELEASE_ID:?RELEASE_ID must be set}" "${GITHUB_REPOSITORY:?GITHUB_REPOSITORY must be set}"
-  existing=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --jq ".assets[] | select(.name == \"$dmg\") | .id")
-  if [[ -n "$existing" ]]; then
-    gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$existing"
-  fi
-  asset=$(gh api --method POST -H "Content-Type: application/x-apple-diskimage" \
-    "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=$dmg" \
-    --input "$dmg" --jq '.id')
-  expected="sha256:$(shasum -a 256 "$dmg" | cut -d ' ' -f 1)"
-  digest=""
-  for _ in 1 2 3 4 5 6; do
-    digest=$(gh api "repos/$GITHUB_REPOSITORY/releases/assets/$asset" --jq '.digest // empty')
-    [[ -n "$digest" ]] && break
-    sleep 5
-  done
-  [[ "$digest" == "$expected" ]] || fail "GitHub recorded digest ${digest:-none} for $dmg, expected $expected."
-  echo "Uploaded stapled $dmg ($digest)"
-else
-  echo "Stapled DMG left at $work/assets/$dmg"
-fi
-
-# Hash the exact local files just verified, including the final stapled DMG.
+# 5. Hand the exact verified bytes back to the staging directory. A separate
+# upload job alone can modify the draft release.
+for file in "$dmg" "$archive"; do
+  cp "$file" "$assets_dir/$file"
+  cmp -s "$file" "$assets_dir/$file" || fail "Staged copy does not match verified bytes: $file"
+done
+cd "$assets_dir"
 if [[ -n "${VERIFICATION_EVIDENCE_PATH:-}" ]]; then
   node "$scripts/release-verification.mjs" macos "$dmg" "$archive"
 fi

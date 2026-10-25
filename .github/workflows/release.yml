@@ -46,7 +46,7 @@ jobs:
           workspaces: ./src-tauri -> target
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Validate stable version
         id: version
@@ -58,8 +58,8 @@ jobs:
       - name: Validate Rust
         run: |
           cargo fmt --manifest-path src-tauri/Cargo.toml --check
-          cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
-          cargo test --manifest-path src-tauri/Cargo.toml
+          cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+          cargo test --locked --manifest-path src-tauri/Cargo.toml
 
   prepare:
     name: Prepare one candidate draft
@@ -81,10 +81,6 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-          cache: npm
-
-      - name: Install preparation dependencies
-        run: npm ci --ignore-scripts
 
       - name: Load release notes
         id: release_notes
@@ -111,13 +107,13 @@ jobs:
         run: node scripts/prepare-stable-release.mjs >> "$GITHUB_OUTPUT"
 
   build:
-    name: Build signed release (${{ matrix.platform }})
+    name: Build and verify signed files (${{ matrix.platform }})
     needs: [validate, prepare]
     env:
       RELEASE_ID: ${{ needs.prepare.outputs.release_id }}
       RELEASE_VERSION: ${{ needs.validate.outputs.version }}
     permissions:
-      contents: write
+      contents: read
       # Windows signing exchanges GitHub OIDC tokens for Azure Artifact Signing
       # access; the federated credential only trusts the release-signing
       # environment (docs/windows-release-signing.md).
@@ -132,15 +128,21 @@ jobs:
               --config src-tauri/tauri.macos-signing.conf.json
               --target universal-apple-darwin
               --bundles app,dmg
+              -- --locked
+            release_platform: macos
           - platform: ubuntu-22.04
             args: >-
               --config src-tauri/tauri.release.conf.json
               --bundles appimage,deb
+              -- --locked
+            release_platform: linux
           - platform: windows-latest
             args: >-
               --config src-tauri/tauri.release.conf.json
               --config src-tauri/tauri.windows-signing.conf.json
               --bundles nsis,msi
+              -- --locked
+            release_platform: windows
 
     runs-on: ${{ matrix.platform }}
     # Holds the release-signing secrets; protect it with required reviewers
@@ -177,7 +179,7 @@ jobs:
           workspaces: ./src-tauri -> target
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Import Linux release-signing key
         id: signing_key
@@ -209,11 +211,10 @@ jobs:
           APPLE_API_ISSUER: ${{ vars.APPLE_API_ISSUER }}
         run: scripts/setup-macos-signing.sh src-tauri/tauri.macos-signing.conf.json
 
-      - name: Build and upload to the candidate draft
+      - name: Build signed artifacts locally
         id: tauri
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Embed a GPG signature in the AppImage; a signing failure fails the build.
           SIGN: ${{ matrix.platform == 'ubuntu-22.04' && '1' || '' }}
           SIGN_KEY: ${{ steps.signing_key.outputs.fingerprint }}
@@ -225,14 +226,21 @@ jobs:
           APPLE_API_KEY: ${{ matrix.platform == 'macos-latest' && vars.APPLE_API_KEY || '' }}
           APPLE_API_KEY_PATH: ${{ steps.macos_signing.outputs.api_key_path }}
         with:
-          releaseId: ${{ needs.prepare.outputs.release_id }}
           uploadUpdaterJson: false
           args: ${{ matrix.args }}
+
+      - name: Stage canonical release filenames
+        id: stage_assets
+        env:
+          ARTIFACT_PATHS: ${{ steps.tauri.outputs.artifactPaths }}
+          RELEASE_PLATFORM: ${{ matrix.release_platform }}
+          RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets
+        run: node scripts/stage-release-assets.mjs
 
       - name: Verify Windows signatures
         if: matrix.platform == 'windows-latest'
         env:
-          ARTIFACT_PATHS: ${{ steps.tauri.outputs.artifactPaths }}
+          ARTIFACT_PATHS: ${{ steps.stage_assets.outputs.asset_paths }}
           # The common name on the Artifact Signing certificate. Changing it is
           # a reviewed code change, not a settings change.
           WINDOWS_SIGNING_PUBLISHER: Patrick McDowell
@@ -251,8 +259,6 @@ jobs:
       - name: Notarize and verify macOS release
         if: matrix.platform == 'macos-latest'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_ID: ${{ needs.prepare.outputs.release_id }}
           MACOS_SIGNING_IDENTITY: ${{ steps.macos_signing.outputs.identity }}
           MACOS_SIGNING_TEAM_ID: ${{ steps.macos_signing.outputs.team_id }}
           MACOS_SIGNING_KEYCHAIN: ${{ steps.macos_signing.outputs.keychain }}
@@ -260,7 +266,7 @@ jobs:
           APPLE_API_KEY: ${{ vars.APPLE_API_KEY }}
           APPLE_API_KEY_PATH: ${{ steps.macos_signing.outputs.api_key_path }}
           VERIFICATION_EVIDENCE_PATH: ${{ runner.temp }}/release-verification/${{ matrix.platform }}.json
-        run: scripts/finalize-macos-release.sh
+        run: scripts/finalize-macos-release.sh --assets-dir "$RUNNER_TEMP/release-assets"
 
       - name: Remove macOS signing keychain
         if: always() && matrix.platform == 'macos-latest'
@@ -271,17 +277,23 @@ jobs:
       - name: Sign and verify Linux release checksums
         if: matrix.platform == 'ubuntu-22.04'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_ID: ${{ needs.prepare.outputs.release_id }}
           SIGNING_KEY_FINGERPRINT: ${{ steps.signing_key.outputs.fingerprint }}
           VERIFICATION_EVIDENCE_PATH: ${{ runner.temp }}/release-verification/${{ matrix.platform }}.json
-        run: scripts/sign-linux-release.sh site/release-signing-key.asc
+        run: scripts/sign-linux-release.sh site/release-signing-key.asc --assets-dir "$RUNNER_TEMP/release-assets"
 
       - name: Remove release-signing key
         if: always() && matrix.platform == 'ubuntu-22.04'
         run: |
           gpgconf --kill gpg-agent || true
           rm -rf "$HOME/.gnupg"
+
+      - name: Save verified release files
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: signed-release-${{ matrix.platform }}
+          path: ${{ runner.temp }}/release-assets/*
+          if-no-files-found: error
+          overwrite: true
 
       - name: Save hashes of signature-checked files
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -291,14 +303,67 @@ jobs:
           if-no-files-found: error
           overwrite: true
 
-  verify-draft:
-    name: Verify complete signed draft
+  upload-draft:
+    name: Upload verified files to the candidate draft
     needs: [validate, prepare, build]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-22.04
     permissions:
-      # Draft metadata and asset downloads require push access.
       contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Download verified platform files from this run
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: signed-release-*
+          path: ${{ runner.temp }}/release-assets
+          merge-multiple: true
+          digest-mismatch: error
+
+      - name: Download platform verification records from this run
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: release-verification-*
+          path: ${{ runner.temp }}/release-verification
+          merge-multiple: true
+          digest-mismatch: error
+
+      - name: Upload verified bytes and download the final draft by asset ID
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.prepare.outputs.release_id }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets
+          VERIFICATION_EVIDENCE_DIR: ${{ runner.temp }}/release-verification
+          RELEASE_SNAPSHOT_DIR: ${{ runner.temp }}/uploaded-draft
+        run: node scripts/upload-release-draft.mjs
+
+      - name: Save exact downloaded draft for independent verification
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: uploaded-draft-${{ needs.prepare.outputs.release_id }}
+          path: ${{ runner.temp }}/uploaded-draft
+          if-no-files-found: error
+          overwrite: true
+
+  verify-draft:
+    name: Verify downloaded signed draft
+    needs: [validate, prepare, upload-draft]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    outputs:
+      verified_draft: ${{ steps.verify.outputs.verified_draft }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -314,6 +379,13 @@ jobs:
       - name: Install verification dependencies
         run: npm ci --ignore-scripts
 
+      - name: Download exact final-draft snapshot from the upload job
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: uploaded-draft-${{ needs.prepare.outputs.release_id }}
+          path: ${{ runner.temp }}/uploaded-draft
+          digest-mismatch: error
+
       - name: Download platform verification records from this run
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -322,16 +394,42 @@ jobs:
           merge-multiple: true
           digest-mismatch: error
 
-      - name: Download and verify final draft assets
+      - name: Verify final downloaded bytes and website recognition
+        id: verify
+        env:
+          RELEASE_ID: ${{ needs.prepare.outputs.release_id }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          node scripts/verify-release-draft.mjs \
+            --release "$RUNNER_TEMP/uploaded-draft/release.json" \
+            --assets-dir "$RUNNER_TEMP/uploaded-draft/assets" \
+            --version "$RELEASE_VERSION" --commit "$GITHUB_SHA" \
+            --release-id "$RELEASE_ID" \
+            --evidence-dir "$RUNNER_TEMP/release-verification"
+
+  confirm-draft:
+    name: Confirm current signed draft
+    needs: [validate, prepare, verify-draft]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    permissions:
+      # Reading a draft requires push access. No npm packages run in this job.
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Confirm live draft identity and verified asset metadata
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_ID: ${{ needs.prepare.outputs.release_id }}
           RELEASE_VERSION: ${{ needs.validate.outputs.version }}
-        run: |
-          gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" > "$RUNNER_TEMP/release.json"
-          node scripts/verify-release-draft.mjs \
-            --release "$RUNNER_TEMP/release.json" \
-            --assets-dir "$RUNNER_TEMP/release-assets" \
-            --version "$RELEASE_VERSION" --commit "$GITHUB_SHA" \
-            --release-id "$RELEASE_ID" --download \
-            --evidence-dir "$RUNNER_TEMP/release-verification"
+          VERIFIED_DRAFT: ${{ needs.verify-draft.outputs.verified_draft }}
+        run: node scripts/confirm-release-draft.mjs
