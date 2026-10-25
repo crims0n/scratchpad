@@ -4,7 +4,7 @@ The Stable Release workflow signs the universal macOS app and DMG with a Develop
 
 1. `scripts/setup-macos-signing.sh` imports the certificate into a temporary keychain and writes the App Store Connect API key to the runner's temp directory. It fails unless the certificate holds a valid identity matching `src-tauri/tauri.macos-signing.conf.json` and the notary service accepts the API key, so bad credentials stop the job before the build.
 2. `src-tauri/tauri.macos-signing.conf.json` sets the signing identity and the hardened runtime. It comes after `tauri.release.conf.json` on the command line. Stable packaging never applies a beta or ad-hoc signing override. Tauri signs the executable and bundle with a secure timestamp, notarizes and staples the `.app`, and signs the DMG.
-3. `scripts/finalize-macos-release.sh` downloads the DMG and `.app.tar.gz` from the draft release, notarizes and staples the DMG, and runs `scripts/verify-macos-release.sh` on both. It then replaces the draft's DMG with the stapled one and checks that GitHub's digest of the upload matches.
+3. `scripts/stage-release-assets.mjs` collects the local DMG and app archive under the expected release filenames. `scripts/finalize-macos-release.sh --assets-dir DIR` notarizes and staples the staged DMG, runs `scripts/verify-macos-release.sh` on both files, and copies the exact verified bytes back to that directory. It has no GitHub token or draft access.
 4. The keychain, certificate and API key file are deleted at the end of the job, even if it fails.
 
 `verify-macos-release.sh` fails the job unless the DMG, and the app inside both the DMG and the archive, meet all of these:
@@ -16,7 +16,7 @@ The Stable Release workflow signs the universal macOS app and DMG with a Develop
 
 Gatekeeper assessments must be enabled; a disabled or unreadable status fails verification. CI also fails if Rosetta is unavailable. Local verification may skip the Intel launch check when Rosetta is not installed.
 
-After verification and the stapled DMG upload, the job records the size and SHA-256 of the verified local DMG and app archive in a workflow artifact. The final draft check requires both downloads to match that record for the same release ID, source commit and workflow run. Website checksums come from GitHub's final upload digests.
+After verification, the job saves the final files and a separate record of their sizes and SHA-256 hashes as workflow artifacts. A dedicated upload job with repository write permission checks both files against the record, uploads them to the prepared draft, and checks the upload digests. It downloads the final assets by ID and saves a snapshot for the read-only final check. Both checks require the files to match the signing record for the same release ID, source commit and workflow run. Website checksums come from GitHub's final upload digests.
 
 ## Why the app has no entitlements
 
@@ -90,5 +90,5 @@ CI cannot test a real download or the editor UI. Before publishing a release, on
 ## Testing changes to the scripts
 
 - `verify-macos-release.sh --team <TEAMID> <file.dmg|file.app.tar.gz|file.app>...` runs locally on any Mac.
-- `finalize-macos-release.sh --assets-dir DIR --no-upload` notarizes and verifies local assets without contacting GitHub. It needs the `MACOS_SIGNING_*` and `APPLE_API_*` variables it documents.
+- `finalize-macos-release.sh --assets-dir DIR` notarizes and verifies local assets, then replaces the local DMG with its stapled bytes. It never contacts GitHub; `--no-upload` remains a compatibility no-op. It needs the `MACOS_SIGNING_*` and `APPLE_API_*` variables it documents.
 - `setup-macos-signing.sh` changes the user keychain search list, so run it only on CI runners.

@@ -1,31 +1,27 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Signs the final Linux release assets. Downloads the AppImage and .deb exactly
-# as uploaded to the draft release, checks the AppImage's embedded signature,
-# writes and signs SHA256SUMS, verifies everything against the published public
-# key alone (including tampered copies that must fail), then uploads
-# SHA256SUMS and SHA256SUMS.asc to the draft.
-#
-# Usage: sign-linux-release.sh <public-key.asc> [--assets-dir DIR] [--no-upload]
-#   --assets-dir  use already-downloaded assets in DIR instead of the release
-#   --no-upload   leave the signed files in the work directory
-# Env:   SIGNING_KEY_FINGERPRINT  primary fingerprint of the imported key
-#        RELEASE_ID, GITHUB_REPOSITORY, GH_TOKEN  (unless --assets-dir/--no-upload)
+# Sign and verify local Linux assets, then place SHA256SUMS and its signature
+# beside those packages. No GitHub token or draft access is used.
+# Usage: sign-linux-release.sh <public-key.asc> --assets-dir DIR [--no-upload]
+# Env: SIGNING_KEY_FINGERPRINT (primary fingerprint of the imported key)
+# --no-upload is retained as a compatibility no-op; this script never uploads.
 
 set -euo pipefail
 
-public_key=${1:?usage: sign-linux-release.sh <public-key.asc> [--assets-dir DIR] [--no-upload]}
+public_key=${1:?usage: sign-linux-release.sh <public-key.asc> --assets-dir DIR [--no-upload]}
 shift
 assets_dir=""
-upload=1
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --assets-dir) assets_dir=${2:?--assets-dir needs a directory}; shift 2 ;;
-    --no-upload) upload=0; shift ;;
+    --no-upload) shift ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
+
+: "${assets_dir:?--assets-dir must select local release assets}"
+assets_dir=$(cd "$assets_dir" && pwd)
 
 fingerprint=${SIGNING_KEY_FINGERPRINT:?SIGNING_KEY_FINGERPRINT must be set}
 public_key=$(realpath "$public_key")
@@ -39,17 +35,8 @@ fail() {
   exit 1
 }
 
-# 1. Fetch the final assets (exactly what users will download).
-if [[ -n "$assets_dir" ]]; then
-  cp "$assets_dir"/*_amd64.AppImage "$assets_dir"/*_amd64.deb "$work/assets/"
-else
-  : "${RELEASE_ID:?RELEASE_ID must be set}" "${GITHUB_REPOSITORY:?GITHUB_REPOSITORY must be set}"
-  gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
-    --jq '.assets[] | select(.name | test("_amd64\\.(AppImage|deb)$")) | "\(.id)\t\(.name)"' \
-    | while IFS=$'\t' read -r id name; do
-        gh api -H "Accept: application/octet-stream" "repos/$GITHUB_REPOSITORY/releases/assets/$id" > "$work/assets/$name"
-      done
-fi
+# 1. Copy only the staged platform packages into an isolated work directory.
+cp "$assets_dir"/*_amd64.AppImage "$assets_dir"/*_amd64.deb "$work/assets/"
 
 cd "$work/assets"
 shopt -s nullglob
@@ -107,24 +94,13 @@ if (cd "$work/verify/tampered" && sha256sum --check --strict --quiet SHA256SUMS 
 fi
 echo "Verified SHA256SUMS signature; modified checksums and assets were rejected."
 
-# 5. Attach the signed manifest to the draft release.
-if [[ "$upload" -eq 1 ]]; then
-  : "${RELEASE_ID:?RELEASE_ID must be set}" "${GITHUB_REPOSITORY:?GITHUB_REPOSITORY must be set}"
-  for name in SHA256SUMS SHA256SUMS.asc; do
-    existing=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --jq ".assets[] | select(.name == \"$name\") | .id")
-    if [[ -n "$existing" ]]; then
-      gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$existing"
-    fi
-    gh api --method POST -H "Content-Type: text/plain" \
-      "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=$name" \
-      --input "$name" > /dev/null
-    echo "Uploaded $name"
-  done
-fi
-
-cat SHA256SUMS
-
-# Record the same local packages, manifest and signature that passed above.
+# 5. Hand the exact verified bytes back to the staging directory. A separate
+# upload job alone can modify the draft release.
+for file in "$appimage" "$deb" SHA256SUMS SHA256SUMS.asc; do
+  cp "$file" "$assets_dir/$file"
+  cmp -s "$file" "$assets_dir/$file" || fail "Staged copy does not match verified bytes: $file"
+done
+cd "$assets_dir"
 if [[ -n "${VERIFICATION_EVIDENCE_PATH:-}" ]]; then
   node "$scripts/release-verification.mjs" linux "$appimage" "$deb" SHA256SUMS SHA256SUMS.asc
 fi

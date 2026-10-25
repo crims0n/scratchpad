@@ -2,11 +2,13 @@
 
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
-import semver from "semver";
 
 export function stableRelease(version) {
-  const parsed = semver.parse(version);
-  if (!parsed || parsed.major < 1 || parsed.prerelease.length || parsed.build.length || parsed.version !== version) {
+  // This privileged entry point must load without npm dependencies. Stable
+  // versions need only canonical numeric components, bounded like node-semver.
+  if (typeof version !== "string" || version.length > 256
+    || !/^[1-9]\d*\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/.test(version)
+    || !version.split(".").every(component => Number.isSafeInteger(Number(component)))) {
     throw new Error("Stable releases require a canonical version of 1.0.0 or later without prerelease/build suffixes");
   }
   return { version, tag: `v${version}`, name: `Scratchpad v${version}` };

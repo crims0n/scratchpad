@@ -56,22 +56,54 @@ test("every stable build selects the production identity without a beta override
   assert.match(workflow, /needs: \[validate, prepare, build\]/);
 });
 
-test("one main-only draft preparation supplies every build and finalizer; draft access has push permission", async () => {
+test("repository write access is confined to dependency-free draft preparation and upload jobs", async () => {
   const workflow = await readFile(new URL("../.github/workflows/release.yml", import.meta.url), "utf8");
   const prepare = workflow.split("  prepare:\n")[1].split("  build:\n")[0];
-  const build = workflow.split("  build:\n")[1].split("  verify-draft:\n")[0];
+  const build = workflow.split("  build:\n")[1].split("  upload-draft:\n")[0];
+  const upload = workflow.split("  upload-draft:\n")[1].split("  verify-draft:\n")[0];
   const verify = workflow.split("  verify-draft:\n")[1];
-  for (const job of [prepare, verify]) {
+  for (const job of [prepare, upload]) {
     assert.match(job, /if: github.ref == 'refs\/heads\/main'/);
     assert.match(job, /contents: write/);
+    assert.doesNotMatch(job, /npm (ci|install|run)|cargo |tauri-action@/);
+    assert.match(job, /GH_TOKEN: \$\{\{ github.token \}\}/);
+  }
+  for (const job of [build, verify]) {
+    assert.match(job, /contents: read/);
+    assert.doesNotMatch(job, /contents: write|(?:GH_TOKEN|GITHUB_TOKEN):|github.token/);
   }
   assert.equal((workflow.match(/node scripts\/prepare-stable-release.mjs/g) || []).length, 1);
-  assert.match(build, /releaseId: \$\{\{ needs.prepare.outputs.release_id \}\}/);
-  assert.equal((build.match(/RELEASE_ID: \$\{\{ needs.prepare.outputs.release_id \}\}/g) || []).length, 3);
-  assert.match(verify, /RELEASE_ID: \$\{\{ needs.prepare.outputs.release_id \}\}/);
-  assert.match(verify, /--release-id "\$RELEASE_ID" --download/);
+  for (const job of [build, upload, verify]) {
+    assert.match(job, /RELEASE_ID: \$\{\{ needs.prepare.outputs.release_id \}\}/);
+  }
+  assert.match(build, /environment: release-signing/);
+  assert.match(build, /id-token: write/);
+  assert.equal((workflow.match(/persist-credentials: false/g) || []).length, 5);
+  assert.equal((workflow.match(/npm ci --ignore-scripts/g) || []).length, 3);
+  assert.equal((build.match(/-- --locked/g) || []).length, 3);
   assert.doesNotMatch(workflow, /steps\.tauri\.outputs\.releaseId|needs\.build\.outputs\.release_id|gh release download/);
-  assert.doesNotMatch(build, /tagName:|releaseName:|releaseDraft:|releaseCommitish:|releaseBody:|generateReleaseNotes:/);
+  assert.doesNotMatch(build, /releaseId:|tagName:|releaseName:|releaseDraft:|releaseCommitish:|releaseBody:|generateReleaseNotes:/);
+});
+
+test("signed files and independent evidence stay within this run and verification uses the downloaded snapshot", async () => {
+  const workflow = await readFile(new URL("../.github/workflows/release.yml", import.meta.url), "utf8");
+  const build = workflow.split("  build:\n")[1].split("  upload-draft:\n")[0];
+  const upload = workflow.split("  upload-draft:\n")[1].split("  verify-draft:\n")[0];
+  const verify = workflow.split("  verify-draft:\n")[1];
+  assert.match(build, /node scripts\/stage-release-assets.mjs/);
+  assert.match(build, /ARTIFACT_PATHS: \$\{\{ steps.stage_assets.outputs.asset_paths \}\}/);
+  assert.match(build, /name: signed-release-\$\{\{ matrix.platform \}\}/);
+  assert.match(build, /name: release-verification-\$\{\{ matrix.platform \}\}/);
+  assert.match(upload, /needs: \[validate, prepare, build\]/);
+  assert.match(upload, /pattern: signed-release-\*/);
+  assert.match(upload, /node scripts\/upload-release-draft.mjs/);
+  assert.match(verify, /needs: \[validate, prepare, upload-draft\]/);
+  assert.match(verify, /name: uploaded-draft-\$\{\{ needs.prepare.outputs.release_id \}\}/);
+  assert.match(verify, /--release "\$RUNNER_TEMP\/uploaded-draft\/release.json"/);
+  assert.match(verify, /--assets-dir "\$RUNNER_TEMP\/uploaded-draft\/assets"/);
+  assert.doesNotMatch(verify, /--download|gh api/);
+  assert.equal((workflow.match(/digest-mismatch: error/g) || []).length, 4);
+  assert.doesNotMatch(workflow, /run-id:|github-token:|repository:/);
 });
 
 test("only renamed release installers run the Beta transition", async () => {
