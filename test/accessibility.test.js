@@ -34,16 +34,17 @@ test("help, theme, about, MCP, trash, collection backup, and clear-local overlay
 
 test("help and reference documents current Markdown editing behavior", () => {
   const shortcuts = document.getElementById("pane-shortcuts").textContent;
+  const guide = document.getElementById("pane-guide").textContent;
   const markdown = document.getElementById("pane-markdown").textContent;
   const mcp = document.getElementById("pane-mcp").textContent;
 
   assert.match(shortcuts, /F1/);
-  assert.match(shortcuts, /A collection is your notes, folders, and trash/);
-  assert.match(shortcuts, /Print Note.*system print dialog.*paper-friendly light palette/);
+  assert.match(guide, /A collection is your notes, folders, and trash/);
+  assert.match(guide, /Print Note.*system print dialog.*paper-friendly light palette/);
   assert.match(shortcuts, /Print Active Note/);
-  assert.match(shortcuts, /Open or create workspace….*Return to local notes.*does not merge collections/);
-  assert.match(shortcuts, /Clear Local Collection.*exact word DELETE.*verified safety backup/);
-  assert.match(shortcuts, /Deleting a folder from the sidebar returns its notes to the top level/);
+  assert.match(guide, /Open or create workspace….*Return to local notes.*does not merge collections/);
+  assert.match(guide, /Clear Local Collection.*exact word DELETE.*verified safety backup/);
+  assert.match(guide, /Deleting a folder from the sidebar returns its notes to the top level/);
   assert.match(shortcuts, /Compare.*removed source text on the left and added source text on the right/);
   assert.match(shortcuts, /Jump to List Content \/ Line Start/);
   assert.match(shortcuts, /Continue List, Quote, Fence, or Table/);

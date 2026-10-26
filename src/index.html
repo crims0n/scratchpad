@@ -644,7 +644,8 @@
     <div class="help-modal" id="help-modal" role="dialog" aria-modal="true" aria-label="Help and reference">
       <div class="help-modal-header">
         <div class="help-tabs" role="tablist" aria-label="Help topics">
-          <button class="help-tab-btn active" id="tab-shortcuts-btn" role="tab" aria-selected="true" aria-controls="pane-shortcuts">⌨️ Keyboard Shortcuts</button>
+          <button class="help-tab-btn active" id="tab-guide-btn" role="tab" aria-selected="true" aria-controls="pane-guide">📖 Guide</button>
+          <button class="help-tab-btn" id="tab-shortcuts-btn" role="tab" aria-selected="false" aria-controls="pane-shortcuts" tabindex="-1">⌨️ Keyboard Shortcuts</button>
           <button class="help-tab-btn" id="tab-markdown-btn" role="tab" aria-selected="false" aria-controls="pane-markdown" tabindex="-1">📝 Markdown Cheatsheet</button>
           <button class="help-tab-btn" id="tab-mcp-btn" role="tab" aria-selected="false" aria-controls="pane-mcp" tabindex="-1">🔌 MCP Functions</button>
         </div>
@@ -656,19 +657,55 @@
       </div>
 
       <div class="help-modal-body">
-        <!-- Shortcuts Pane -->
-        <div class="help-pane active" id="pane-shortcuts" role="tabpanel" aria-labelledby="tab-shortcuts-btn">
+        <!-- User Guide Pane -->
+        <div class="help-pane active" id="pane-guide" role="tabpanel" aria-labelledby="tab-guide-btn">
           <div class="shortcuts-section">
-            <h4 class="shortcuts-heading">Collections, Workspaces & Notes</h4>
-            <p class="shortcuts-note">A <strong>collection</strong> is your notes, folders, and trash. <strong>Local notes</strong> stores one collection in this app; a <strong>workspace file</strong> stores a separate, portable collection. The menu section is labeled <strong>Collection</strong> for local notes, or <strong>Workspace</strong> when a workspace file is active. Hover over actions for descriptions and storage scope; the same information is available to screen readers. Choose <strong>Open or create workspace…</strong> to switch to a workspace, or <strong>Return to local notes</strong> to switch back. Switching does not merge collections or remove your local notes. An empty, not-yet-initialized workspace starts with your local notes and folders; local trash stays local. Backup and restore remain available in both modes; <strong>Clear Local Collection…</strong> is hidden while a workspace is open.</p>
+            <h4 class="shortcuts-heading">Start writing</h4>
+            <p class="shortcuts-note">Create a note with <strong>Cmd/Ctrl+N</strong> or the sidebar’s new-note button. Changes save automatically after a short pause; check the status bar for <strong>Saved</strong> or <strong>Save failed</strong>.</p>
+            <p class="shortcuts-note"><strong>Edit</strong>, <strong>Split</strong>, and <strong>Preview</strong> show one note’s source and rendered Markdown. Split is two views of the same note. <strong>Cmd/Ctrl+\</strong> opens a second note alongside it; <strong>Compare</strong> highlights differences between the two notes. Syntax highlighting and optional line numbers are under <strong>Scratchpad menu → Appearance</strong>.</p>
+            <p class="shortcuts-note">Use <strong>Tab / Shift+Tab</strong> to switch Help topics and <strong>Escape</strong> to close Help and return to the control that opened it. The welcome note is an editable first-run guide; editing or deleting it does not remove Help.</p>
+          </div>
+          <div class="shortcuts-section">
+            <h4 class="shortcuts-heading">Collections and workspaces</h4>
+            <p class="shortcuts-note">A <strong>collection</strong> is your notes, folders, and trash. <strong>Local notes</strong> stores one collection in this app; a <strong>workspace file</strong> stores a separate, portable collection. The menu section is labeled <strong>Collection</strong> for local notes, or <strong>Workspace</strong> when a workspace file is active. Hover over actions for descriptions and storage scope; the same information is available to screen readers. Choose <strong>Open or create workspace…</strong> to switch to a workspace, or <strong>Return to local notes</strong> to switch back. Switching does not merge collections or remove your local notes. An uninitialized workspace can receive a one-time copy of readable notes and folders; unreadable local data and local trash are not copied. At startup, if no readable local notes are available, it starts with a fresh welcome note instead. Local folders are copied only when the local collection is not in recovery mode. Opening one from the menu without available notes leaves it empty. An initialized empty workspace stays empty. Backup and restore remain available in both modes; <strong>Clear Local Collection…</strong> is hidden while a workspace is open.</p>
+          </div>
+          <div class="shortcuts-section">
+            <h4 class="shortcuts-heading">Saving, closing, and quitting</h4>
+            <p class="shortcuts-note">Before switching collections, closing the window, or quitting on macOS, Scratchpad saves pending edits. Both panes and collection mutations are locked while it finishes; a failed save cancels the operation and restores editing. Keep the app open and preserve your text if <strong>Save failed</strong> persists.</p>
+            <p class="shortcuts-note">A valid pending folder name is committed before leaving. An invalid name cancels Close, Quit, or the switch: correct it or press <strong>Escape</strong> to cancel the folder edit, then retry.</p>
+            <p class="shortcuts-note">If macOS Quit receives no reply from the editor for 30 seconds, a native prompt offers <strong>Keep Open</strong>, <strong>Quit Without Saving</strong>, or <strong>Cancel</strong>. The timeout alone does not discard edits. Force Quit, power loss, and crashes can still lose unsaved work.</p>
+          </div>
+          <div class="shortcuts-section">
+            <h4 class="shortcuts-heading">Back up, restore, and clear</h4>
+            <p class="shortcuts-note">Use the menu’s <strong>Back Up Collection…</strong> and <strong>Restore Collection…</strong> actions to save or replace the open local/workspace collection, including folders, order, pins, and trash. Restore validates the backup and retains a verified safety copy before replacement; it does not merge. Preferences, themes, workspace paths, MCP configuration, and earlier recovery archives are excluded. Copy important backups outside the app data directory. Backups are unencrypted; keep them private. If a local restore is interrupted, Scratchpad recovers its checkpoint at startup; if recovery fails, local data stays read-only and <strong>Retry reading</strong> retries recovery.</p>
             <p class="shortcuts-note">In the desktop app, return to <strong>Local notes</strong> and choose <strong>Clear Local Collection…</strong> to remove local notes, folders, and trash. Review the counts and type the exact word <strong>DELETE</strong> to enable clearing. A verified safety backup is retained first; use <strong>Restore Collection…</strong> to recover it. Preferences, themes, workspace files, and existing backup/recovery copies stay untouched. Cancel/Escape changes nothing. This is not secure erasure; safety copies are unencrypted. Recover unreadable data before clearing and close other instances using the local collection.</p>
-            <p class="shortcuts-note">Use the menu’s <strong>Back Up Collection…</strong> and <strong>Restore Collection…</strong> actions to save or replace the open local/workspace collection, including folders, order, pins, and trash. Restore validates the backup and retains a verified safety copy before replacement; it does not merge. Preferences and themes are excluded. Backups are unencrypted; keep them private. If a local restore is interrupted, Scratchpad recovers its checkpoint at startup; if recovery fails, local data stays read-only and <strong>Retry reading</strong> retries recovery.</p>
+          </div>
+          <div class="shortcuts-section">
+            <h4 class="shortcuts-heading">Organize and recover deleted notes</h4>
             <p class="shortcuts-note">Double-click the empty space below the scratchpad list to create a new scratchpad. Use the folder button in the sidebar to create collapsible folders. Pinned notes stay at the very top as ordinary notes, while unpinned notes without a folder remain below the folders. Drag notes onto folders to move them, or right-click a folder to add a note, rename, reorder, or safely remove it. Deleting a folder from the sidebar returns its notes to the top level.</p>
-            <p class="shortcuts-note">Sidebar badges detect <strong>TXT, MD, JSON, XML, YAML, and CSV</strong> from each note’s current content and refresh after a pause in editing. Detection is conservative: empty or uncertain content shows TXT, and ordinary bullet lists show MD. Badges are format hints; they do not validate YAML, change editor behavior, or choose an export format. Non-Markdown snippets preserve literal punctuation.</p>
-            <p class="shortcuts-note">Right-click a note and choose <strong>Delete Note</strong> to move it to trash. Click the <strong>trash icon at the bottom right</strong> and choose <strong>Restore</strong> to recover it. Restored notes return to their original folder, or the top level if it no longer exists. Right-click the trash icon (or focus it and press Shift+F10), choose <strong>Empty Trash…</strong>, and confirm to permanently remove recovery copies. Each local collection or workspace has its own trash, which survives restarts and never expires automatically.</p>
+            <p class="shortcuts-note">Sidebar badges detect <strong>TXT, MD, JSON, XML, YAML, CSV, and SPL</strong> from each note’s current content and refresh after a pause in editing. Detection is conservative: empty or uncertain content shows TXT, and ordinary bullet lists show MD. Detected formats guide syntax coloring and editing assistance; they do not validate a file or choose an export format. Structured snippets such as JSON and SPL preserve literal punctuation instead of applying Markdown shortcuts.</p>
+            <p class="shortcuts-note">Right-click a note and choose <strong>Delete Note</strong> to move it to trash. Click the <strong>trash icon at the bottom right</strong> and choose <strong>Restore</strong> to recover it. Restored notes return to their original folder, or the top level if it no longer exists. Right-click the trash icon (or focus it and press Shift+F10), choose <strong>Empty Trash…</strong>, and confirm to permanently remove the selected trash entries. Independent backups and recovery archives are retained. Each local collection or workspace has its own trash, which survives restarts and never expires automatically.</p>
+          </div>
+          <div class="shortcuts-section">
+            <h4 class="shortcuts-heading">Unreadable data and recovery</h4>
             <p class="shortcuts-note">If local notes or folder metadata cannot be read, the <strong>Local data recovery</strong> banner keeps the collection read-only and preserves the original values. <strong>Export preserved data…</strong> saves raw recovery JSON for manual repair (not a Markdown import or full backup); keep it private. <strong>Retry reading</strong> leaves the source unchanged. In the desktop app, <strong>Replace unreadable data…</strong> requires confirmation and a verified recovery file in app data, outside localStorage, before replacing unreadable values; readable data and trash are retained. Export for safekeeping because deleting app data deletes recovery files too. Healthy workspaces remain usable, and closing does not overwrite unreadable local data.</p>
+          </div>
+          <div class="shortcuts-section">
+            <h4 class="shortcuts-heading">Export and print one note</h4>
             <p class="shortcuts-note"><strong>Scratchpad menu → Note → Export HTML file</strong> saves the selected note with Markdown formatting, preview colours, and embedded styles for offline reading. In split view, it exports the active pane, including your latest edits. Search highlights and app controls are excluded; the same Preview restrictions block scripts and internet/local-file images. HTML exports contain unencrypted note content and are for sharing, not collection backups.</p>
             <p class="shortcuts-note"><strong>Print Note…</strong> opens a note-only desktop preview and system print dialog for the selected note, including current edits. In split view, it prints the active pane. Output uses a paper-friendly light palette and excludes app controls, other notes, search highlights, and the preview toolbar, with the same Preview image restrictions. Choose paper, margins, page ranges, and any available print-to-PDF destination in the system dialog; Cancel changes nothing. Use <strong>Print…</strong> to retry, then <strong>Close</strong> the preview before preparing another note; its snapshot is held only in memory. Scratchpad cannot tell whether paper was actually printed.</p>
+          </div>
+          <div class="shortcuts-section">
+            <h4 class="shortcuts-heading">Privacy and updates</h4>
+            <p class="shortcuts-note">Notes, workspace files, trash, backups, and recovery copies are unencrypted. Use one editor instance per collection/workspace: Scratchpad does not coordinate writes across processes. There is no cloud sync or telemetry. Preview blocks remote and local-file images; opening an external link contacts that destination in your browser. Optional MCP clients can send returned content to their model provider.</p>
+            <p class="shortcuts-note">Open <strong>Scratchpad menu → About Scratchpad</strong> to check for updates and read a release’s notes before downloading. Automatic checks are optional and off by default; they contact GitHub Pages without sending notes or workspace data. <strong>Skip This Version</strong> hides background notices for that release, while a manual check can show it again. Download opens the release page in your browser; nothing is installed automatically.</p>
+          </div>
+        </div>
+
+        <!-- Shortcuts Pane -->
+        <div class="help-pane" id="pane-shortcuts" role="tabpanel" aria-labelledby="tab-shortcuts-btn" aria-hidden="true">
+          <div class="shortcuts-section">
+            <h4 class="shortcuts-heading">Notes and views</h4>
             <div class="shortcut-row">
               <span class="shortcut-desc">Print Active Note</span>
               <div class="shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>P</kbd></div>
@@ -687,7 +724,6 @@
             </div>
             <p class="shortcuts-note">When two notes are open side by side, choose <strong>Compare</strong> in the toolbar to highlight removed source text on the left and added source text on the right. The comparison refreshes after a brief pause in typing and turns off when split view closes.</p>
             <p class="shortcuts-note">Use gutter chevrons to collapse detected Markdown, JSON, XML, and YAML sections; click a hidden-line placeholder to expand. Find reveals hidden matches, and Compare starts expanded. Folding is available for notes up to 100,000 characters and 10,000 lines; larger notes remain editable without folding. With the editor focused, collapse / expand the current section with <span class="code-mono">Cmd+Alt+[ / Cmd+Alt+]</span> on macOS or <span class="code-mono">Ctrl+Shift+[ / Ctrl+Shift+]</span> elsewhere. Use <span class="code-mono">Ctrl+Alt+[ / Ctrl+Alt+]</span> to collapse / expand all sections.</p>
-            <p class="shortcuts-note">Open <strong>Scratchpad menu → About Scratchpad</strong> to check for updates and read a release’s notes before downloading. Automatic checks are optional and off by default; they contact GitHub Pages without sending notes or workspace data. <strong>Skip This Version</strong> hides background notices for that release, while a manual check can show it again. Download opens the release page in your browser; nothing is installed automatically.</p>
             <div class="shortcut-row">
               <span class="shortcut-desc">Move Active Note Up in Sidebar</span>
               <div class="shortcut-keys"><kbd>Alt</kbd><span class="key-plus">+</span><kbd>↑</kbd></div>
@@ -756,6 +792,14 @@
 
           <div class="shortcuts-section">
             <h4 class="shortcuts-heading">Editing & Clipboard</h4>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Undo in Active Editor</span>
+              <div class="shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>Z</kbd></div>
+            </div>
+            <div class="shortcut-row">
+              <span class="shortcut-desc">Redo in Active Editor</span>
+              <div class="shortcut-keys" id="redo-shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>Shift</kbd><span class="key-plus">+</span><kbd>Z</kbd></div>
+            </div>
             <div class="shortcut-row">
               <span class="shortcut-desc">Copy Selected Text</span>
               <div class="shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>C</kbd></div>
@@ -1013,6 +1057,7 @@ function hello() {
         </div>
         <nav class="about-links" aria-label="Scratchpad project links">
           <a href="https://github.com/crims0n/scratchpad" target="_blank" rel="noopener noreferrer">Repository <span aria-hidden="true">↗</span></a>
+          <a href="https://github.com/crims0n/scratchpad/blob/main/docs/README.md" target="_blank" rel="noopener noreferrer">Documentation <span aria-hidden="true">↗</span></a>
           <a href="https://github.com/crims0n/scratchpad/blob/main/RELEASE_NOTES.md" target="_blank" rel="noopener noreferrer">Release notes <span aria-hidden="true">↗</span></a>
         </nav>
         <section class="update-section" aria-labelledby="update-heading">

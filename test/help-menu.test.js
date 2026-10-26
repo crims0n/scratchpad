@@ -6,6 +6,39 @@ import test from "node:test";
 
 import { bootApp } from "./helpers/app-harness.js";
 
+test("F1 opens Guide, topics follow document order, and Escape restores focus", async () => {
+  const app = await bootApp({ instance: 6900 });
+  const opener = document.getElementById("help-btn");
+  opener.focus();
+  const topics = ["guide", "shortcuts", "markdown", "mcp"];
+  const press = (key, shiftKey = false) => document.dispatchEvent(new app.dom.window.KeyboardEvent("keydown", {
+    key, shiftKey, bubbles: true, cancelable: true
+  }));
+  press("F1");
+  assert.deepEqual([...document.querySelectorAll('.help-tabs [role="tab"]')].map(tab => tab.getAttribute("aria-controls")),
+    [...document.querySelectorAll('.help-pane[role="tabpanel"]')].map(pane => pane.id));
+  for (const active of [...topics, "guide"]) {
+    for (const topic of topics) {
+      const selected = topic === active;
+      const button = document.getElementById(`tab-${topic}-btn`);
+      const pane = document.getElementById(`pane-${topic}`);
+      assert.equal(button.getAttribute("aria-selected"), String(selected));
+      assert.equal(button.tabIndex, selected ? 0 : -1);
+      assert.equal(pane.getAttribute("aria-hidden"), String(!selected));
+      if (selected) assert.equal(document.activeElement, button);
+    }
+    press("Tab");
+  }
+  press("Tab", true);
+  assert.equal(document.activeElement.id, "tab-guide-btn");
+  document.getElementById("tab-guide-btn").click();
+  assert.equal(document.getElementById("pane-guide").classList.contains("active"), true);
+  press("Escape");
+  assert.equal(document.getElementById("help-modal-backdrop").getAttribute("aria-hidden"), "true");
+  assert.equal(document.activeElement, opener);
+  app.dom.window.close();
+});
+
 test("the Scratchpad menu opens Help and About dialogs and returns focus", async () => {
   const { version } = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
   const app = await bootApp();
@@ -21,6 +54,7 @@ test("the Scratchpad menu opens Help and About dialogs and returns focus", async
   assert.equal(actionsDropdown.classList.contains("show"), false);
   assert.equal(helpBackdrop.style.display, "flex");
   assert.equal(document.getElementById("help-btn").getAttribute("aria-expanded"), "true");
+  assert.equal(document.getElementById("tab-guide-btn").getAttribute("aria-selected"), "true");
 
   const mcpTab = document.getElementById("tab-mcp-btn");
   mcpTab.click();
@@ -29,7 +63,7 @@ test("the Scratchpad menu opens Help and About dialogs and returns focus", async
   assert.equal(document.getElementById("pane-markdown").getAttribute("aria-hidden"), "true");
 
   document.dispatchEvent(new app.dom.window.KeyboardEvent("keydown", { key: "Tab" }));
-  assert.equal(document.getElementById("tab-shortcuts-btn").getAttribute("aria-selected"), "true");
+  assert.equal(document.getElementById("tab-guide-btn").getAttribute("aria-selected"), "true");
 
   document.getElementById("close-help-btn").click();
   assert.equal(helpBackdrop.style.display, "none");
@@ -59,3 +93,19 @@ test("the Scratchpad menu opens Help and About dialogs and returns focus", async
   assert.equal(aboutBackdrop.style.display, "none");
   assert.equal(document.activeElement, actionsButton);
 });
+
+for (const [platform, keys] of [
+  ["MacIntel", ["Cmd", "Shift", "Z"]],
+  ["Win32", ["Ctrl", "Y"]],
+  ["Linux x86_64", ["Ctrl", "Y", "Ctrl", "Shift", "Z"]]
+]) {
+  test(`Redo reference shows supported keys on ${platform}`, async () => {
+    const app = await bootApp({ instance: 6910 + keys.length, beforeBoot: win => {
+      Object.defineProperty(win.navigator, "platform", { value: platform, configurable: true });
+    } });
+    const row = document.getElementById("redo-shortcut-keys");
+    assert.equal(row.className, "shortcut-keys");
+    assert.deepEqual([...row.querySelectorAll("kbd")].map(key => key.textContent), keys);
+    app.dom.window.close();
+  });
+}

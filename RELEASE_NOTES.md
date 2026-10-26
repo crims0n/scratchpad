@@ -5,6 +5,8 @@
 - Scratchpad's first stable release brings the existing local-first Markdown editor, dual-note view and comparison, search, folders, persistent trash, themes, and optional local MCP agent access into one release stream.
 - macOS universal packages are Developer ID-signed and notarized. Windows EXE/MSI installers and installed executables are Authenticode-signed and timestamped. Linux AppImage and Debian downloads are covered by a GPG-signed checksum manifest; the AppImage also carries an embedded signature.
 - Complete collection backup/restore and guarded local collection clearing retain verified safety copies. Unreadable local data is preserved for recovery instead of being silently replaced.
+- Collection switches, window closing, and macOS Quit flush pending saves while both panes are read-only. Failed saves cancel the operation; a stalled macOS Quit offers a native choice without automatically discarding edits.
+- Automatic format detection and editor coloring include Splunk SPL. In-app Help includes a user guide alongside shortcuts, Markdown examples, and the MCP function reference.
 - Updates use one preferred release feed. Existing beta clients can discover 1.0, and newer clients no longer select a channel from the internal application identifier. Update checks remain optional and off by default; installation is manual.
 
 ## Upgrading from beta

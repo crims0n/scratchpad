@@ -231,9 +231,11 @@ const helpModalBackdrop = document.getElementById("help-modal-backdrop");
 const helpModal = document.getElementById("help-modal");
 const closeHelpBtn = document.getElementById("close-help-btn");
 const tabShortcutsBtn = document.getElementById("tab-shortcuts-btn");
+const tabGuideBtn = document.getElementById("tab-guide-btn");
 const tabMarkdownBtn = document.getElementById("tab-markdown-btn");
 const tabMcpBtn = document.getElementById("tab-mcp-btn");
 const paneShortcuts = document.getElementById("pane-shortcuts");
+const paneGuide = document.getElementById("pane-guide");
 const paneMarkdown = document.getElementById("pane-markdown");
 const paneMcp = document.getElementById("pane-mcp");
 const splitDropOverlay = document.getElementById("split-drop-overlay");
@@ -601,6 +603,12 @@ function applyPlatformShortcutLabels() {
       element.textContent = element.textContent.replaceAll("Cmd", "Ctrl");
     }
   });
+
+  const redoKeys = document.getElementById("redo-shortcut-keys");
+  redoKeys.innerHTML = '<kbd>Ctrl</kbd><span class="key-plus">+</span><kbd>Y</kbd>';
+  if (/linux/i.test(platform)) {
+    redoKeys.innerHTML += '<span class="key-plus">or</span><kbd>Ctrl</kbd><span class="key-plus">+</span><kbd>Shift</kbd><span class="key-plus">+</span><kbd>Z</kbd>';
+  }
 }
 
 // Reports the remembered workspace alongside whether it could be determined at
@@ -2893,6 +2901,7 @@ function attachEventListeners() {
     if (e.target === helpModalBackdrop) closeHelpModal();
   });
   tabShortcutsBtn.addEventListener("click", () => switchHelpTab("shortcuts"));
+  tabGuideBtn.addEventListener("click", () => switchHelpTab("guide"));
   tabMarkdownBtn.addEventListener("click", () => switchHelpTab("markdown"));
   tabMcpBtn.addEventListener("click", () => switchHelpTab("mcp"));
 
@@ -5172,7 +5181,7 @@ function toggleNotePinned(noteId) {
 // ----------------------------------------------------
 // Help & Reference Modal Logic
 // ----------------------------------------------------
-function openHelpModal(defaultTab = "shortcuts") {
+function openHelpModal(defaultTab = "guide") {
   helpModalPreviousFocus = document.activeElement;
   isHelpModalOpen = true;
   helpModalBackdrop.style.display = "flex";
@@ -5202,11 +5211,12 @@ function toggleHelpModal() {
 
 function switchHelpTab(tabName, focusTab = false) {
   const helpTopics = {
+    guide: { button: tabGuideBtn, pane: paneGuide },
     shortcuts: { button: tabShortcutsBtn, pane: paneShortcuts },
     markdown: { button: tabMarkdownBtn, pane: paneMarkdown },
     mcp: { button: tabMcpBtn, pane: paneMcp }
   };
-  const activeTopic = helpTopics[tabName] || helpTopics.shortcuts;
+  const activeTopic = helpTopics[tabName] || helpTopics.guide;
 
   Object.values(helpTopics).forEach(({ button, pane }) => {
     const isActive = button === activeTopic.button;
@@ -5223,10 +5233,10 @@ function switchHelpTab(tabName, focusTab = false) {
 }
 
 function cycleHelpTab(backwards = false) {
-  const tabs = ["shortcuts", "markdown", "mcp"];
+  const tabs = ["guide", "shortcuts", "markdown", "mcp"];
   const currentTab = tabs.find(tabName =>
     document.getElementById(`tab-${tabName}-btn`).classList.contains("active")
-  ) || "shortcuts";
+  ) || "guide";
   const currentIndex = tabs.indexOf(currentTab);
   const direction = backwards ? -1 : 1;
   const nextIndex = (currentIndex + direction + tabs.length) % tabs.length;

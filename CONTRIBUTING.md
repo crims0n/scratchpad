@@ -21,25 +21,31 @@ Keep `main` deployable and do not commit or push to it directly. Every change sh
 
 ## Development setup
 
-You need Node.js 20 or newer, Rust 1.98.0, and the platform dependencies from the [Tauri prerequisites guide](https://tauri.app/start/prerequisites/).
+You need Node.js 20 or newer (CI uses Node.js 24), Rust 1.98.0 as pinned in `rust-toolchain.toml`, and the platform dependencies from the [Tauri prerequisites guide](https://v2.tauri.app/start/prerequisites/). Install GnuPG (`gpg` and `gpgv`) for the release-verification tests; they use disposable public fixtures rather than production signing credentials.
 
 ```bash
 git clone https://github.com/crims0n/scratchpad.git
 cd scratchpad
-npm install
+npm ci
 npm run tauri -- dev
 ```
 
 ## Validate a change
+
+The app serves its frontend directly from `src/`; there is no frontend development server to start. Both local development and plain local builds use **Scratchpad Development**, a separate application/storage identity from released Scratchpad. Use disposable notes and copied workspace files: the separate profile does not prevent two processes from opening the same workspace. MCP uses one loopback port, so only one app can have agent access enabled at a time.
+
+Start with the [architecture guide](docs/architecture.md) for module ownership, persistence, native IPC, and MCP data flow. The [documentation index](docs/README.md) links the user and maintainer guides.
 
 Run the same core checks used in CI:
 
 ```bash
 npm run check
 cargo fmt --manifest-path src-tauri/Cargo.toml --check
-cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
-cargo test --manifest-path src-tauri/Cargo.toml
+cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+cargo test --locked --manifest-path src-tauri/Cargo.toml
 ```
+
+Frontend integration tests in `test/` boot the real app with JSDOM and a stubbed Tauri bridge; they do not prove native installer/webview behavior. Rust tests include loopback MCP sockets. CI also checks the Windows installer transition and workspace path handling, plus macOS quit protection. Use the [release checklist](docs/release-checklist.md) for signed packages and installed-platform acceptance.
 
 For changes to packaging or Tauri configuration, also build the application locally:
 
@@ -50,6 +56,8 @@ npm run tauri -- build
 ## Pull requests
 
 Explain the user-visible behavior, describe how you tested it, and include screenshots for visual changes. New behavior should include tests when it can be exercised outside the desktop shell.
+
+When behavior or labels change, review the matching README sections, [welcome note](src/welcome-note.js), [in-app Help](src/index.html), [MCP reference](docs/mcp.md), [product page](site/index.html), and [release notes](RELEASE_NOTES.md). Update architecture diagrams when ownership or data flow changes. Keep published-download claims tied to real releases and record package-specific verification separately from source tests.
 
 All changes to `main`, including small fixes and documentation updates, must go through a pull request. A linked issue is not required when the change is small and its purpose is clear from the pull request.
 

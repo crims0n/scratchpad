@@ -46,8 +46,9 @@ test("the landing page renders the currently published package and complete down
   assert.equal(document.querySelectorAll(".download-card").length, 6);
   assert.equal(document.querySelectorAll(".checksum").length, 6);
   assert.equal(document.getElementById("release-badge").textContent, "Beta v0.8.2");
-  assert.equal(document.getElementById("transition-label").textContent, "Preparing for 1.0:");
-  assert.match(document.getElementById("transition-detail").textContent, /when a published 1\.0 release is available/);
+  assert.equal(document.getElementById("transition-label").textContent, "Upgrading from beta?");
+  assert.match(document.getElementById("transition-detail").textContent, /Check GitHub Releases for the version currently available/);
+  assert.match(document.getElementById("feature-release-note").textContent, /Scratchpad 1\.0.*currently offers Beta v0\.8\.2/);
 });
 
 test("the landing page renders a published stable manifest with stable URLs and final checksums", async t => {
@@ -56,6 +57,8 @@ test("the landing page renders a published stable manifest with stable URLs and 
   assert.equal(document.getElementById("release-badge").textContent, "v1.0.0");
   assert.equal(document.getElementById("transition-label").textContent, "Upgrading from beta?");
   assert.equal(document.getElementById("transition-detail").textContent, " before installing the stable release.");
+  assert.match(document.getElementById("feature-release-note").textContent, /included in Scratchpad 1\.0 and later/);
+  assert.match(document.getElementById("feature-release-note").textContent, /download catalog below/);
   assert.match(document.getElementById("primary-download").href, /\/v1\.0\.0\/Scratchpad_1\.0\.0_universal\.dmg$/);
   assert.equal(document.querySelectorAll(".download-card").length, 6);
   assert.ok([...document.querySelectorAll(".checksum")].every(element => /^[a-f0-9]{64}$/.test(element.textContent)));
@@ -66,6 +69,8 @@ test("an unavailable manifest falls back to release-neutral GitHub downloads", a
   assert.equal(document.getElementById("release-badge").textContent, "Latest release");
   assert.equal(document.getElementById("primary-download").href, "https://github.com/crims0n/scratchpad/releases");
   assert.equal(document.querySelectorAll(".download-card").length, 0);
+  assert.match(document.getElementById("feature-release-note").textContent, /Check GitHub Releases for the version currently available/);
+  assert.doesNotMatch(document.querySelector("main").textContent, /1\.0 candidate|until stable is available|upcoming transition|Preparing for 1\.0/);
 });
 
 test("the landing page has named navigation, images, and download controls", () => {
@@ -74,6 +79,8 @@ test("the landing page has named navigation, images, and download controls", () 
   assert.ok([...document.querySelectorAll("img")].every((image) => image.hasAttribute("alt")));
   assert.ok(document.getElementById("primary-download").textContent.trim());
   assert.ok(document.querySelector("meta[http-equiv='Content-Security-Policy']"));
+  assert.doesNotMatch(document.getElementById("feature-release-note").textContent, /candidate|until stable/);
+  assert.doesNotMatch(document.getElementById("transition-detail").textContent, /upcoming|when.*available/);
 });
 
 test("the landing page describes current Markdown assistance", () => {

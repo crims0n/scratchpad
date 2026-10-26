@@ -32,22 +32,43 @@ The `release-signing` environment holds these non-secret variables: `AZURE_TENAN
 1. Create a pay-as-you-go Azure subscription. The billing account must have account type *Individual*, and its legal name and sold-to address must match a government-issued ID. Individual Public Trust validation is available only in the United States and Canada.
 2. Register the `Microsoft.CodeSigning` resource provider and create an Artifact Signing account. Assign yourself *Artifact Signing Identity Verifier*, then complete the individual identity validation in the Azure portal.
 3. Create a Public Trust certificate profile from the completed validation.
-4. Create an app registration without secrets. Add the federated credential above, then grant its service principal the signer role on the certificate profile:
+4. Create an app registration without secrets. Substitute your actual resource values below, add the federated credential above, then grant its service principal the signer role on the chosen certificate profile:
 
    ```powershell
-   $sp = (az ad sp show --id <app-id> --query id -o tsv)
-   $acct = "/subscriptions/<sub>/resourceGroups/codesign/providers/Microsoft.CodeSigning/codeSigningAccounts/<account>"
-   az role assignment create --assignee-object-id $sp --assignee-principal-type ServicePrincipal --role "Artifact Signing Certificate Profile Signer" --scope "$acct/certificateProfiles/<profile>"
+   $signingAppId = 'YOUR_APP_ID'
+   $signingSubscriptionId = 'YOUR_SUBSCRIPTION_ID'
+   $signingResourceGroup = 'codesign'
+   $signingAccount = 'YOUR_ARTIFACT_SIGNING_ACCOUNT'
+   $signingProfile = 'YOUR_CERTIFICATE_PROFILE'
+   $signingServicePrincipal = (az ad sp show --id $signingAppId --query id -o tsv)
+   $signingAccountResource = "/subscriptions/$signingSubscriptionId/resourceGroups/$signingResourceGroup/providers/Microsoft.CodeSigning/codeSigningAccounts/$signingAccount"
+   az role assignment create --assignee-object-id $signingServicePrincipal --assignee-principal-type ServicePrincipal --role "Artifact Signing Certificate Profile Signer" --scope "$signingAccountResource/certificateProfiles/$signingProfile"
    ```
 
-5. Set the environment variables with `gh variable set <NAME> --env release-signing --body <value>`.
-6. Put the certificate's common name in `WINDOWS_SIGNING_PUBLISHER` in `.github/workflows/release.yml`. Read it with `az rest --method get --url "https://management.azure.com$acct/certificateProfiles/<profile>?api-version=2024-09-30-preview" --query "properties.certificates[0].subjectName"`.
+5. Using the values from step 4, set the environment variables. Use the same `$signingProfile` for the role scope, certificate lookup, and `ARTIFACT_SIGNING_PROFILE`. The endpoint below is for this project's East US account; use your account's endpoint if setting up another region.
+
+   ```powershell
+   $signingTenantId = 'YOUR_TENANT_ID'
+   gh variable set AZURE_TENANT_ID --repo crims0n/scratchpad --env release-signing --body "$signingTenantId"
+   gh variable set AZURE_CLIENT_ID --repo crims0n/scratchpad --env release-signing --body "$signingAppId"
+   gh variable set AZURE_SUBSCRIPTION_ID --repo crims0n/scratchpad --env release-signing --body "$signingSubscriptionId"
+   gh variable set ARTIFACT_SIGNING_ENDPOINT --repo crims0n/scratchpad --env release-signing --body 'https://eus.codesigning.azure.net'
+   gh variable set ARTIFACT_SIGNING_ACCOUNT --repo crims0n/scratchpad --env release-signing --body "$signingAccount"
+   gh variable set ARTIFACT_SIGNING_PROFILE --repo crims0n/scratchpad --env release-signing --body "$signingProfile"
+   ```
+
+6. Put the certificate's common name in `WINDOWS_SIGNING_PUBLISHER` in `.github/workflows/release.yml`. Read it using the same account and profile from step 4:
+
+   ```powershell
+   $signingProfileUri = "https://management.azure.com$signingAccountResource/certificateProfiles/${signingProfile}?api-version=2024-09-30-preview"
+   az rest --method get --url "$signingProfileUri" --query 'properties.certificates[0].subjectName' --output tsv
+   ```
 
 ## Renewal and costs
 
-- Certificates last about three days and renew automatically. Timestamps keep older signatures valid after each certificate expires.
+- [Certificates are valid for 72 hours and renew daily](https://learn.microsoft.com/en-us/azure/artifact-signing/concept-certificate-management). Trusted timestamps preserve verification after certificate expiry; revocation remains a separate consideration.
 - The identity validation expires, and Microsoft sends reminders starting 60 days before. Renew it in the Azure portal, or certificate renewal and signing stop. If the publisher name changes, update `WINDOWS_SIGNING_PUBLISHER`.
-- The Basic SKU is billed monthly at full price; there is no proration. It includes 5,000 signatures a month, and a release uses about ten. Deleting the Artifact Signing account stops billing and does not invalidate files already signed.
+- Check the current [pricing and billing guidance](https://learn.microsoft.com/en-us/azure/artifact-signing/faq#cost-management-and-billing) when maintaining the Basic account. Its signing quota covers all profiles; do not budget by installer count alone, because bundled executables, DLLs, and NSIS components also require signatures. Deleting the account stops future signing and does not revoke already-issued certificates.
 - Updating the dlib: change `$dlibVersion` and `$dlibSha256` together in `setup-windows-signing.ps1`. Use a version that has been on nuget.org for at least two weeks, and take the SHA-256 of the `.nupkg` you inspected.
 
 ## Revocation and incident response

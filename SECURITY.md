@@ -23,6 +23,13 @@ notes, or permanently empty trash. Local storage and workspace databases,
 including their trash, are not encrypted by Scratchpad. Protect them and their
 backups with the same care as active notes.
 
+Collection backups include active and trashed note content; restore and clear
+also retain safety copies in app data. Recovery exports can contain raw damaged
+data and earlier copies. Emptying trash or clearing a collection does not erase
+independent backups or guarantee secure deletion. Copy important backups outside
+app data, and avoid opening the same collection/workspace in multiple editor
+processes: Scratchpad does not coordinate writes across instances.
+
 See the [MCP reference](docs/mcp.md#live-data-and-privacy-boundary) for the local
 authentication boundary, message limits, and client configuration.
 

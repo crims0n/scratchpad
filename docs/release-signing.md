@@ -19,11 +19,13 @@ Rotating the subkey therefore keeps the published fingerprint, and a CI compromi
 
 ## Initial setup
 
-Do this on a trusted machine, ideally offline, with GnuPG 2.2 or later.
+The project already has a published key. These steps are for an initial setup or
+an explicitly planned key replacement, not a routine release. Do this on a
+trusted machine, ideally offline, with GnuPG 2.2 or later.
 
 ```bash
 gpg --quick-gen-key "Scratchpad Release Signing (github.com/crims0n/scratchpad)" ed25519 cert 5y
-FPR=<primary fingerprint printed above>
+FPR='YOUR_PRIMARY_FINGERPRINT'
 gpg --quick-add-key "$FPR" ed25519 sign 1y
 SUBFPR=$(gpg --with-colons --list-keys "$FPR" | awk -F: '$1=="fpr"{print $10}' | sed -n 2p)
 
@@ -40,7 +42,7 @@ gpg --output scratchpad-release-revoke.asc --gen-revoke "$FPR"
 
 Then:
 
-1. Replace `FINGERPRINT-PENDING` in `site/index.html` and `docs/verify-linux-downloads.md` with the primary fingerprint, in groups of four (`gpg --fingerprint "$FPR"`, single spaces). `test/release-signing-key.test.js` checks that both match `site/release-signing-key.asc`.
+1. For a new key, update the existing fingerprint in `site/index.html` and `docs/verify-linux-downloads.md` to the reviewed primary fingerprint, in groups of four (`gpg --fingerprint "$FPR"`, single spaces). `test/release-signing-key.test.js` checks that both match `site/release-signing-key.asc`. Announce a primary-key change as described below.
 2. In **Settings → Environments**, create `release-signing` with required reviewers and deployment branches limited to `main`. The Stable Release build job runs in this environment.
 3. Add the environment secrets `RELEASE_SIGNING_GPG_PRIVATE_KEY` (contents of `signing-subkey.asc`) and `RELEASE_SIGNING_GPG_PASSPHRASE`.
 4. Securely delete `signing-subkey.asc` from the working machine.

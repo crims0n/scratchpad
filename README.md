@@ -24,6 +24,15 @@ macOS packages from v0.8.2 are signed with a Developer ID certificate and notari
 
 See [release notes](RELEASE_NOTES.md) for highlights and limitations. Existing beta users should follow [Upgrading from beta to 1.0](docs/transition-to-1.0.md), including the renamed macOS app and Windows installer transition.
 
+## First steps
+
+1. Create a note with **Cmd/Ctrl+N** and start typing. Changes save automatically after a short pause; check the status bar for **Saved** or **Save failed**.
+2. Use **Edit**, **Split**, and **Preview** for one note's source and rendered Markdown. **Cmd/Ctrl+\\** opens a second note beside it; **Compare** highlights their source differences.
+3. Keep using **Local notes**, or choose **Scratchpad menu → Open or create workspace…** for a separate collection in a portable SQLite file. Switching collections does not merge them.
+4. Choose **Back Up Collection…** to protect the current collection, including trash. Copy important backups outside the app data directory. Use **Help & reference** in the menu, **Cmd/Ctrl+/**, or **F1** for the guide and reference.
+
+The [documentation index](docs/README.md) links the user, contributor, architecture, and release guides.
+
 ## Features
 
 - Optional local MCP agent access with five read tools, eight individually enabled write tools, and a live listening indicator
@@ -40,7 +49,7 @@ See [release notes](RELEASE_NOTES.md) for highlights and limitations. Existing b
 - Two-note side-by-side editing with drag-to-split and live source comparison
 - Top-level pinned notes, collapsible sidebar folders with drag-and-drop organization, search, configurable note previews, manual ordering, word counts, and distraction-free Focus Mode
 - Find and replace with case-sensitive, exact-match, and regular-expression modes, live highlighting, and results across one or every scratchpad
-- Sidebar format badges for detected TXT, MD, JSON, XML, YAML, and CSV content, refreshed after edits
+- Sidebar format badges for detected TXT, MD, JSON, XML, YAML, CSV, and SPL content, refreshed after edits
 - Native text-file import and Markdown/standalone HTML export
 - Formatted, note-only printing through the system print dialog (Cmd/Ctrl+P)
 - Copy as Markdown or sanitized rendered HTML
@@ -54,11 +63,13 @@ See [release notes](RELEASE_NOTES.md) for highlights and limitations. Existing b
 
 By default, notes, folders, and trash stay in the desktop webview's local storage. Scratchpad also supports optional portable workspace files for a durable collection of notes, folders, trash, pinned state, and sidebar order. Workspace files use SQLite internally and may have a `.db` or `.sqlite` extension. Notes without a folder remain at the top level of the sidebar; deleting a folder from the sidebar returns its notes there rather than deleting them. Agent folder deletion requires an empty folder.
 
-Local notes and workspace notes are two separate collections, each with its own trash. While a workspace is connected, changes are written to that workspace and the local collection is left exactly as it was, so disconnecting returns the notes and trash you had before. Connecting an empty workspace seeds it with the active notes and folders already available in the app; local trash stays local. A workspace with existing notes, folders, or trash opens its own collection.
+Local notes and workspace notes are two separate collections, each with its own trash. While a workspace is connected, changes are written to that workspace and the local collection is left exactly as it was, so disconnecting returns the notes and trash you had before. An uninitialized workspace can receive a one-time copy of readable notes and folders; unreadable local data and local trash are not copied. At startup, if no readable local notes are available, it receives a fresh welcome note instead. Local folders are copied only when the local collection is not in recovery mode. Opening one from the menu without available notes leaves it empty. A workspace with existing notes, folders, or trash opens its own collection, and an initialized empty workspace stays empty.
 
 A **collection** is your notes, folders, and trash; a **workspace file** is a portable storage location for a collection. The menu section is labeled **Collection** for local notes, or **Workspace** for a workspace file. Both modes use the same status label: **Current — Local notes** or **Current — filename**. Hover over actions for descriptions and their storage scope; the same information is available to screen readers. Choose **Open or create workspace…** to switch to a workspace file, or **Return to local notes** to switch back. These actions do not merge collections. Backup and restore remain available in both modes. **Clear Local Collection…** is hidden while a workspace is open and always targets local storage, never a workspace file.
 
-Pending workspace changes are flushed before the desktop window closes; if that save fails, Scratchpad cancels the close and reports the error. If a workspace cannot be opened at start-up, Scratchpad reports it and falls back to your local notes, leaving the workspace file untouched.
+Pending changes are flushed before switching collections, closing the desktop window, or quitting on macOS. Both editor panes and collection mutations are locked during the operation; cancellation or failure restores editing. A pending valid folder name is committed first; an invalid name cancels the operation with instructions to correct it or press Escape. Save failure cancels the switch/close/quit and reports the error. If a workspace cannot be opened at start-up, Scratchpad reports it and falls back to your local notes, leaving the workspace file untouched.
+
+If macOS Quit receives no reply from the editor for 30 seconds, a native prompt offers **Keep Open**, **Quit Without Saving**, or **Cancel**. Unsaved edits are discarded only if you explicitly choose **Quit Without Saving**; a timeout alone does not discard them. This protection does not cover force-quitting, power loss, or another process overwriting the same files. Use one editor instance per collection/workspace, keep backups, and resolve **Save failed** before leaving the app.
 
 Workspace access is limited to files chosen through the native workspace dialog or restored from native preferences. A missing remembered workspace is not recreated automatically. When upgrading from an older version that stored its workspace choice in browser storage, Scratchpad asks once before reopening that file; declining returns to local notes, and you can open the workspace later from the menu.
 
@@ -154,6 +165,9 @@ The app displays `Cmd` on macOS and `Ctrl` on Windows or Linux.
 | Shortcut | Action |
 | --- | --- |
 | `Cmd/Ctrl + N` | Create a scratchpad |
+| `Cmd/Ctrl + Z` | Undo in the active editor |
+| `Cmd + Shift + Z` (macOS) / `Ctrl + Y` (Windows/Linux) | Redo in the active editor |
+| `Ctrl + Shift + Z` (Linux) | Alternative Redo shortcut |
 | `Cmd/Ctrl + B` | Toggle the sidebar |
 | `Cmd/Ctrl + \` | Toggle two-note side-by-side editing |
 | `Alt + ↑` / `Alt + ↓` | Move a list branch, or the active sidebar note outside a list |
@@ -175,7 +189,7 @@ The app displays `Cmd` on macOS and `Ctrl` on Windows or Linux.
 
 ## Markdown editing
 
-Scratchpad keeps its Markdown assistance lightweight and works directly in the native text editor:
+Scratchpad provides Markdown assistance in both editor panes. Structured formats such as JSON and SPL preserve literal punctuation instead of applying Markdown shortcuts:
 
 - `Enter` preserves the marker and spacing of bullet lists, advances ordered-list numbering, and creates unchecked task items. An empty item outdents or exits its list.
 - `Tab` at the start of a list item nests the complete item and its children; `Shift+Tab` outdents them. Elsewhere, Tab inserts indentation. Fenced code always receives literal indentation.
@@ -237,7 +251,7 @@ Opaque hex, RGB, HSL, named, and `color(srgb …)` values are measured against t
 ```bash
 git clone https://github.com/crims0n/scratchpad.git
 cd scratchpad
-npm install
+npm ci
 npm run tauri -- dev
 ```
 
@@ -250,8 +264,8 @@ Plain `tauri dev` and local builds use **Scratchpad Development**, with a separa
 ```bash
 npm run check
 cargo fmt --manifest-path src-tauri/Cargo.toml --check
-cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
-cargo test --manifest-path src-tauri/Cargo.toml
+cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+cargo test --locked --manifest-path src-tauri/Cargo.toml
 ```
 
 ### Build locally
@@ -273,6 +287,8 @@ Follow the [release checklist](docs/release-checklist.md) to build a draft, chec
 Linux artifacts are signed during the release using secrets in the protected `release-signing` environment. The release fails if signing or verification fails. The draft includes `SHA256SUMS` and `SHA256SUMS.asc`; see [Linux release signing](docs/release-signing.md) for key setup, rotation, and revocation. Windows executables and both installers are Authenticode-signed and timestamped with Azure Artifact Signing, and the release fails if any signature does not verify; see [Windows release signing](docs/windows-release-signing.md). The macOS app and DMG are signed with a Developer ID certificate, notarized, and stapled, and the release fails if signing, notarization, or Gatekeeper verification fails; see [macOS release signing](docs/macos-release-signing.md).
 
 ## Architecture
+
+See [Architecture and data flow](docs/architecture.md) for runtime, persistence, MCP, quit-handling, and release-pipeline diagrams, plus the source map and security boundaries.
 
 | Area | Implementation |
 | --- | --- |
