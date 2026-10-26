@@ -11,6 +11,8 @@ use tauri::{
 
 mod backup;
 mod file_export;
+#[cfg(target_os = "macos")]
+mod macos_quit;
 mod mcp;
 #[cfg(test)]
 mod native_ipc_tests;
@@ -932,8 +934,8 @@ fn macos_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         })?;
 
     // Tauri's first application-menu item is a predefined About command that
-    // opens the system metadata panel. Replace only that item so the standard
-    // Services, Hide, and Quit behavior remains intact.
+    // opens the system metadata panel. The standard Quit action is guarded by
+    // macos_quit's applicationShouldTerminate: hook, including Dock Quit.
     app_menu.remove_at(0)?.ok_or_else(|| {
         std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -978,6 +980,25 @@ fn is_main_navigation_allowed(url: &tauri::Url) -> bool {
         && matches!(url.path(), "" | "/" | "/index.html")
 }
 
+#[tauri::command]
+fn complete_native_quit<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    window: tauri::WebviewWindow<R>,
+    request_id: String,
+    saved: bool,
+) -> Result<bool, String> {
+    if window.label() != "main" {
+        return Err("Only the main editor can acknowledge a quit save".into());
+    }
+    #[cfg(target_os = "macos")]
+    return Ok(macos_quit::complete(&app, &request_id, saved));
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, request_id, saved);
+        Ok(false)
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run(context: tauri::Context<tauri::Wry>) {
     let builder = tauri::Builder::default()
@@ -989,13 +1010,23 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             // A print preview must not keep an editor-less process alive;
             // CloseRequested is too early because saving can cancel a close.
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
+                #[cfg(target_os = "macos")]
+                if macos_quit::main_window_destroyed(window.app_handle()) {
+                    return;
+                }
                 window.app_handle().exit(0);
             }
         });
     #[cfg(target_os = "macos")]
     let builder = builder
         .menu(macos_menu)
-        .on_menu_event(handle_macos_menu_event);
+        .on_menu_event(handle_macos_menu_event)
+        .setup(|app| {
+            if let Err(error) = macos_quit::install(app.handle()) {
+                eprintln!("macOS save-before-quit protection unavailable: {error}");
+            }
+            Ok(())
+        });
 
     builder
         // Markdown links have no default handling in the webview; the opener
@@ -1015,6 +1046,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
                 .build(),
         )
         .invoke_handler(tauri::generate_handler![
+            complete_native_quit,
             updates::get_update_info,
             updates::check_for_updates,
             updates::open_update_release,

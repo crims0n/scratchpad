@@ -3450,7 +3450,9 @@ name = "scratchpad"
 version = "1.0.0"
 dependencies = [
  "dirs",
+ "dispatch2",
  "dunce",
+ "objc2",
  "reqwest",
  "rfd",
  "rmcp",
