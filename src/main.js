@@ -1631,25 +1631,31 @@ async function registerCloseHandler() {
     // window or veto a system logout/restart before persistence has finished.
     const listen = window.__TAURI__?.event?.listen;
     if (typeof listen === "function") {
+      let nativeQuitTransition = null;
       const unlistenCancel = await listen("scratchpad-native-quit-cancelled", ({ payload: id }) => {
         if (nativeQuitRequestId !== id) return;
         nativeQuitRequestId = null;
-        isClosePending = isClosing = false;
-        refreshEditorAvailability();
+        isClosing = false;
+        if (nativeQuitTransition) endCollectionTransition(nativeQuitTransition);
+        nativeQuitTransition = null;
       });
       const unlistenQuit = await listen("scratchpad-native-quit", async ({ payload: id }) => {
         if (typeof id !== "string" || !id) return;
-        if (isCollectionBackupBusy || isWorkspaceSwitching) {
+        // An already pending close may itself be stalled. Leave the native
+        // watchdog armed rather than immediately canceling every retry.
+        if (isClosePending || isClosing) return;
+        if (isCollectionTransitionBusy()) {
           showNotification("Finish or cancel the collection operation before quitting");
           await invoke("complete_native_quit", { requestId: id, saved: false });
           return;
         }
-        // An already pending close may itself be stalled. Leave the native
-        // watchdog armed rather than immediately canceling every retry.
-        if (isClosePending || isClosing) return;
+        const transition = beginCollectionTransition("close", "Quit");
+        if (!transition) {
+          await invoke("complete_native_quit", { requestId: id, saved: false });
+          return;
+        }
         nativeQuitRequestId = id;
-        isClosePending = true;
-        refreshEditorAvailability();
+        nativeQuitTransition = transition;
         let approved = false;
         try {
           await dbSaveQueue;
@@ -1669,8 +1675,8 @@ async function registerCloseHandler() {
         } finally {
           if (nativeQuitRequestId === id && !approved) {
             nativeQuitRequestId = null;
-            isClosePending = false;
-            refreshEditorAvailability();
+            nativeQuitTransition = null;
+            endCollectionTransition(transition);
           }
         }
       });
