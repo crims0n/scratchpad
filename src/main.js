@@ -343,6 +343,7 @@ let mcpWriteListener = null;
 let mcpCollectionId = window.crypto.randomUUID();
 let isWorkspaceSwitching = false;
 let isClosePending = false;
+let nativeQuitRequestId = null;
 // Covers backup, restore, and clearing local data: all exclude edits/switches/close.
 let isCollectionBackupBusy = false;
 
@@ -1605,6 +1606,55 @@ async function registerCloseHandler() {
         showNotification("Could not close Scratchpad");
       }
     });
+    // AppKit waits for this request's explicit reply; it must not destroy the
+    // window or veto a system logout/restart before persistence has finished.
+    const listen = window.__TAURI__?.event?.listen;
+    if (typeof listen === "function") {
+      const unlistenCancel = await listen("scratchpad-native-quit-cancelled", ({ payload: id }) => {
+        if (nativeQuitRequestId !== id) return;
+        nativeQuitRequestId = null;
+        isClosePending = isClosing = false;
+        refreshEditorAvailability();
+      });
+      const unlistenQuit = await listen("scratchpad-native-quit", async ({ payload: id }) => {
+        if (typeof id !== "string" || !id) return;
+        if (isCollectionBackupBusy || isWorkspaceSwitching) {
+          showNotification("Finish or cancel the collection operation before quitting");
+          await invoke("complete_native_quit", { requestId: id, saved: false });
+          return;
+        }
+        // An already pending close may itself be stalled. Leave the native
+        // watchdog armed rather than immediately canceling every retry.
+        if (isClosePending || isClosing) return;
+        nativeQuitRequestId = id;
+        isClosePending = true;
+        refreshEditorAvailability();
+        let approved = false;
+        try {
+          await dbSaveQueue;
+          if (nativeQuitRequestId !== id) return;
+          const saved = await flushPendingSaves();
+          if (nativeQuitRequestId !== id) return;
+          if (!saved) {
+            setSaveFailedState();
+            showNotification("Could not save the latest changes; quit cancelled");
+          }
+          const accepted = await invoke("complete_native_quit", { requestId: id, saved });
+          approved = saved && accepted; // Expired requests cannot quit later.
+        } catch (error) {
+          showNotification("Could not save the latest changes; quit cancelled");
+          await invoke("complete_native_quit", { requestId: id, saved: false })
+            .catch(replyError => console.error("Could not cancel native quit", replyError));
+        } finally {
+          if (nativeQuitRequestId === id && !approved) {
+            nativeQuitRequestId = null;
+            isClosePending = false;
+            refreshEditorAvailability();
+          }
+        }
+      });
+      window.addEventListener("pagehide", () => { unlistenQuit(); unlistenCancel(); }, { once: true });
+    }
   } catch (error) {
     console.error("Failed to register the close-save handler", error);
   }

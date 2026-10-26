@@ -4,6 +4,7 @@
 identifier = "editor-commands"
 description = "Commands available to the main editor"
 commands.allow = [
+  "complete_native_quit",
   "get_update_info",
   "check_for_updates",
   "open_update_release",
