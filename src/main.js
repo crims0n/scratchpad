@@ -603,6 +603,12 @@ function applyPlatformShortcutLabels() {
       element.textContent = element.textContent.replaceAll("Cmd", "Ctrl");
     }
   });
+
+  const redoKeys = document.getElementById("redo-shortcut-keys");
+  redoKeys.innerHTML = '<kbd>Ctrl</kbd><span class="key-plus">+</span><kbd>Y</kbd>';
+  if (/linux/i.test(platform)) {
+    redoKeys.innerHTML += '<span class="key-plus">or</span><kbd>Ctrl</kbd><span class="key-plus">+</span><kbd>Shift</kbd><span class="key-plus">+</span><kbd>Z</kbd>';
+  }
 }
 
 // Reports the remembered workspace alongside whether it could be determined at
@@ -5175,7 +5181,7 @@ function toggleNotePinned(noteId) {
 // ----------------------------------------------------
 // Help & Reference Modal Logic
 // ----------------------------------------------------
-function openHelpModal(defaultTab = "shortcuts") {
+function openHelpModal(defaultTab = "guide") {
   helpModalPreviousFocus = document.activeElement;
   isHelpModalOpen = true;
   helpModalBackdrop.style.display = "flex";
@@ -5205,12 +5211,12 @@ function toggleHelpModal() {
 
 function switchHelpTab(tabName, focusTab = false) {
   const helpTopics = {
-    shortcuts: { button: tabShortcutsBtn, pane: paneShortcuts },
     guide: { button: tabGuideBtn, pane: paneGuide },
+    shortcuts: { button: tabShortcutsBtn, pane: paneShortcuts },
     markdown: { button: tabMarkdownBtn, pane: paneMarkdown },
     mcp: { button: tabMcpBtn, pane: paneMcp }
   };
-  const activeTopic = helpTopics[tabName] || helpTopics.shortcuts;
+  const activeTopic = helpTopics[tabName] || helpTopics.guide;
 
   Object.values(helpTopics).forEach(({ button, pane }) => {
     const isActive = button === activeTopic.button;
@@ -5227,10 +5233,10 @@ function switchHelpTab(tabName, focusTab = false) {
 }
 
 function cycleHelpTab(backwards = false) {
-  const tabs = ["shortcuts", "guide", "markdown", "mcp"];
+  const tabs = ["guide", "shortcuts", "markdown", "mcp"];
   const currentTab = tabs.find(tabName =>
     document.getElementById(`tab-${tabName}-btn`).classList.contains("active")
-  ) || "shortcuts";
+  ) || "guide";
   const currentIndex = tabs.indexOf(currentTab);
   const direction = backwards ? -1 : 1;
   const nextIndex = (currentIndex + direction + tabs.length) % tabs.length;

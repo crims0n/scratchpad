@@ -644,8 +644,8 @@
     <div class="help-modal" id="help-modal" role="dialog" aria-modal="true" aria-label="Help and reference">
       <div class="help-modal-header">
         <div class="help-tabs" role="tablist" aria-label="Help topics">
-          <button class="help-tab-btn active" id="tab-shortcuts-btn" role="tab" aria-selected="true" aria-controls="pane-shortcuts">⌨️ Keyboard Shortcuts</button>
-          <button class="help-tab-btn" id="tab-guide-btn" role="tab" aria-selected="false" aria-controls="pane-guide" tabindex="-1">📖 Guide</button>
+          <button class="help-tab-btn active" id="tab-guide-btn" role="tab" aria-selected="true" aria-controls="pane-guide">📖 Guide</button>
+          <button class="help-tab-btn" id="tab-shortcuts-btn" role="tab" aria-selected="false" aria-controls="pane-shortcuts" tabindex="-1">⌨️ Keyboard Shortcuts</button>
           <button class="help-tab-btn" id="tab-markdown-btn" role="tab" aria-selected="false" aria-controls="pane-markdown" tabindex="-1">📝 Markdown Cheatsheet</button>
           <button class="help-tab-btn" id="tab-mcp-btn" role="tab" aria-selected="false" aria-controls="pane-mcp" tabindex="-1">🔌 MCP Functions</button>
         </div>
@@ -658,7 +658,7 @@
 
       <div class="help-modal-body">
         <!-- User Guide Pane -->
-        <div class="help-pane" id="pane-guide" role="tabpanel" aria-labelledby="tab-guide-btn" aria-hidden="true">
+        <div class="help-pane active" id="pane-guide" role="tabpanel" aria-labelledby="tab-guide-btn">
           <div class="shortcuts-section">
             <h4 class="shortcuts-heading">Start writing</h4>
             <p class="shortcuts-note">Create a note with <strong>Cmd/Ctrl+N</strong> or the sidebar’s new-note button. Changes save automatically after a short pause; check the status bar for <strong>Saved</strong> or <strong>Save failed</strong>.</p>
@@ -667,7 +667,7 @@
           </div>
           <div class="shortcuts-section">
             <h4 class="shortcuts-heading">Collections and workspaces</h4>
-            <p class="shortcuts-note">A <strong>collection</strong> is your notes, folders, and trash. <strong>Local notes</strong> stores one collection in this app; a <strong>workspace file</strong> stores a separate, portable collection. The menu section is labeled <strong>Collection</strong> for local notes, or <strong>Workspace</strong> when a workspace file is active. Hover over actions for descriptions and storage scope; the same information is available to screen readers. Choose <strong>Open or create workspace…</strong> to switch to a workspace, or <strong>Return to local notes</strong> to switch back. Switching does not merge collections or remove your local notes. An empty, not-yet-initialized workspace starts with your local notes and folders; local trash stays local. Backup and restore remain available in both modes; <strong>Clear Local Collection…</strong> is hidden while a workspace is open.</p>
+            <p class="shortcuts-note">A <strong>collection</strong> is your notes, folders, and trash. <strong>Local notes</strong> stores one collection in this app; a <strong>workspace file</strong> stores a separate, portable collection. The menu section is labeled <strong>Collection</strong> for local notes, or <strong>Workspace</strong> when a workspace file is active. Hover over actions for descriptions and storage scope; the same information is available to screen readers. Choose <strong>Open or create workspace…</strong> to switch to a workspace, or <strong>Return to local notes</strong> to switch back. Switching does not merge collections or remove your local notes. An uninitialized workspace can receive a one-time copy of readable notes and folders; unreadable local data and local trash are not copied. At startup, if no readable local notes are available, it starts with a fresh welcome note instead, retaining any readable local folders. Opening one from the menu without available notes leaves it empty. An initialized empty workspace stays empty. Backup and restore remain available in both modes; <strong>Clear Local Collection…</strong> is hidden while a workspace is open.</p>
           </div>
           <div class="shortcuts-section">
             <h4 class="shortcuts-heading">Saving, closing, and quitting</h4>
@@ -703,7 +703,7 @@
         </div>
 
         <!-- Shortcuts Pane -->
-        <div class="help-pane active" id="pane-shortcuts" role="tabpanel" aria-labelledby="tab-shortcuts-btn">
+        <div class="help-pane" id="pane-shortcuts" role="tabpanel" aria-labelledby="tab-shortcuts-btn" aria-hidden="true">
           <div class="shortcuts-section">
             <h4 class="shortcuts-heading">Notes and views</h4>
             <div class="shortcut-row">
@@ -798,7 +798,7 @@
             </div>
             <div class="shortcut-row">
               <span class="shortcut-desc">Redo in Active Editor</span>
-              <span class="code-mono">Cmd+Shift+Z (macOS); Ctrl+Y (Windows/Linux)</span>
+              <div class="shortcut-keys" id="redo-shortcut-keys"><kbd>Cmd</kbd><span class="key-plus">+</span><kbd>Shift</kbd><span class="key-plus">+</span><kbd>Z</kbd></div>
             </div>
             <div class="shortcut-row">
               <span class="shortcut-desc">Copy Selected Text</span>

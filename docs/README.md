@@ -4,7 +4,7 @@
 
 - [README and first steps](../README.md): installation, editing, shortcuts, collections, backup/restore, trash, and recovery.
 - **In-app Help & reference**: open from the Scratchpad menu, **Cmd/Ctrl+/**, or **F1**. The Guide, Keyboard Shortcuts, Markdown Cheatsheet, and MCP Functions topics are bundled and work offline. **Tab / Shift+Tab** switches topics; **Escape** closes Help.
-- [Welcome note source](../src/welcome-note.js): the editable onboarding note created for a fresh local collection. Updating the app does not overwrite existing notes or insert the guide into an intentionally empty collection.
+- [Welcome note source](../src/welcome-note.js): the editable onboarding note created for a fresh local collection. Startup also creates it when initializing a workspace with no readable local notes to copy, retaining any readable local folders. Unreadable local data is not copied into that workspace. Updating the app does not overwrite existing notes or insert the guide into an initialized, intentionally empty collection.
 - [MCP agent access](mcp.md): installed-client configuration, permissions, tools, revisions, retries, and privacy.
 - [Upgrading from beta to 1.0](transition-to-1.0.md): data continuity, installer differences, workspace reconnection, and MCP paths.
 - [Verifying Linux downloads](verify-linux-downloads.md): public key, signed checksums, and verification commands.

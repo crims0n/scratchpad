@@ -32,16 +32,37 @@ The `release-signing` environment holds these non-secret variables: `AZURE_TENAN
 1. Create a pay-as-you-go Azure subscription. The billing account must have account type *Individual*, and its legal name and sold-to address must match a government-issued ID. Individual Public Trust validation is available only in the United States and Canada.
 2. Register the `Microsoft.CodeSigning` resource provider and create an Artifact Signing account. Assign yourself *Artifact Signing Identity Verifier*, then complete the individual identity validation in the Azure portal.
 3. Create a Public Trust certificate profile from the completed validation.
-4. Create an app registration without secrets. Add the federated credential above, then grant its service principal the signer role on the certificate profile:
+4. Create an app registration without secrets. Substitute your actual resource values below, add the federated credential above, then grant its service principal the signer role on the chosen certificate profile:
 
    ```powershell
-   $sp = (az ad sp show --id 'YOUR_APP_ID' --query id -o tsv)
-   $acct = "/subscriptions/YOUR_SUBSCRIPTION_ID/resourceGroups/codesign/providers/Microsoft.CodeSigning/codeSigningAccounts/YOUR_ACCOUNT"
-   az role assignment create --assignee-object-id $sp --assignee-principal-type ServicePrincipal --role "Artifact Signing Certificate Profile Signer" --scope "$acct/certificateProfiles/default"
+   $signingAppId = 'YOUR_APP_ID'
+   $signingSubscriptionId = 'YOUR_SUBSCRIPTION_ID'
+   $signingResourceGroup = 'codesign'
+   $signingAccount = 'YOUR_ARTIFACT_SIGNING_ACCOUNT'
+   $signingProfile = 'YOUR_CERTIFICATE_PROFILE'
+   $signingServicePrincipal = (az ad sp show --id $signingAppId --query id -o tsv)
+   $signingAccountResource = "/subscriptions/$signingSubscriptionId/resourceGroups/$signingResourceGroup/providers/Microsoft.CodeSigning/codeSigningAccounts/$signingAccount"
+   az role assignment create --assignee-object-id $signingServicePrincipal --assignee-principal-type ServicePrincipal --role "Artifact Signing Certificate Profile Signer" --scope "$signingAccountResource/certificateProfiles/$signingProfile"
    ```
 
-5. Set the environment variables with `gh variable set <NAME> --env release-signing --body <value>`.
-6. Put the certificate's common name in `WINDOWS_SIGNING_PUBLISHER` in `.github/workflows/release.yml`. Read it with `az rest --method get --url "https://management.azure.com$acct/certificateProfiles/<profile>?api-version=2024-09-30-preview" --query "properties.certificates[0].subjectName"`.
+5. Using the values from step 4, set the environment variables. Use the same `$signingProfile` for the role scope, certificate lookup, and `ARTIFACT_SIGNING_PROFILE`. The endpoint below is for this project's East US account; use your account's endpoint if setting up another region.
+
+   ```powershell
+   $signingTenantId = 'YOUR_TENANT_ID'
+   gh variable set AZURE_TENANT_ID --repo crims0n/scratchpad --env release-signing --body "$signingTenantId"
+   gh variable set AZURE_CLIENT_ID --repo crims0n/scratchpad --env release-signing --body "$signingAppId"
+   gh variable set AZURE_SUBSCRIPTION_ID --repo crims0n/scratchpad --env release-signing --body "$signingSubscriptionId"
+   gh variable set ARTIFACT_SIGNING_ENDPOINT --repo crims0n/scratchpad --env release-signing --body 'https://eus.codesigning.azure.net'
+   gh variable set ARTIFACT_SIGNING_ACCOUNT --repo crims0n/scratchpad --env release-signing --body "$signingAccount"
+   gh variable set ARTIFACT_SIGNING_PROFILE --repo crims0n/scratchpad --env release-signing --body "$signingProfile"
+   ```
+
+6. Put the certificate's common name in `WINDOWS_SIGNING_PUBLISHER` in `.github/workflows/release.yml`. Read it using the same account and profile from step 4:
+
+   ```powershell
+   $signingProfileUri = "https://management.azure.com$signingAccountResource/certificateProfiles/${signingProfile}?api-version=2024-09-30-preview"
+   az rest --method get --url "$signingProfileUri" --query 'properties.certificates[0].subjectName' --output tsv
+   ```
 
 ## Renewal and costs
 

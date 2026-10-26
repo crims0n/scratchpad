@@ -270,6 +270,7 @@ a:focus-visible {
 
 .features,
 .download-catalog,
+.getting-started,
 .open-source {
   border-top: 1px solid var(--border);
 }
@@ -345,6 +346,7 @@ h2 {
 .feature-grid p,
 .section-heading p,
 .catalog-copy p,
+.getting-started p,
 .open-source p {
   color: var(--muted);
   font-size: 0.86rem;
@@ -512,17 +514,40 @@ summary {
   font-size: 0.8rem;
 }
 
+.getting-started,
 .open-source {
   padding: 90px 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 80px;
+}
+
+.getting-started {
+  align-items: start;
+}
+
+.open-source {
   align-items: end;
 }
 
+.getting-started p,
 .open-source p {
   max-width: 570px;
   margin: 18px 0 0;
+}
+
+.usage-copy h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.4;
+}
+
+.usage-copy p {
+  margin-top: 10px;
+}
+
+.usage-copy h3:not(:first-child) {
+  margin-top: 26px;
 }
 
 .source-links {
@@ -620,12 +645,14 @@ footer {
 
   .features,
   .download-catalog,
+  .getting-started,
   .open-source {
     padding: 72px 0;
   }
 
   .feature-grid,
   .download-catalog,
+  .getting-started,
   .open-source {
     grid-template-columns: 1fr;
   }
@@ -642,6 +669,7 @@ footer {
   }
 
   .download-catalog,
+  .getting-started,
   .open-source {
     gap: 42px;
   }

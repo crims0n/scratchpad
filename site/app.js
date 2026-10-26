@@ -76,7 +76,9 @@ function renderManifest(manifest) {
   if (release.prerelease === false && Number(release.version.split(".")[0]) >= 1) {
     elements.transitionLabel.textContent = "Upgrading from beta?";
     elements.transitionDetail.textContent = " before installing the stable release.";
-    elements.featureReleaseNote.textContent = "These features are included in Scratchpad 1.0 and later. Choose a package from the published release above.";
+    elements.featureReleaseNote.textContent = "These features are included in Scratchpad 1.0 and later. Choose a package from the download catalog below.";
+  } else {
+    elements.featureReleaseNote.textContent = `This guide describes Scratchpad 1.0. The download catalog currently offers ${releaseLabel}.`;
   }
 
   if (primaryAsset) {
