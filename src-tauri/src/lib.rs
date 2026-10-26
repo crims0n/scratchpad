@@ -11,6 +11,8 @@ use tauri::{
 
 mod backup;
 mod file_export;
+#[cfg(target_os = "macos")]
+mod macos_quit;
 mod mcp;
 #[cfg(test)]
 mod native_ipc_tests;
@@ -932,8 +934,8 @@ fn macos_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         })?;
 
     // Tauri's first application-menu item is a predefined About command that
-    // opens the system metadata panel. Replace only that item so the standard
-    // Services, Hide, and Quit behavior remains intact.
+    // opens the system metadata panel. The standard Quit action is guarded by
+    // macos_quit's applicationShouldTerminate: hook, including Dock Quit.
     app_menu.remove_at(0)?.ok_or_else(|| {
         std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -995,7 +997,11 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
     #[cfg(target_os = "macos")]
     let builder = builder
         .menu(macos_menu)
-        .on_menu_event(handle_macos_menu_event);
+        .on_menu_event(handle_macos_menu_event)
+        .setup(|app| {
+            macos_quit::install(app.handle()).map_err(std::io::Error::other)?;
+            Ok(())
+        });
 
     builder
         // Markdown links have no default handling in the webview; the opener

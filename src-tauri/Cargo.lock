@@ -3451,6 +3451,7 @@ version = "1.0.0"
 dependencies = [
  "dirs",
  "dunce",
+ "objc2",
  "reqwest",
  "rfd",
  "rmcp",
