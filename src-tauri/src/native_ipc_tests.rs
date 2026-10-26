@@ -66,6 +66,7 @@ fn built_capabilities_enforce_window_and_origin_boundaries_over_ipc() {
         .manage(workspaces)
         .manage(crate::note_print::PrintState::default())
         .invoke_handler(tauri::generate_handler![
+            complete_native_quit,
             load_db_notes,
             crate::note_print::get_print_note,
             crate::note_print::close_note_print,
@@ -84,6 +85,25 @@ fn built_capabilities_enforce_window_and_origin_boundaries_over_ipc() {
     .build()
     .unwrap();
     let local = "tauri://localhost/index.html";
+    let quit = serde_json::json!({ "requestId": "not-a-pending-request", "saved": true });
+    assert_eq!(
+        invoke(&main, "complete_native_quit", local, quit.clone()).unwrap(),
+        false
+    );
+    assert!(invoke(
+        &main,
+        "complete_native_quit",
+        "https://example.com/",
+        quit.clone()
+    )
+    .is_err());
+    assert!(invoke(
+        &print,
+        "complete_native_quit",
+        "tauri://localhost/note-print.html",
+        quit
+    )
+    .is_err());
     let body = serde_json::json!({ "dbPath": path });
     // A remote origin and the print window cannot open even a granted DB.
     assert!(invoke(&main, "load_db_notes", "https://example.com/", body.clone()).is_err());
