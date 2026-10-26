@@ -231,9 +231,11 @@ const helpModalBackdrop = document.getElementById("help-modal-backdrop");
 const helpModal = document.getElementById("help-modal");
 const closeHelpBtn = document.getElementById("close-help-btn");
 const tabShortcutsBtn = document.getElementById("tab-shortcuts-btn");
+const tabGuideBtn = document.getElementById("tab-guide-btn");
 const tabMarkdownBtn = document.getElementById("tab-markdown-btn");
 const tabMcpBtn = document.getElementById("tab-mcp-btn");
 const paneShortcuts = document.getElementById("pane-shortcuts");
+const paneGuide = document.getElementById("pane-guide");
 const paneMarkdown = document.getElementById("pane-markdown");
 const paneMcp = document.getElementById("pane-mcp");
 const splitDropOverlay = document.getElementById("split-drop-overlay");
@@ -2893,6 +2895,7 @@ function attachEventListeners() {
     if (e.target === helpModalBackdrop) closeHelpModal();
   });
   tabShortcutsBtn.addEventListener("click", () => switchHelpTab("shortcuts"));
+  tabGuideBtn.addEventListener("click", () => switchHelpTab("guide"));
   tabMarkdownBtn.addEventListener("click", () => switchHelpTab("markdown"));
   tabMcpBtn.addEventListener("click", () => switchHelpTab("mcp"));
 
@@ -5203,6 +5206,7 @@ function toggleHelpModal() {
 function switchHelpTab(tabName, focusTab = false) {
   const helpTopics = {
     shortcuts: { button: tabShortcutsBtn, pane: paneShortcuts },
+    guide: { button: tabGuideBtn, pane: paneGuide },
     markdown: { button: tabMarkdownBtn, pane: paneMarkdown },
     mcp: { button: tabMcpBtn, pane: paneMcp }
   };
@@ -5223,7 +5227,7 @@ function switchHelpTab(tabName, focusTab = false) {
 }
 
 function cycleHelpTab(backwards = false) {
-  const tabs = ["shortcuts", "markdown", "mcp"];
+  const tabs = ["shortcuts", "guide", "markdown", "mcp"];
   const currentTab = tabs.find(tabName =>
     document.getElementById(`tab-${tabName}-btn`).classList.contains("active")
   ) || "shortcuts";

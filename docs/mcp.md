@@ -99,8 +99,9 @@ tools remain discoverable but reject calls. Failed permission updates restore
 the previous choices and show an error in Configuration.
 
 Choices last until agent access is disabled or the app closes; closing and
-reopening Configuration preserves them. New sessions always start with reads
-on and writes off. Content replacement and permanent deletion are not exposed.
+reopening Configuration preserves them. Restarting agent access starts with reads
+on and writes off; reconnecting a client while access stays on retains the current
+permissions. Content replacement and permanent deletion are not exposed.
 
 ## Creating notes and folders
 
@@ -152,9 +153,10 @@ already-started saves finish. A response timeout does not cancel a save: its
 outcome is unknown, so retry with the same ID and arguments.
 
 Retry receipts are held for the current collection session, across client
-reconnects and access toggles. Switching/opening a workspace (including a
-cancelled switch attempt) or restarting the app changes `collectionId`; old
-requests are rejected. Up to 1,000 distinct write requests are retained per
+reconnects and access toggles. A successful collection switch, collection
+replacement/clear/recovery, or app restart changes `collectionId`; old requests
+are rejected. Canceling the workspace picker or failing to read/seed a workspace
+leaves the original collection identity intact. Up to 1,000 distinct write requests are retained per
 collection session. At that limit, new requests are rejected without evicting
 old retry keys; reopen the collection to begin a new session. After a session
 change, inspect existing notes before resubmitting an old write with an unknown outcome.
@@ -339,7 +341,9 @@ before MCP messages are accepted. Scratchpad manages the secret in its app
 configuration directory; clients do not need it in their configuration. On
 Unix it is created with owner-only permissions. Authentication is bounded by a
 timeout, and the app limits simultaneous connections and incoming messages
-(256 KiB per message). The channel cannot be reached directly from another
+(256 KiB per message). The fixed port is shared by development and release
+builds, so only one editor can enable agent access at a time; their token files
+remain profile-specific. The channel cannot be reached directly from another
 computer, but processes running as your user can
 still obtain local app data. The menu toggle grants access to local agents as
 a group; there are no separate permissions per client.

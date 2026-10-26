@@ -1,6 +1,6 @@
 # Verifying Linux downloads
 
-Every Linux release on [GitHub Releases](https://github.com/crims0n/scratchpad/releases) includes:
+Signed Linux releases from v0.8.2 onward on [GitHub Releases](https://github.com/crims0n/scratchpad/releases) include:
 
 - `Scratchpad…_amd64.AppImage` with an embedded GPG signature;
 - `Scratchpad…_amd64.deb`;
@@ -33,7 +33,7 @@ Both commands must succeed: `gpgv` must report a good signature, and `sha256sum`
 
 ## The AppImage's embedded signature
 
-The AppImage also carries its own signature, which you can display with:
+After verifying the signed checksums, you can display the AppImage's embedded signature with:
 
 ```bash
 ./Scratchpad*_amd64.AppImage --appimage-signature
@@ -43,8 +43,8 @@ Launching an AppImage does **not** validate this signature, and most desktop int
 
 ## The .deb package
 
-`apt` and `dpkg` do not verify a `.deb` that you downloaded directly. Scratchpad does not host an APT repository, so verifying with `SHA256SUMS` before running `sudo apt install ./Scratchpad…_amd64.deb` is the only check.
+`apt` and `dpkg` do not authenticate a `.deb` that you downloaded directly against the project's signing key. Scratchpad does not host an APT repository, so verify with `SHA256SUMS` before running `sudo apt install ./Scratchpad_1.0.0_amd64.deb` (substitute your actual downloaded filename).
 
 ## Key changes
 
-If the key is rotated or revoked, this page, the website, and the release notes will say so. A revoked key's signatures must not be trusted, even if `gpgv` reports them as good with an older copy of the key. Always download the current key from the website.
+If the key is rotated or revoked, this page, the website, and the release notes will say so. GnuPG documents that [`gpgv` trusts the supplied keyring and does not check key expiry or revocation](https://www.gnupg.org/documentation/manuals/gnupg/gpgv.html). A good-signature message alone does not establish that the key is still trusted. Download the current public key, compare its fingerprint, and follow any expiry/revocation notice before installing; do not trust a revoked key's signatures.

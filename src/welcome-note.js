@@ -4,13 +4,13 @@ export const WELCOME_NOTE_TITLE = "Welcome to Scratchpad!";
 
 export const WELCOME_NOTE_CONTENT = `# Welcome to Scratchpad!
 
-Scratchpad is a fast, local-first place for notes, snippets, and Markdown. Everything is saved automatically as you write.
+Scratchpad is a local-first place for notes, snippets, and Markdown. No account is needed. Changes save automatically after a short pause; check the status bar for **Saved** or **Save failed**.
 
 ## Start writing
 - Create a scratchpad with \`Cmd/Ctrl+N\`, or by double-clicking the empty space below the sidebar list, and find your notes from the sidebar.
-- Switch between **Edit**, **Split**, and **Preview** to work with rendered Markdown.
+- Switch between **Edit**, **Split**, and **Preview** for this note's source and rendered Markdown. **Split** shows two views of the same note.
 - Click gutter arrows to collapse Markdown, JSON, XML, or YAML sections. Click a hidden-line placeholder to expand it; Find reveals hidden matches. Folding is available for notes up to 100,000 characters and 10,000 lines.
-- Open a second note beside this one with \`Cmd/Ctrl+\\\`.
+- Open a second, separate note beside this one with \`Cmd/Ctrl+\\\`.
 - With two notes open, choose **Compare** in the toolbar to highlight removed text on the left and added text on the right as you edit.
 - Enter Focus Mode with \`Cmd/Ctrl+Shift+F\` when you want fewer distractions.
 
@@ -24,7 +24,7 @@ Scratchpad is a fast, local-first place for notes, snippets, and Markdown. Every
 - Paste a URL over selected text to make a link, or paste a rectangular spreadsheet range to make a table. Tab-indented text stays literal.
 
 ## Find and organize
-- Search scratchpad titles and content from the sidebar. Each note shows a detected TXT, MD, JSON, XML, YAML, or CSV badge; uncertain content falls back to TXT.
+- Search scratchpad titles and content from the sidebar. Each note shows a detected TXT, MD, JSON, XML, YAML, CSV, or SPL badge; uncertain content falls back to TXT. Format detection guides coloring and editing assistance; it is not a file validator.
 - Use the folder button in the sidebar to group related scratchpads. Folders collapse to keep the sidebar compact; notes without a folder remain at the top level.
 - Drag a note onto a folder to move it, or right-click a folder for note and folder actions.
 - Pin important scratchpads to keep them at the very top of the sidebar without placing them inside a folder. Unpinning returns a scratchpad to its folder.
@@ -32,8 +32,14 @@ Scratchpad is a fast, local-first place for notes, snippets, and Markdown. Every
 
 ## Collections and workspace files
 - A **collection** is your notes, folders, and trash. **Local notes** keeps one collection in this app; a **workspace file** holds a separate, portable collection.
-- The menu section shows the active storage location: **Collection** for local notes, or **Workspace** for a workspace file. Hover over actions for descriptions. In the desktop app, choose **Open or create workspace…** to switch to a workspace, or **Return to local notes** to switch back. An empty, not-yet-initialized workspace starts with local notes and folders; local trash stays local. **Clear Local Collection…** is shown only in local mode.
-- **Back Up Collection…** and **Restore Collection…** act on the collection shown in the menu, whether local or in a workspace file. Restore replaces, rather than merges, notes, folders, and trash after confirmation, and retains a verified safety backup. Backups are unencrypted; keep them private.
+- The menu section shows the active storage location: **Collection** for local notes, or **Workspace** for a workspace file. In the desktop app, choose **Open or create workspace…** to switch to a workspace, or **Return to local notes** to switch back. Switching does not merge collections. A new workspace starts with the available notes and folders; local trash stays local. A deliberately emptied workspace stays empty. **Clear Local Collection…** is shown only in local mode.
+- **Back Up Collection…** and **Restore Collection…** act on the collection shown in the menu, whether local or in a workspace file. Restore replaces, rather than merges, notes, folders, and trash after confirmation, and retains a verified safety backup. Preferences, themes, and MCP configuration are not included. Copy important backups outside the app data directory.
+
+## Keep your work safe
+- If **Save failed** appears, keep Scratchpad open and preserve your text before retrying. Switching, closing, or quitting is canceled when the outgoing save fails. Both panes stop accepting edits while an operation finishes.
+- Finish any folder rename before leaving. An invalid name cancels Close, Quit, or a collection switch; correct the name or press **Escape** to cancel the rename, then try again.
+- If **Local data recovery** appears, use **Export preserved data…** before replacing anything. This raw recovery export is for manual repair, not a normal collection backup. **Retry reading** retries without discarding the source; do not delete app data while recovery is pending.
+- Notes, workspace files, trash, backups, and recovery copies are unencrypted. Use one Scratchpad editor instance per collection or workspace; separate editor instances do not coordinate edits. Autosave cannot protect against force-quitting or power loss.
 
 ## Delete and recover
 - Right-click a note and choose **Delete Note** to move it to trash.
@@ -50,19 +56,19 @@ Scratchpad is a fast, local-first place for notes, snippets, and Markdown. Every
 
 ## Make it yours
 - Choose a built-in theme from the bottom of the sidebar, or import your own.
-- Open the Scratchpad menu to adjust sidebar previews, editor zoom, line spacing, syntax highlighting, and optional line numbers. Editor colors follow detected MD, JSON, XML, YAML, and CSV formats; TXT stays plain.
+- Open the Scratchpad menu to adjust sidebar previews, editor zoom, line spacing, syntax highlighting, and optional line numbers. Editor colors follow detected MD, JSON, XML, YAML, CSV, and SPL formats; TXT stays plain.
 - The Scratchpad menu also imports text files, exports Markdown or standalone HTML, copies Markdown or rendered HTML, and opens portable workspace files. **Export HTML file** saves one note with preview formatting and embedded styles for offline reading; in split view, it exports the active pane.
 - Choose **Print Note…** in the Scratchpad menu, or press **Cmd/Ctrl+P**, to print the active note with Markdown formatting and a paper-friendly light palette. In split view, it prints the active pane. Cancel leaves the note unchanged.
 
 ## Check for updates (optional)
-- Scratchpad follows one release stream. Existing beta installations can discover 1.0 through the same update check; review the release's upgrade instructions before replacing the app.
+- Scratchpad follows one release stream. Once 1.0 is published, existing beta installations can discover it through the same update check; review the release's upgrade instructions before replacing the app.
 - Open **Scratchpad menu → About Scratchpad**, then **Check for Updates…**, to look for a newer release.
 - Choose **Read release notes** to see what changed before downloading. **Download Update** opens the release page in your browser; nothing is installed automatically.
 - **Automatically check for updates** is off by default. When enabled, it checks shortly after launch and at most once every 24 hours. Checks contact GitHub Pages without sending notes or workspace data.
 - **Later** closes the panel. **Skip This Version** hides background notices for that release; a manual check can still show it again.
 
 ## Need a reference?
-Press \`Cmd/Ctrl+/\` (or \`F1\`) to open keyboard shortcuts, the Markdown cheatsheet, and the MCP function reference. Use \`Tab\` and \`Shift+Tab\` to switch between them.
+Press \`Cmd/Ctrl+/\` (or \`F1\`) to open the user guide, keyboard shortcuts, Markdown cheatsheet, and MCP function reference. Use \`Tab\` and \`Shift+Tab\` to switch topics and **Escape** to close Help. This welcome note is editable; changing it does not change Help.
 
 Happy writing.
 `;

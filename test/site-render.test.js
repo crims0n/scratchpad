@@ -48,6 +48,7 @@ test("the landing page renders the currently published package and complete down
   assert.equal(document.getElementById("release-badge").textContent, "Beta v0.8.2");
   assert.equal(document.getElementById("transition-label").textContent, "Preparing for 1.0:");
   assert.match(document.getElementById("transition-detail").textContent, /when a published 1\.0 release is available/);
+  assert.match(document.getElementById("feature-release-note").textContent, /1\.0 candidate.*latest published release/);
 });
 
 test("the landing page renders a published stable manifest with stable URLs and final checksums", async t => {
@@ -56,6 +57,7 @@ test("the landing page renders a published stable manifest with stable URLs and 
   assert.equal(document.getElementById("release-badge").textContent, "v1.0.0");
   assert.equal(document.getElementById("transition-label").textContent, "Upgrading from beta?");
   assert.equal(document.getElementById("transition-detail").textContent, " before installing the stable release.");
+  assert.match(document.getElementById("feature-release-note").textContent, /included in Scratchpad 1\.0 and later/);
   assert.match(document.getElementById("primary-download").href, /\/v1\.0\.0\/Scratchpad_1\.0\.0_universal\.dmg$/);
   assert.equal(document.querySelectorAll(".download-card").length, 6);
   assert.ok([...document.querySelectorAll(".checksum")].every(element => /^[a-f0-9]{64}$/.test(element.textContent)));

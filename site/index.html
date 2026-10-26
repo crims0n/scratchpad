@@ -49,12 +49,12 @@
           <p class="visually-hidden" id="download-status" aria-live="polite">Loading release downloads.</p>
         </div>
 
-        <p class="security-note"><strong>Signed packages:</strong> macOS packages from v0.8.2 are signed and notarized by Apple. Windows packages from v0.8.2 are signed and timestamped, though SmartScreen may still warn about new downloads. Linux packages are <a href="#verify-linux">GPG-signed</a>. <strong id="transition-label">Preparing for 1.0:</strong> read the <a href="https://github.com/crims0n/scratchpad/blob/main/docs/transition-to-1.0.md">upgrade guide</a><span id="transition-detail"> for the upcoming transition. Follow it when a published 1.0 release is available.</span></p>
+        <p class="security-note"><strong>Signed packages:</strong> macOS packages from v0.8.2 are Developer ID-signed and notarized by Apple. Windows packages from v0.8.2 are signed and timestamped, though SmartScreen may still warn about new downloads. Linux packages have <a href="#verify-linux">GPG-signed checksums</a>. <strong id="transition-label">Preparing for 1.0:</strong> read the <a href="https://github.com/crims0n/scratchpad/blob/main/docs/transition-to-1.0.md">upgrade guide</a><span id="transition-detail"> for the upcoming transition. Follow it when a published 1.0 release is available.</span></p>
       </div>
 
       <div class="hero-visual" aria-label="Scratchpad application preview">
         <div class="preview-glow"></div>
-        <img src="./assets/preview.png" alt="Scratchpad displaying a Markdown note in its dark theme" width="1233" height="950">
+        <img src="./assets/preview.png" alt="Scratchpad with a pinned welcome note and a folder of JSON and SPL examples in its dark theme" width="2360" height="1640">
       </div>
     </section>
 
@@ -62,6 +62,7 @@
       <div class="section-heading">
         <span class="section-kicker">Small by design</span>
         <h2 id="features-title">A scratchpad should stay out of the way.</h2>
+        <p id="feature-release-note">This guide describes the 1.0 candidate. Downloads remain on the latest published release until stable is available.</p>
       </div>
       <div class="feature-grid">
         <article>
@@ -76,7 +77,7 @@
             <span class="feature-number">02</span>
             <h3>Markdown-native</h3>
           </div>
-          <p>Write with smart list and table helpers, right-click starter templates, optional line numbers and editor coloring, synchronized split view, and language-aware code previews.</p>
+          <p>Write with smart list and table helpers, right-click starter templates, optional line numbers and editor coloring, collapsible sections, and language-aware code previews. Detected formats include JSON, YAML, CSV, and Splunk SPL.</p>
         </article>
         <article>
           <div class="feature-heading">
@@ -92,6 +93,51 @@
           </div>
           <p>Choose from modern and retro themes, import your own, and settle into a distraction-free focus mode.</p>
         </article>
+        <article>
+          <div class="feature-heading">
+            <span class="feature-number">05</span>
+            <h3>Two notes together</h3>
+          </div>
+          <p>Edit two notes side by side and compare their source differences. Use Edit, Split, or Preview to view one note’s Markdown source and rendered output.</p>
+        </article>
+        <article>
+          <div class="feature-heading">
+            <span class="feature-number">06</span>
+            <h3>Organize and recover</h3>
+          </div>
+          <p>Group notes in folders, pin the ones you need, and recover deleted notes from persistent trash. Back up a complete collection; restore keeps a safety copy before replacement.</p>
+        </article>
+        <article>
+          <div class="feature-heading">
+            <span class="feature-number">07</span>
+            <h3>Share a note</h3>
+          </div>
+          <p>Import text, export Markdown or standalone HTML, and print a formatted note through the system dialog. Use print-to-PDF where your operating system offers it.</p>
+        </article>
+        <article>
+          <div class="feature-heading">
+            <span class="feature-number">08</span>
+            <h3>Optional agent access</h3>
+          </div>
+          <p>Connect a local stdio MCP client to the open collection. Access starts off; reads and writes have individual permissions, and every write function starts disabled.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="open-source" aria-labelledby="guide-title">
+      <div>
+        <span class="section-kicker">Getting started</span>
+        <h2 id="guide-title">Open it. Start writing.</h2>
+        <p>Create a note with Cmd/Ctrl+N. Changes save after a short pause; check the status bar for Saved or Save failed. Press F1 for the bundled user guide, shortcuts, Markdown examples, and MCP reference.</p>
+        <p><a href="https://github.com/crims0n/scratchpad/blob/main/README.md#first-steps">Read the guide <span aria-hidden="true">↗</span></a></p>
+      </div>
+      <div class="usage-copy">
+        <h3>Choose where your collection lives</h3>
+        <p>Local notes and portable workspace files hold separate collections of notes, folders, and trash. Opening a workspace switches collections; it does not merge them. Back Up Collection saves the open collection. Restore replaces it after confirmation.</p>
+        <h3>Keep a backup you control</h3>
+        <p>Notes, trash, backups, and recovery copies are unencrypted. Copy important backups outside app data and use one editor instance per collection or workspace file. Autosave does not protect against force-quitting or power loss.</p>
+        <h3>Decide when to connect</h3>
+        <p>Optional update checks are off by default and send no notes. MCP clients can read unsaved edits and may send returned content to their model provider. Review <a href="https://github.com/crims0n/scratchpad/blob/main/docs/mcp.md">agent permissions and privacy</a> before connecting.</p>
       </div>
     </section>
 
@@ -103,7 +149,7 @@
         <p class="release-notes" id="release-notes">Loading the newest release notes…</p>
         <div class="signing-key" id="verify-linux">
           <h3>Verify Linux packages</h3>
-          <p>Each Linux release includes a <code>SHA256SUMS</code> file signed with the Scratchpad <a href="./release-signing-key.asc">release-signing key</a>.</p>
+          <p>Signed Linux releases from v0.8.2 include a <code>SHA256SUMS</code> file signed with the Scratchpad <a href="./release-signing-key.asc">release-signing key</a>.</p>
           <p class="signing-fingerprint-label">Key fingerprint</p>
           <code class="signing-fingerprint" id="signing-fingerprint">1AD2 0240 0B0C 14AD 86F4 3E14 4F6B 122C D9DC CB40</code>
           <p><a href="https://github.com/crims0n/scratchpad/blob/main/docs/verify-linux-downloads.md">How to verify a download <span aria-hidden="true">↗</span></a></p>
@@ -126,6 +172,8 @@
       </div>
       <div class="source-links">
         <a href="https://github.com/crims0n/scratchpad">Browse source <span aria-hidden="true">↗</span></a>
+        <a href="https://github.com/crims0n/scratchpad/blob/main/docs/README.md">Documentation <span aria-hidden="true">↗</span></a>
+        <a href="https://github.com/crims0n/scratchpad/blob/main/docs/architecture.md">Architecture <span aria-hidden="true">↗</span></a>
         <a href="https://github.com/crims0n/scratchpad/issues">Issues &amp; ideas <span aria-hidden="true">↗</span></a>
         <a href="https://github.com/crims0n/scratchpad/security/policy">Security policy <span aria-hidden="true">↗</span></a>
       </div>

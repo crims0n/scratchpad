@@ -6,6 +6,37 @@ import test from "node:test";
 
 import { bootApp } from "./helpers/app-harness.js";
 
+test("Help guide participates in keyboard topic cycling and restores focus on Escape", async () => {
+  const app = await bootApp({ instance: 6900 });
+  const opener = document.getElementById("help-btn");
+  opener.focus();
+  opener.click();
+  const topics = ["shortcuts", "guide", "markdown", "mcp"];
+  const press = (key, shiftKey = false) => document.dispatchEvent(new app.dom.window.KeyboardEvent("keydown", {
+    key, shiftKey, bubbles: true, cancelable: true
+  }));
+  for (const active of [...topics, "shortcuts"]) {
+    for (const topic of topics) {
+      const selected = topic === active;
+      const button = document.getElementById(`tab-${topic}-btn`);
+      const pane = document.getElementById(`pane-${topic}`);
+      assert.equal(button.getAttribute("aria-selected"), String(selected));
+      assert.equal(button.tabIndex, selected ? 0 : -1);
+      assert.equal(pane.getAttribute("aria-hidden"), String(!selected));
+      if (selected) assert.equal(document.activeElement, button);
+    }
+    press("Tab");
+  }
+  press("Tab", true);
+  assert.equal(document.activeElement.id, "tab-shortcuts-btn");
+  document.getElementById("tab-guide-btn").click();
+  assert.equal(document.getElementById("pane-guide").classList.contains("active"), true);
+  press("Escape");
+  assert.equal(document.getElementById("help-modal-backdrop").getAttribute("aria-hidden"), "true");
+  assert.equal(document.activeElement, opener);
+  app.dom.window.close();
+});
+
 test("the Scratchpad menu opens Help and About dialogs and returns focus", async () => {
   const { version } = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
   const app = await bootApp();

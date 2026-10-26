@@ -1,6 +1,6 @@
 # macOS release signing (maintainers)
 
-The Stable Release workflow signs the universal macOS app and DMG with a Developer ID Application certificate and notarizes both with Apple, so a browser-downloaded release opens without a Gatekeeper bypass.
+The Stable Release workflow signs the universal macOS app and DMG with a Developer ID Application certificate and notarizes both with Apple. The workflow checks Gatekeeper acceptance; opening a browser-downloaded final package without a bypass must also be verified on real Macs before publication.
 
 1. `scripts/setup-macos-signing.sh` imports the certificate into a temporary keychain and writes the App Store Connect API key to the runner's temp directory. It fails unless the certificate holds a valid identity matching `src-tauri/tauri.macos-signing.conf.json` and the notary service accepts the API key, so bad credentials stop the job before the build.
 2. `src-tauri/tauri.macos-signing.conf.json` sets the signing identity and the hardened runtime. It comes after `tauri.release.conf.json` on the command line. Stable packaging never applies a beta or ad-hoc signing override. Tauri signs the executable and bundle with a secure timestamp, notarizes and staples the `.app`, and signs the DMG.
@@ -52,20 +52,21 @@ The identity is committed rather than stored as a variable, so changing it is a 
 5. Store the `.p12`, its password and the `.p8` in a password manager, then load the environment from a trusted terminal:
 
    ```sh
-   R=crims0n/scratchpad; E=release-signing
+   R=crims0n/scratchpad
+   E=release-signing
    base64 -i developer.p12 | gh secret set APPLE_CERTIFICATE --repo $R --env $E
    gh secret set APPLE_CERTIFICATE_PASSWORD --repo $R --env $E     # prompts
-   gh secret set APPLE_API_PRIVATE_KEY --repo $R --env $E < AuthKey_<key-id>.p8
+   gh secret set APPLE_API_PRIVATE_KEY --repo $R --env $E < AuthKey_YOUR_KEY_ID.p8
    openssl rand -base64 32 | gh secret set KEYCHAIN_PASSWORD --repo $R --env $E
-   gh variable set APPLE_API_KEY --repo $R --env $E --body <key-id>
-   gh variable set APPLE_API_ISSUER --repo $R --env $E --body <issuer-id>
+   gh variable set APPLE_API_KEY --repo $R --env $E --body 'YOUR_KEY_ID'
+   gh variable set APPLE_API_ISSUER --repo $R --env $E --body 'YOUR_ISSUER_ID'
    ```
 
 6. Delete the `.p12` and `.p8` from the working machine.
 
 ## Renewal
 
-- **Developer Program membership** renews yearly. If it lapses, released apps keep working, but new builds cannot be signed or notarized.
+- **Developer Program membership** renews yearly. Existing Developer ID-signed apps continue to work after membership expires; membership is required to obtain a new Developer ID certificate. Keep membership and notarization credentials current for releases. See Apple's [Developer ID certificate guidance](https://developer.apple.com/help/account/certificates/create-developer-id-certificates).
 - **Developer ID certificate** expires five years after issue. Apps signed before expiry stay valid because of their secure timestamps. Before it expires, create a new certificate (steps 2–3), replace `APPLE_CERTIFICATE` and `APPLE_CERTIFICATE_PASSWORD`, and update the identity in `tauri.macos-signing.conf.json` if its name changed. Apple allows a limited number of Developer ID certificates per team, so revoke old ones only when needed.
 - **API key** does not expire. Rotate it by creating a new key, replacing `APPLE_API_PRIVATE_KEY` and `APPLE_API_KEY`, then revoking the old key.
 
@@ -83,9 +84,9 @@ If the `.p12`, its password or the API key may be exposed:
 CI cannot test a real download or the editor UI. Before publishing a release, on both an Apple Silicon Mac and an Intel Mac:
 
 1. Download the DMG with a browser, so it gets the quarantine attribute, then open it and drag the app to Applications.
-2. Launch it. The only prompt should be the standard "downloaded from the Internet" confirmation, with no warning about an unidentified developer and no need for **Open Anyway** or right-click → Open.
+2. Launch it. Record the actual Gatekeeper prompt and publisher/team. Require launch without an unidentified-developer warning or a bypass such as **Open Anyway** or right-click → Open; do not infer this result from the signing job alone.
 3. Edit, save and reopen a note. Then enable agent access and connect an MCP client using the installed app's `--mcp-stdio` command.
-4. Optionally, run `scripts/verify-macos-release.sh --team B62UYUQ6C3 <downloaded.dmg>`.
+4. Optionally, run `scripts/verify-macos-release.sh --team B62UYUQ6C3 ./Scratchpad_1.0.0_universal.dmg`, substituting the actual downloaded filename.
 
 ## Testing changes to the scripts
 

@@ -21,6 +21,7 @@ const elements = {
   notes: document.getElementById("release-notes"),
   downloadStatus: document.getElementById("download-status"),
   transitionLabel: document.getElementById("transition-label"),
+  featureReleaseNote: document.getElementById("feature-release-note"),
   transitionDetail: document.getElementById("transition-detail")
 };
 
@@ -75,6 +76,7 @@ function renderManifest(manifest) {
   if (release.prerelease === false && Number(release.version.split(".")[0]) >= 1) {
     elements.transitionLabel.textContent = "Upgrading from beta?";
     elements.transitionDetail.textContent = " before installing the stable release.";
+    elements.featureReleaseNote.textContent = "These features are included in Scratchpad 1.0 and later. Choose a package from the published release above.";
   }
 
   if (primaryAsset) {

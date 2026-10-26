@@ -35,9 +35,9 @@ The `release-signing` environment holds these non-secret variables: `AZURE_TENAN
 4. Create an app registration without secrets. Add the federated credential above, then grant its service principal the signer role on the certificate profile:
 
    ```powershell
-   $sp = (az ad sp show --id <app-id> --query id -o tsv)
-   $acct = "/subscriptions/<sub>/resourceGroups/codesign/providers/Microsoft.CodeSigning/codeSigningAccounts/<account>"
-   az role assignment create --assignee-object-id $sp --assignee-principal-type ServicePrincipal --role "Artifact Signing Certificate Profile Signer" --scope "$acct/certificateProfiles/<profile>"
+   $sp = (az ad sp show --id 'YOUR_APP_ID' --query id -o tsv)
+   $acct = "/subscriptions/YOUR_SUBSCRIPTION_ID/resourceGroups/codesign/providers/Microsoft.CodeSigning/codeSigningAccounts/YOUR_ACCOUNT"
+   az role assignment create --assignee-object-id $sp --assignee-principal-type ServicePrincipal --role "Artifact Signing Certificate Profile Signer" --scope "$acct/certificateProfiles/default"
    ```
 
 5. Set the environment variables with `gh variable set <NAME> --env release-signing --body <value>`.
@@ -45,9 +45,9 @@ The `release-signing` environment holds these non-secret variables: `AZURE_TENAN
 
 ## Renewal and costs
 
-- Certificates last about three days and renew automatically. Timestamps keep older signatures valid after each certificate expires.
+- [Certificates are valid for 72 hours and renew daily](https://learn.microsoft.com/en-us/azure/artifact-signing/concept-certificate-management). Trusted timestamps preserve verification after certificate expiry; revocation remains a separate consideration.
 - The identity validation expires, and Microsoft sends reminders starting 60 days before. Renew it in the Azure portal, or certificate renewal and signing stop. If the publisher name changes, update `WINDOWS_SIGNING_PUBLISHER`.
-- The Basic SKU is billed monthly at full price; there is no proration. It includes 5,000 signatures a month, and a release uses about ten. Deleting the Artifact Signing account stops billing and does not invalidate files already signed.
+- Check the current [pricing and billing guidance](https://learn.microsoft.com/en-us/azure/artifact-signing/faq#cost-management-and-billing) when maintaining the Basic account. Its signing quota covers all profiles; do not budget by installer count alone, because bundled executables, DLLs, and NSIS components also require signatures. Deleting the account stops future signing and does not revoke already-issued certificates.
 - Updating the dlib: change `$dlibVersion` and `$dlibSha256` together in `setup-windows-signing.ps1`. Use a version that has been on nuget.org for at least two weeks, and take the SHA-256 of the `.nupkg` you inspected.
 
 ## Revocation and incident response
