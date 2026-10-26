@@ -61,7 +61,9 @@ test("native timeout cancellation prevents a late save from terminating the app"
   const app = await boot({ save_workspace_db: () => { started.resolve(); return write.promise; } });
   const quit = app.emit("scratchpad-native-quit", "timed-out");
   await started.promise;
+  assert.equal(document.getElementById("app").inert, true);
   await app.emit("scratchpad-native-quit-cancelled", "timed-out");
+  assert.equal(document.getElementById("app").inert, false);
   write.resolve();
   await quit;
   assert.deepEqual(replies(app), [], "a cancelled request cannot approve a quit later");
@@ -70,6 +72,42 @@ test("native timeout cancellation prevents a late save from terminating the app"
   assert.equal(getAppElement("editor").value, "still editable");
   await app.emit("scratchpad-native-quit", "new-request");
   assert.deepEqual(replies(app), [{ requestId: "new-request", saved: true }]);
+  app.dom.window.close();
+});
+
+test("native quit commits an open folder rename before acknowledging termination", async () => {
+  let persisted;
+  const app = await boot({
+    load_db_folders: () => [{ id: "folder", name: "Original folder" }],
+    save_workspace_db: args => { persisted = structuredClone(args); }
+  });
+  document.querySelector('.note-folder-header[data-section-id="folder"]')
+    .dispatchEvent(new window.MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  app.click("ctx-folder-rename");
+  document.querySelector(".note-folder-input").value = "Renamed before Quit";
+  await app.emit("scratchpad-native-quit", "folder-rename");
+  assert.deepEqual(persisted.folders, [{ id: "folder", name: "Renamed before Quit" }]);
+  assert.deepEqual(replies(app), [{ requestId: "folder-rename", saved: true }]);
+  assert.equal(document.getElementById("app").inert, true);
+  app.dom.window.close();
+});
+
+test("native quit visibly cancels an invalid folder draft and permits correction and retry", async () => {
+  let persisted;
+  const app = await boot({ save_workspace_db: args => { persisted = structuredClone(args); } });
+  app.click("new-folder-btn");
+  const input = document.querySelector(".note-folder-input");
+  input.value = "Pinned";
+  await app.emit("scratchpad-native-quit", "invalid-folder");
+  assert.deepEqual(replies(app), [{ requestId: "invalid-folder", saved: false }]);
+  assert.match(document.getElementById("save-status").textContent, /Quit cancelled.*folder name.*Escape/);
+  assert.equal(document.getElementById("app").inert, false);
+  assert.equal(getAppElement("editor").readOnly, false);
+  assert.equal(document.querySelector(".note-folder-input").value, "Pinned");
+  input.value = "Corrected folder";
+  await app.emit("scratchpad-native-quit", "corrected-folder");
+  assert.equal(persisted.folders[0].name, "Corrected folder");
+  assert.deepEqual(replies(app).at(-1), { requestId: "corrected-folder", saved: true });
   app.dom.window.close();
 });
 
