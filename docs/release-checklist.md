@@ -1,6 +1,6 @@
 # Release checklist
 
-The first stable candidate is **v1.0.0** (`v1.0.0`). Its version and release notes are prepared. Build it as a draft and complete review and installed-package acceptance before publication. This checklist does not claim that those checks have already been completed.
+The first stable release, **v1.0.0**, is published; its evidence is recorded in [#34](https://github.com/crims0n/scratchpad/issues/34). For subsequent releases, substitute the new candidate version/tag in the examples below. Never rebuild or reuse a published version. Build each candidate as a draft and complete review and installed-package acceptance before publication; this checklist does not itself establish those results.
 
 ## Build the draft
 
@@ -51,9 +51,33 @@ Record the exact candidate commit/version and results under [#35](https://github
 
 Publish the reviewed draft as a normal stable release only after sign-off. Do not recreate the beta workflow or publish a second beta copy of 1.0. Existing clients discover the same stable release through the manifest's compatibility alias.
 
+Before publishing, check **Settings → Environments → github-pages → Deployment branches and tags**, or inspect the rules without changing them:
+
+```sh
+gh api repos/crims0n/scratchpad/environments/github-pages/deployment-branch-policies
+```
+
+The actual candidate tag must be allowed to deploy, and `main` must remain allowed for manual website recovery. Branch and tag rules are distinct: allowing `main` alone does not allow a release-tag event. The first stable release needed an explicit `v1.0.0` tag rule because only `main` and `scratchpad-beta-v*` were previously allowed. Future stable tags need an explicitly reviewed rule before publication; do not assume the first version's rule covers later versions. Choose any broader tag policy deliberately. The workflow must not change environment protections or signing access to make itself pass.
+
 After publishing:
 
-1. Require the **Deploy website** workflow triggered by publication to pass.
+1. Require the **Deploy website** workflow triggered by publication to pass, including **Verify canonical public release feed** after deployment. That check polls the canonical `release.json` for up to 12 minutes (15 seconds between attempts, requests bounded to 10 seconds and 1 MiB). It compares the generated artifact's release metadata, stable/legacy aliases and complete installer metadata, including URLs, sizes and hashes. Only `generatedAt` is ignored so redeploying the same catalog at a different time can pass. A green `deploy-pages` step alone is insufficient.
 2. Check the live website and `https://crims0n.github.io/scratchpad/release.json`: `release` and `channels.stable` must point to `v1.0.0`, with `prerelease: false` and all six final installer URLs and SHA-256 values. Download links must use the published release, not a draft or the development profile.
 3. Confirm `channels.beta` is only the compatibility alias for the same stable version/tag/URL, with legacy flags for installed beta clients. Check update discovery from an installed v0.8.2 client and the stable app; same/older versions must not be offered.
 4. Record website/update results under [#34](https://github.com/crims0n/scratchpad/issues/34), along with the signed build and final artifact checks. Close release-readiness issues only when their remaining acceptance criteria are complete.
+
+## Recover a stale website deployment
+
+If **Verify canonical public release feed** fails, preserve the run URL, event/ref and source SHA, uploaded Pages artifact ID and its generated `release.json`, the last live verification diagnostic, and the canonical endpoint's returned metadata. Compare the expected and served release tags, aliases and installer URLs/hashes. Check whether a newer legitimate release has superseded the run before attempting recovery. Cache/propagation delays can resolve within the polling budget, but repeated stale content after the budget is a failed live check, even if the deployment API reported success.
+
+For v1.0.0, the release-event workflow produced a correct artifact and reported success while the site still served 0.8.2. The existing manual workflow recovered it; see [#130](https://github.com/crims0n/scratchpad/issues/130) and the [upstream report](https://github.com/actions/deploy-pages/issues/383). This symptom does not by itself prove a specific GitHub backend cause.
+
+After reviewing the evidence and checking that no website deployment is active or queued, run **Actions → Deploy website → Run workflow**, selecting `main`, or:
+
+```sh
+gh workflow run pages.yml --repo crims0n/scratchpad --ref main
+```
+
+Record that recovery run's URL/SHA. It regenerates the website catalog from published releases and uses the same post-deployment verification. Require the actual canonical feed to match and the rendered website to select the published downloads; retry the installed-client check only after the live feed is correct. If verification still fails, retain the failure and investigate Pages rather than declaring recovery complete.
+
+Website recovery does not rebuild application packages. Keep the accepted published release, tag and assets intact. Do not replace/delete a published release or its assets, fake `GITHUB_SHA`, push empty commits directly to `main`, or automatically broaden deployment policies or workflow write permissions as a workaround.

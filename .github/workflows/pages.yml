@@ -8,6 +8,7 @@ on:
       - "images/logo.png"
       - "images/preview.png"
       - "scripts/generate-release-manifest.mjs"
+      - "scripts/verify-pages-release.mjs"
       - "site/**"
   release:
     types: [published]
@@ -68,3 +69,9 @@ jobs:
       - name: Deploy website
         id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5
+
+      # Shared by push, release publication and manual recovery. The deployment
+      # API can report success while the canonical site still serves old bytes.
+      - name: Verify canonical public release feed
+        timeout-minutes: 14
+        run: node scripts/verify-pages-release.mjs --expected .pages-staging/release.json
