@@ -64,7 +64,8 @@ jobs:
       - name: Confirm native ARM64 toolchain
         run: |
           node -e "if (process.arch !== 'arm64') throw new Error('Expected native ARM64 Node.js'); console.log(process.platform, process.arch)"
-          rustc -vV
+          node -e "const host = require('node:child_process').execFileSync('rustc', ['-vV'], {encoding:'utf8'}); console.log(host); if (!host.includes('host: ${{ matrix.target }}')) throw new Error('Expected native ARM64 Rust host')"
+          node -e "const config = require('./src-tauri/tauri.conf.json'); if (config.identifier !== 'io.github.crims0n.scratchpad.dev' || config.mainBinaryName !== 'scratchpad-dev') throw new Error('Expected isolated development identity')"
 
       - name: Install frontend dependencies
         run: npm ci --ignore-scripts

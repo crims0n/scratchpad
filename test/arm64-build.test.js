@@ -101,3 +101,13 @@ test("evidence refuses to mix packages into an existing artifact directory", asy
   await mkdir(input.outputDir);
   await assert.rejects(verifyArm64Build(input), /EEXIST/);
 });
+
+test("packaging may change binary bytes while retaining ARM64 architecture", async t => {
+  const input = await fixture(t, "linux");
+  const packaged = elf();
+  packaged[63] = 1;
+  await writeFile(input.binaries.appimage, packaged);
+  const report = await verifyArm64Build(input);
+  assert.notEqual(report.binaries.find(file => file.role === "built").sha256,
+    report.binaries.find(file => file.role === "appimage").sha256);
+});

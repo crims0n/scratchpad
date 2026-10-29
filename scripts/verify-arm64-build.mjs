@@ -52,11 +52,8 @@ export async function verifyArm64Build({ platform, packages, binaries, outputDir
     catch (error) { throw new Error(`${role}: ${error.message}`, { cause: error }); }
     binaryRecords.push({ role, ...metadata(basename(file), bytes) });
   }
-  // The extracted application must be the exact binary that was compiled.
-  const built = binaryRecords.find(record => record.role === "built");
-  if (binaryRecords.some(record => record.sha256 !== built.sha256 || record.size !== built.size)) {
-    throw new Error("Packaged application does not match the built application");
-  }
+  // Packaging can strip symbols or change ELF runtime paths. Record each
+  // inspected payload's actual hash rather than assuming identical bytes.
   const packageRecords = await Promise.all(packages.map(async file => metadata(basename(file), await readFile(file))));
   const report = { schemaVersion: 1, purpose: "unsigned-build-feasibility", platform, architecture: "arm64",
     target: targets[platform], commit, runId, runAttempt, version, applicationIdentifier: "io.github.crims0n.scratchpad.dev",
@@ -84,7 +81,7 @@ async function main() {
     binaries: Object.fromEntries(["built", "deb", "appimage", "msi", "nsis"].filter(role => values[role]).map(role => [role, values[role]])),
     outputDir: values["output-dir"], commit: process.env.GITHUB_SHA, runId: process.env.GITHUB_RUN_ID,
     runAttempt: process.env.GITHUB_RUN_ATTEMPT, version: JSON.parse(await readFile("package.json", "utf8")).version });
-  const summary = `## Unsigned ${report.platform} ARM64 build feasibility\n\nSource: \`${report.commit}\`. Native ARM64 host; both package payloads match the compiled ARM64 application. Development identity only. Signing, GUI launch, MCP and upgrade acceptance have not been established. Artifacts expire after seven days.\n\n| Package | SHA-256 |\n| --- | --- |\n${report.packages.map(file => `| ${file.name} | \`${file.sha256}\` |`).join("\n")}\n`;
+  const summary = `## Unsigned ${report.platform} ARM64 build feasibility\n\nSource: \`${report.commit}\`. Native ARM64 host; the compiled application and both extracted package applications have ARM64 headers. Development identity only. Signing, GUI launch, MCP and upgrade acceptance have not been established. Artifacts expire after seven days.\n\n| Package | SHA-256 |\n| --- | --- |\n${report.packages.map(file => `| ${file.name} | \`${file.sha256}\` |`).join("\n")}\n`;
   process.stdout.write(summary);
   if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, summary);
 }
