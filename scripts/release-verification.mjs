@@ -83,6 +83,11 @@ export async function hashFile(file) {
   return { name: basename(file), size: info.size, sha256: hash.digest("hex") };
 }
 
+export function validFileMetadata(asset) {
+  return /^[a-f0-9]{64}$/.test(asset?.sha256 || "")
+    && Number.isSafeInteger(asset.size) && asset.size > 0;
+}
+
 function assertIdentity({ releaseId, version, commit, runId }) {
   stableRelease(version);
   if (!Number.isSafeInteger(releaseId) || releaseId <= 0 || !/^[a-f0-9]{40}$/.test(commit || "")
@@ -122,7 +127,7 @@ export function verifyEvidence({ evidence, verified, releaseId, version, commit,
     assertNames(record.assets, version, record.platform);
     for (const asset of record.assets) {
       const downloaded = verified.find(file => file.name === asset.name);
-      if (!/^[a-f0-9]{64}$/.test(asset.sha256 || "") || !Number.isSafeInteger(asset.size) || asset.size <= 0
+      if (!validFileMetadata(asset)
         || !downloaded || downloaded.sha256 !== asset.sha256 || downloaded.size !== asset.size) {
         throw new Error(`Draft asset does not match signature-checked bytes: ${asset.name}`);
       }

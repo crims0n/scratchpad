@@ -61,6 +61,21 @@ test("release manifests include beta installers, metadata, and trusted checksums
   assert.equal(manifest.generatedAt, "2026-08-28T12:00:00Z");
 });
 
+test("fork and renamed repository catalogs use the supplied identity and reject upstream package URLs", () => {
+  const repository = "someone/notepad";
+  const fork = structuredClone(release);
+  fork.assets = fork.assets.map(asset => ({
+    ...asset, browser_download_url: asset.browser_download_url.replace("crims0n/scratchpad", repository)
+  }));
+  const manifest = buildReleaseManifest([fork], { repository });
+  assert.equal(manifest.repository, repository);
+  assert.equal(manifest.release.url, `https://github.com/${repository}/releases/tag/${release.tag_name}`);
+  assert.equal(manifest.release.assets.length, 3);
+  assert.ok(manifest.release.assets.every(asset => asset.url.startsWith(`https://github.com/${repository}/releases/download/`)));
+  assert.throws(() => buildReleaseManifest([release], { repository }), /No published Scratchpad release/);
+  assert.throws(() => buildReleaseManifest([fork], { repository: "invalid/owner/repo" }), /Invalid release repository/);
+});
+
 test("manifest generation ignores drafts and chooses the newest published release", () => {
   const older = {
     ...release,

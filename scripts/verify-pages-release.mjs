@@ -4,8 +4,8 @@ import { appendFile, readFile } from "node:fs/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 import { isDeepStrictEqual } from "node:util";
 import { pathToFileURL } from "node:url";
+import { assertReleaseRepository, validFileMetadata } from "./release-verification.mjs";
 
-export const RELEASE_FEED = "https://crims0n.github.io/scratchpad/release.json";
 const MAX_BYTES = 1024 * 1024;
 const RECOVERY = "Inspect the generated artifact and live feed, then use Actions → Deploy website → Run workflow on main if Pages served stale content. See docs/release-checklist.md#recover-a-stale-website-deployment.";
 
@@ -17,17 +17,43 @@ function releaseContent(manifest) {
   return content;
 }
 
+export function releaseFeedUrl(siteUrl) {
+  const base = new URL(siteUrl);
+  if (base.protocol !== "https:" || base.username || base.password || base.search || base.hash) {
+    throw new Error("Expected an HTTPS Pages site URL without credentials, query or fragment");
+  }
+  if (!base.pathname.endsWith("/")) base.pathname += "/";
+  // Check the URL clients actually use. A cache-busted URL could look current
+  // while the canonical feed continues to advertise an older release.
+  return new URL("release.json", base).href;
+}
+
+function firstDifference(expected, live, path = "manifest", asset) {
+  if (isDeepStrictEqual(expected, live)) return null;
+  if (expected && live && typeof expected === "object" && typeof live === "object"
+    && Array.isArray(expected) === Array.isArray(live)) {
+    if (Array.isArray(expected) && expected.length !== live.length) return { path: `${path}.length`, asset };
+    for (const key of new Set([...Object.keys(expected), ...Object.keys(live)])) {
+      const next = Array.isArray(expected) ? `${path}[${key}]` : `${path}.${key}`;
+      const name = path.endsWith(".assets") ? expected[key]?.name : asset;
+      if (!Object.hasOwn(expected, key) || !Object.hasOwn(live, key)) return { path: next, asset: name };
+      const difference = firstDifference(expected[key], live[key], next, name);
+      if (difference) return difference;
+    }
+  }
+  return { path, asset };
+}
+
 export function assertLiveManifest(expected, live) {
   if (!live || !isDeepStrictEqual(releaseContent(expected), releaseContent(live))) {
-    const section = !isDeepStrictEqual(expected.channels, live?.channels) ? "stable/legacy metadata"
-      : !isDeepStrictEqual(expected.release.assets, live?.release?.assets) ? "installer catalog, URLs, sizes or hashes"
-        : "release metadata or manifest schema";
-    throw new Error(`Live release feed differs from the generated artifact: ${section} (expected ${expected.release.tag}; received ${live?.release?.tag || "invalid manifest"})`);
+    const difference = firstDifference(releaseContent(expected), live && releaseContent(live));
+    const asset = difference.asset ? `, asset ${JSON.stringify(difference.asset)}` : "";
+    throw new Error(`Live release feed differs from the generated artifact at ${difference.path}${asset} (expected ${expected.release.tag}; received ${live?.release?.tag || "invalid manifest"})`);
   }
 }
 
-export async function fetchLiveManifest({ fetchImpl = fetch, timeoutMs = 10_000 } = {}) {
-  const response = await fetchImpl(RELEASE_FEED, {
+export async function fetchLiveManifest({ feedUrl, fetchImpl = fetch, timeoutMs = 10_000 }) {
+  const response = await fetchImpl(feedUrl, {
     redirect: "error",
     cache: "no-store",
     headers: { accept: "application/json", "cache-control": "no-cache" },
@@ -41,6 +67,7 @@ export async function fetchLiveManifest({ fetchImpl = fetch, timeoutMs = 10_000 
     await response.body?.cancel();
     throw new Error("Public release feed exceeds 1 MiB");
   }
+  if (!response.body) throw new Error(`Public release feed is empty (HTTP ${response.status})`);
   const chunks = [];
   let size = 0;
   for await (const chunk of response.body) {
@@ -48,10 +75,14 @@ export async function fetchLiveManifest({ fetchImpl = fetch, timeoutMs = 10_000 
     if (size > MAX_BYTES) throw new Error("Public release feed exceeds 1 MiB");
     chunks.push(chunk);
   }
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  const text = Buffer.concat(chunks).toString("utf8");
+  if (!text.trim()) throw new Error(`Public release feed is empty (HTTP ${response.status})`);
+  return JSON.parse(text);
 }
 
 export async function verifyPagesRelease(expected, {
+  siteUrl,
+  repository,
   fetchImpl = fetch,
   now = () => performance.now(),
   wait = sleep,
@@ -60,11 +91,12 @@ export async function verifyPagesRelease(expected, {
   requestTimeoutMs = 10_000,
   log = console.log
 } = {}) {
-  if (expected?.schemaVersion !== 1 || expected.repository !== "crims0n/scratchpad"
+  assertReleaseRepository(repository);
+  const feedUrl = releaseFeedUrl(siteUrl);
+  if (expected?.schemaVersion !== 1 || expected.repository !== repository
     || !expected.release?.tag || !Array.isArray(expected.release.assets)
     || expected.release.assets.length === 0
-    || expected.release.assets.some(asset => !/^[a-f0-9]{64}$/i.test(asset?.sha256 || "")
-      || !Number.isSafeInteger(asset.size) || asset.size <= 0)
+    || !expected.release.assets.every(validFileMetadata)
     || !expected.channels || !Number.isFinite(maxWaitMs) || maxWaitMs <= 0
     || !Number.isFinite(retryDelayMs) || retryDelayMs <= 0
     || !Number.isInteger(requestTimeoutMs) || requestTimeoutMs <= 0) {
@@ -77,12 +109,12 @@ export async function verifyPagesRelease(expected, {
     attempt++;
     try {
       const timeoutMs = Math.max(1, Math.ceil(Math.min(requestTimeoutMs, deadline - now())));
-      const live = await fetchLiveManifest({ fetchImpl, timeoutMs });
+      const live = await fetchLiveManifest({ feedUrl, fetchImpl, timeoutMs });
       assertLiveManifest(expected, live);
       // A response arriving after the overall deadline is not an on-time pass.
       if (now() >= deadline) throw new Error("Verification deadline elapsed during the request");
-      log(`Verified canonical public release feed: ${expected.release.tag} (${expected.release.assets.length} installers), attempt ${attempt}`);
-      return { tag: expected.release.tag, attempts: attempt };
+      log(`Verified canonical public release feed: ${expected.release.tag} (${expected.release.assets.length} installers), attempt ${attempt}; ${feedUrl}`);
+      return { tag: expected.release.tag, attempts: attempt, feedUrl };
     } catch (error) {
       lastError = error;
       log(`Public release verification attempt ${attempt}: ${error.message}`);
@@ -94,16 +126,23 @@ export async function verifyPagesRelease(expected, {
 }
 
 async function main() {
-  const args = process.argv.slice(2);
-  if (args.length !== 2 || args[0] !== "--expected") {
-    throw new Error("Usage: verify-pages-release.mjs --expected <generated-release.json>");
-  }
-  const expected = JSON.parse(await readFile(args[1], "utf8"));
   try {
-    const result = await verifyPagesRelease(expected);
+    const args = process.argv.slice(2);
+    const options = new Map();
+    for (let i = 0; i < args.length; i += 2) {
+      if (!["--expected", "--site-url", "--repository"].includes(args[i]) || !args[i + 1] || options.has(args[i])) {
+        throw new Error("Usage: verify-pages-release.mjs --expected <generated-release.json> --site-url <Pages URL> --repository <owner/repo>");
+      }
+      options.set(args[i], args[i + 1]);
+    }
+    if (options.size !== 3) throw new Error("Expected --expected, --site-url and --repository arguments");
+    const expected = JSON.parse(await readFile(options.get("--expected"), "utf8"));
+    const result = await verifyPagesRelease(expected, {
+      siteUrl: options.get("--site-url"), repository: options.get("--repository")
+    });
     if (process.env.GITHUB_STEP_SUMMARY) {
       await appendFile(process.env.GITHUB_STEP_SUMMARY,
-        `## Verified live website release\n\nCanonical release.json matches the generated artifact for ${result.tag}: release metadata, stable/legacy aliases, and all installer URLs, sizes and hashes. Verification took ${result.attempts} attempt(s).\n`);
+        `## Verified live website release\n\nCanonical feed: ${result.feedUrl}\n\nRepository: ${expected.repository}. The feed matches the generated artifact for ${result.tag}: release metadata, stable/legacy aliases, and all installer URLs, sizes and hashes. Verification took ${result.attempts} attempt(s).\n`);
     }
   } catch (error) {
     if (process.env.GITHUB_STEP_SUMMARY) {

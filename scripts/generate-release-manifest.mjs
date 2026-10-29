@@ -4,9 +4,9 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { pathToFileURL } from "node:url";
 import semver from "semver";
+import { assertReleaseRepository } from "./release-verification.mjs";
 
 const REPOSITORY = "crims0n/scratchpad";
-const DOWNLOAD_PREFIX = `/${REPOSITORY}/releases/download/`;
 
 const ASSET_RULES = [
   { pattern: /_universal\.dmg$/i, platform: "macos", format: "DMG", architecture: "Universal", primary: true, order: 0 },
@@ -23,11 +23,11 @@ function getAssetRule(name) {
   return ASSET_RULES.find(({ pattern }) => pattern.test(name));
 }
 
-function getTrustedDownloadUrl(rawUrl) {
+function getTrustedDownloadUrl(rawUrl, repository) {
   try {
     const url = new URL(rawUrl);
     if (url.protocol !== "https:" || url.host !== "github.com" || url.username || url.password) return null;
-    if (!url.pathname.startsWith(DOWNLOAD_PREFIX)) return null;
+    if (!url.pathname.startsWith(`/${repository}/releases/download/`)) return null;
     return url.href;
   } catch {
     return null;
@@ -39,7 +39,8 @@ export function getSha256(digest) {
   return match ? match[1].toLowerCase() : null;
 }
 
-export function buildReleaseManifest(releases, { generatedAt = new Date().toISOString() } = {}) {
+export function buildReleaseManifest(releases, { generatedAt = new Date().toISOString(), repository = REPOSITORY } = {}) {
+  assertReleaseRepository(repository);
   const versionOf = (release) => String(release.tag_name || "").replace(/^(scratchpad-beta-v|v)/, "");
   const hasCanonicalVersion = (release) => {
     const version = versionOf(release);
@@ -56,7 +57,7 @@ export function buildReleaseManifest(releases, { generatedAt = new Date().toISOS
   for (const release of candidates) {
     const assets = (release.assets || []).flatMap((asset) => {
       const rule = getAssetRule(asset.name || "");
-      const url = getTrustedDownloadUrl(asset.browser_download_url);
+      const url = getTrustedDownloadUrl(asset.browser_download_url, repository);
       if (!rule || !url) return [];
 
       return [{
@@ -88,7 +89,7 @@ export function buildReleaseManifest(releases, { generatedAt = new Date().toISOS
       channel,
       prerelease: channel === "beta",
       publishedAt: release.published_at,
-      url: `https://github.com/${REPOSITORY}/releases/tag/${encodeURIComponent(tag)}`,
+      url: `https://github.com/${repository}/releases/tag/${encodeURIComponent(tag)}`,
       notes: String(release.body || "").trim()
     };
     releasesByChannel[channel] = { ...selected, assets };
@@ -111,7 +112,7 @@ export function buildReleaseManifest(releases, { generatedAt = new Date().toISOS
       stable,
       beta: stable ? { ...stable, channel: "beta", prerelease: true } : metadata(releasesByChannel.beta)
     };
-    return { schemaVersion: 1, generatedAt, repository: REPOSITORY, release: latest, channels };
+    return { schemaVersion: 1, generatedAt, repository, release: latest, channels };
   }
   throw new Error("No published Scratchpad release with recognized installer assets was found");
 }
@@ -129,7 +130,8 @@ async function main() {
   }
 
   const releases = JSON.parse(await readFile(inputPath, "utf8"));
-  const manifest = buildReleaseManifest(releases);
+  const repository = getArgument("--repository") || process.env.GITHUB_REPOSITORY || REPOSITORY;
+  const manifest = buildReleaseManifest(releases, { repository });
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 }

@@ -10,7 +10,7 @@ The first stable release, **v1.0.0**, is published; its evidence is recorded in 
 4. Record that draft's release ID. All three platform builds record this ID in their verification evidence; they do not access the draft. They have read-only repository permission. A separate upload job uses the prepared ID after all builds pass. Review and approve the pending `release-signing` environment deployment for the three build jobs. An empty draft already exists at this point; it is not ready to publish.
 5. Require validation, preparation, all three signed build jobs, **Upload verified files to the candidate draft**, **Verify downloaded signed draft**, and **Confirm current signed draft** to pass.
 
-   The release must remain a draft with `prerelease: false`, tag `v1.0.0`, and the reviewed source commit. Only preparation, upload and live confirmation have repository write permission; none installs npm packages or loads npm dependencies.
+   The release must remain a draft with `prerelease: false`, the candidate's exact tag/version, and the reviewed source commit. Only preparation, upload and live confirmation have repository write permission; none installs npm packages or loads npm dependencies.
 
    The upload job first checks the exact eight local files against independent records created after platform signature verification (after stapling on macOS). It validates the prepared draft's identity and state before uploading, checks final upload digests, and downloads each asset by ID. It compares the downloads against those same records and saves an exact snapshot for the read-only verification job. Those records must come from this workflow run and match the candidate's release ID, version and source commit. Both upload and snapshot verification check the downloaded `SHA256SUMS.asc` using only the checked-in public key and require exact Linux checksum coverage. Snapshot verification also confirms website-manifest recognition of all six installers.
 
@@ -41,41 +41,43 @@ Read the platform signing guides for detailed checks: [macOS](macos-release-sign
 - **macOS (Apple Silicon and Intel):** browser-download the DMG, install to Applications, and launch without a Gatekeeper bypass. Edit, save, and reopen a note; enable agent access and connect an MCP client with the installed executable.
 - **Windows:** browser-download both installers on a clean test system. Check file properties and UAC show the expected publisher, record SmartScreen behavior, then install, launch, edit/save/reopen, connect an MCP client with the installed executable, and uninstall each package.
 - **Linux:** download packages and checksum files from the same draft. Follow [Verifying Linux downloads](verify-linux-downloads.md), then test AppImage launch and `.deb` installation on a supported clean system. Edit, save, reopen a note, and connect an MCP client with each installed package.
-- **Upgrade:** on each platform, follow [Upgrading from beta to 1.0](transition-to-1.0.md) from a v0.8.2 installation with backed-up test data. Confirm local notes, folders/order, pins, trash, preferences, workspace connections, and MCP paths remain available. Test the MSI upgrade and the EXE installer-controlled transition separately. On macOS, remove the old Beta app bundle after verifying the new app and its data; check LaunchServices/Spotlight and the configured MCP command no longer launch the old app. Do not use an app cleaner or delete app data.
+- **Upgrade:** on each platform, test from the supported previous release(s) with backed-up test data. For the original Beta transition, follow [Upgrading from beta to 1.0](transition-to-1.0.md). Confirm local notes, folders/order, pins, trash, preferences, workspace connections, and MCP paths remain available. Test supported MSI and EXE transitions separately. When upgrading Beta on macOS, remove the old Beta app bundle after verifying the new app and its data; check LaunchServices/Spotlight and the configured MCP command no longer launch the old app. Do not use an app cleaner or delete app data.
 
 Only publish the draft after recording these acceptance results and reviewing the release notes and complete asset list. Publishing updates the website's release manifest; draft builds do not replace the public downloads.
 
-## Final 1.0 sign-off and publication
+## Final sign-off and publication
 
-Record the exact candidate commit/version and results under [#35](https://github.com/crims0n/scratchpad/issues/35). Complete the [final code review (#70)](https://github.com/crims0n/scratchpad/issues/70) and [documentation pass (#69)](https://github.com/crims0n/scratchpad/issues/69); resolve blocking findings and repeat affected acceptance checks after any candidate changes.
+Record the exact candidate commit/version, installed-package acceptance, code review and documentation sign-off in the candidate's tracking issues. For 1.0, these were [#35](https://github.com/crims0n/scratchpad/issues/35), [#70](https://github.com/crims0n/scratchpad/issues/70) and [#69](https://github.com/crims0n/scratchpad/issues/69). Resolve blocking findings and repeat affected acceptance checks after any candidate changes.
 
-Publish the reviewed draft as a normal stable release only after sign-off. Do not recreate the beta workflow or publish a second beta copy of 1.0. Existing clients discover the same stable release through the manifest's compatibility alias.
+Publish the reviewed draft as one normal stable release only after sign-off. Existing Beta clients discover that same published version through the manifest's compatibility alias.
 
-Before publishing, check **Settings → Environments → github-pages → Deployment branches and tags**, or inspect the rules without changing them:
+Before publishing, check **Settings → Environments → github-pages → Deployment branches and tags**, or inspect the rules without changing them from the target repository's checkout:
 
 ```sh
-gh api repos/crims0n/scratchpad/environments/github-pages/deployment-branch-policies
+gh api 'repos/{owner}/{repo}/environments/github-pages/deployment-branch-policies'
 ```
 
 The actual candidate tag must be allowed to deploy, and `main` must remain allowed for manual website recovery. Branch and tag rules are distinct: allowing `main` alone does not allow a release-tag event. The first stable release needed an explicit `v1.0.0` tag rule because only `main` and `scratchpad-beta-v*` were previously allowed. Future stable tags need an explicitly reviewed rule before publication; do not assume the first version's rule covers later versions. Choose any broader tag policy deliberately. The workflow must not change environment protections or signing access to make itself pass.
 
 After publishing:
 
-1. Require the **Deploy website** workflow triggered by publication to pass, including **Verify canonical public release feed** after deployment. That check polls the canonical `release.json` for up to 12 minutes (15 seconds between attempts, requests bounded to 10 seconds and 1 MiB). It compares the generated artifact's release metadata, stable/legacy aliases and complete installer metadata, including URLs, sizes and hashes. Only `generatedAt` is ignored so redeploying the same catalog at a different time can pass. A green `deploy-pages` step alone is insufficient.
-2. Check the live website and `https://crims0n.github.io/scratchpad/release.json`: `release` and `channels.stable` must point to `v1.0.0`, with `prerelease: false` and all six final installer URLs and SHA-256 values. Download links must use the published release, not a draft or the development profile.
-3. Confirm `channels.beta` is only the compatibility alias for the same stable version/tag/URL, with legacy flags for installed beta clients. Check update discovery from an installed v0.8.2 client and the stable app; same/older versions must not be offered.
-4. Record website/update results under [#34](https://github.com/crims0n/scratchpad/issues/34), along with the signed build and final artifact checks. Close release-readiness issues only when their remaining acceptance criteria are complete.
+1. Require the **Deploy website** workflow triggered by publication to pass, including its separate read-only **Verify live website release** job. It uses the deploy job's exact source commit and immutable expected-manifest artifact ID, plus its actual Pages URL and repository context. Polling is outside the deployment concurrency group so recovery can deploy while an older verification is pending. The check polls canonical `release.json` for up to 12 minutes (15 seconds between attempts, requests bounded to 10 seconds and 1 MiB). It compares release metadata, stable/legacy aliases and complete installer metadata, including URLs, sizes and hashes. Only `generatedAt` is ignored so redeploying the same catalog at a different time can pass. A green `deploy-pages` step alone is insufficient.
+2. Check the rendered website and canonical `release.json` at the deployed Pages URL: `release` and `channels.stable` must point to the exact reviewed candidate version/tag, with `prerelease: false` and the complete final installer set and SHA-256 values. Download links must use those published assets, not a draft or the development profile.
+3. Confirm `channels.beta` is only the compatibility alias for the same stable version/tag/URL, with legacy flags for installed beta clients. Check update discovery from the supported previous installed release(s), including a legacy Beta client when validating that compatibility path, and the current stable app; same/older versions must not be offered.
+4. Record website/update results in this release's tracking issue, along with the signed build and final artifact checks; the first stable release's record is [#34](https://github.com/crims0n/scratchpad/issues/34). Close release-readiness issues only when their remaining acceptance criteria are complete.
 
 ## Recover a stale website deployment
 
 If **Verify canonical public release feed** fails, preserve the run URL, event/ref and source SHA, uploaded Pages artifact ID and its generated `release.json`, the last live verification diagnostic, and the canonical endpoint's returned metadata. Compare the expected and served release tags, aliases and installer URLs/hashes. Check whether a newer legitimate release has superseded the run before attempting recovery. Cache/propagation delays can resolve within the polling budget, but repeated stale content after the budget is a failed live check, even if the deployment API reported success.
 
+Cache-control request headers are hints, not a guarantee that the CDN bypasses its cache. The 12-minute limit is a bounded operational budget, not a promise about the edge's TTL. Verification deliberately avoids a cache-busting query: success on a fresh query URL would not prove the ordinary URL used by existing clients is current. If a newer deployment overtakes an older verification, review that expected/live difference and the newer run instead of rolling the site back.
+
 For v1.0.0, the release-event workflow produced a correct artifact and reported success while the site still served 0.8.2. The existing manual workflow recovered it; see [#130](https://github.com/crims0n/scratchpad/issues/130) and the [upstream report](https://github.com/actions/deploy-pages/issues/383). This symptom does not by itself prove a specific GitHub backend cause.
 
-After reviewing the evidence and checking that no website deployment is active or queued, run **Actions → Deploy website → Run workflow**, selecting `main`, or:
+After reviewing the evidence, check for active or queued deployments to avoid dispatching duplicate recovery runs. A stale verification job by itself does not hold the deployment lock. Run **Actions → Deploy website → Run workflow**, selecting `main`, or run from the target repository's checkout:
 
 ```sh
-gh workflow run pages.yml --repo crims0n/scratchpad --ref main
+gh workflow run pages.yml --ref main
 ```
 
 Record that recovery run's URL/SHA. It regenerates the website catalog from published releases and uses the same post-deployment verification. Require the actual canonical feed to match and the rendered website to select the published downloads; retry the installed-client check only after the live feed is correct. If verification still fails, retain the failure and investigate Pages rather than declaring recovery complete.
