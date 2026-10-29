@@ -8,6 +8,9 @@ on:
       - "images/logo.png"
       - "images/preview.png"
       - "scripts/generate-release-manifest.mjs"
+      - "scripts/verify-pages-release.mjs"
+      - "scripts/release-verification.mjs"
+      - "scripts/check-stable-release.mjs"
       - "site/**"
   release:
     types: [published]
@@ -15,23 +18,29 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: false
 
 jobs:
   deploy:
     name: Build and deploy website
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
+      manifest_artifact_id: ${{ steps.manifest.outputs.artifact-id }}
+      source_commit: ${{ steps.checkout.outputs.commit }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Check out repository
+        id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: main
@@ -57,7 +66,7 @@ jobs:
           cp -R site/. .pages-staging/
           cp images/logo.png images/preview.png .pages-staging/assets/
           gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" > "$RUNNER_TEMP/releases.json"
-          node scripts/generate-release-manifest.mjs --input "$RUNNER_TEMP/releases.json" --output .pages-staging/release.json
+          node scripts/generate-release-manifest.mjs --input "$RUNNER_TEMP/releases.json" --output .pages-staging/release.json --repository "$GITHUB_REPOSITORY"
           touch .pages-staging/.nojekyll
 
       - name: Upload website artifact
@@ -65,6 +74,58 @@ jobs:
         with:
           path: .pages-staging
 
+      - name: Save expected release manifest
+        id: manifest
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pages-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .pages-staging/release.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Deploy website
         id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5
+
+  verify:
+    name: Verify live website release
+    needs: deploy
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    # Polling must not hold the deployment concurrency lock and block recovery.
+    timeout-minutes: 15
+    steps:
+      - name: Validate deployment handoff
+        env:
+          MANIFEST_ARTIFACT_ID: ${{ needs.deploy.outputs.manifest_artifact_id }}
+          DEPLOY_COMMIT: ${{ needs.deploy.outputs.source_commit }}
+        run: |
+          [[ "$MANIFEST_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]] || { echo "Missing expected manifest artifact ID"; exit 1; }
+          [[ "$DEPLOY_COMMIT" =~ ^[a-f0-9]{40}$ ]] || { echo "Missing deployment source commit"; exit 1; }
+
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.deploy.outputs.source_commit }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Download this deployment's expected manifest
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.deploy.outputs.manifest_artifact_id }}
+          path: .pages-expected
+          merge-multiple: true
+          digest-mismatch: error
+
+      - name: Verify canonical public release feed
+        timeout-minutes: 14
+        env:
+          PAGES_URL: ${{ needs.deploy.outputs.page_url }}
+        run: node scripts/verify-pages-release.mjs --expected .pages-expected/release.json --site-url "$PAGES_URL" --repository "$GITHUB_REPOSITORY"
