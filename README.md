@@ -8,6 +8,11 @@ Scratchpad is a lightweight, open-source, local-first desktop editor for notes, 
 
 [Visit the Scratchpad website](https://crims0n.github.io/scratchpad/) for an OS-aware download and SHA-256 checksums.
 
+**On this page:**
+[Install](#install) · [First steps](#first-steps) · [Features](#features) · [Storage and privacy](#storage-and-privacy) · [Agent access (MCP)](#agent-access-mcp) ·
+[Delete and recover notes](#delete-and-recover-notes) · [Keyboard shortcuts](#keyboard-shortcuts) · [Markdown editing](#markdown-editing) · [Themes](#themes) ·
+[Development](#development) · [Releases](#releases) · [Architecture](#architecture) · [Contributing and security](#contributing-and-security) · [License](#license)
+
 <p align="center">
   <img src="images/preview.png" alt="Scratchpad application preview" width="900">
 </p>
