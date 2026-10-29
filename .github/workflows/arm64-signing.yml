@@ -64,8 +64,13 @@ jobs:
             Invoke-WebRequest -Uri "https://github.com/crims0n/scratchpad/releases/download/v1.0.0/$name" -OutFile $path
             if ((Get-FileHash -Algorithm SHA256 $path).Hash -ne $files[$name]) { throw "Published regression fixture changed: $name" }
           }
-          ./scripts/verify-windows-release.ps1 -Setup (Join-Path $root 'Scratchpad_1.0.0_x64-setup.exe') -Msi (Join-Path $root 'Scratchpad_1.0.0_x64_en-US.msi')
+          $evidencePath = Join-Path $root 'regression-signatures.json'
+          $payloads = ./scripts/verify-windows-release.ps1 -Setup (Join-Path $root 'Scratchpad_1.0.0_x64-setup.exe') -Msi (Join-Path $root 'Scratchpad_1.0.0_x64_en-US.msi') -SigningEvidencePath $evidencePath -PassThru
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path -LiteralPath $payloads.msi) -or -not (Test-Path -LiteralPath $payloads.nsis)) { throw 'Verified application paths were not returned' }
+          $evidence = Get-Content -LiteralPath $evidencePath -Raw | ConvertFrom-Json
+          if ($evidence.assets.Count -ne 2 -or $evidence.payloads.Count -lt 3 -or $evidence.tools.signToolArchitecture -ne 'x64') { throw 'Incomplete signature evidence' }
+          if ($evidence.payloads | Where-Object { -not $_.certificateThumbprint -or -not $_.timestampCertificateThumbprint }) { throw 'Missing payload certificate/timestamp evidence' }
 
   signed:
     name: Signed ARM64 development packages (${{ matrix.os }})
