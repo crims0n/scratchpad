@@ -2,10 +2,10 @@
 
 import { execFileSync } from "node:child_process";
 import { copyFile, mkdir, open, readFile, writeFile, appendFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 import { pathToFileURL } from "node:url";
-import { hashFile } from "./release-verification.mjs";
+import { hashFile, validFileMetadata } from "./release-verification.mjs";
 
 const targets = { linux: "aarch64-unknown-linux-gnu", windows: "aarch64-pc-windows-msvc" };
 const maxHeaderBytes = 1024 * 1024;
@@ -45,6 +45,8 @@ export function assertArm64Binary(bytes, platform) {
       if (!interpreter) throw new Error("Expected a PIE application with an interpreter header");
     }
   } else if (platform === "windows") {
+    // Keep PE layout checks aligned with scripts/windows-pe.ps1, whose
+    // PowerShell verifier also supports x64/x86 installer wrappers and DLLs.
     if (bytes.length < 64 || bytes.subarray(0, 2).toString() !== "MZ") throw new Error("Expected an ARM64 PE32+ application");
     const offset = bytes.readUInt32LE(0x3c);
     if (offset < 64 || offset + 26 > bytes.length || bytes.readUInt32LE(offset) !== 0x4550
@@ -94,7 +96,7 @@ export function parseRustToolchain(details) {
 }
 
 export async function verifyArm64Build({ platform, packages, binaries, outputDir, commit, prHeadCommit,
-  eventName, rustc, runId, runAttempt, version }) {
+  eventName, rustc, runId, runAttempt, version, signing = null, signingFiles = [], sourceRef, expectedPublisher }) {
   const roles = platform === "linux" ? ["built", "deb", "appimage"] : ["built", "msi", "nsis"];
   if (!targets[platform] || JSON.stringify(Object.keys(binaries).sort()) !== JSON.stringify(roles.sort())) {
     throw new Error("Expected the built application and both extracted package payloads");
@@ -126,16 +128,55 @@ export async function verifyArm64Build({ platform, packages, binaries, outputDir
   // Packaging can strip symbols or change ELF runtime paths. Record each
   // inspected payload's actual hash rather than assuming identical bytes.
   const packageRecords = await Promise.all(packages.map(hashFile));
-  const report = { schemaVersion: 1, purpose: "unsigned-build-feasibility", platform, architecture: "arm64",
+  const checksumError = "Signing validation must include the platform checksum/signature files exactly";
+  if (signing) {
+    const expectedExtras = platform === "linux" ? ["SHA256SUMS", "SHA256SUMS.asc"] : [];
+    if (JSON.stringify(signingFiles.map(file => basename(file)).sort()) !== JSON.stringify(expectedExtras)) {
+      throw new Error(checksumError);
+    }
+  } else if (signingFiles.length) {
+    throw new Error("Checksum files require signing verification evidence");
+  }
+  let extraRecords;
+  try { extraRecords = await Promise.all(signingFiles.map(hashFile)); }
+  catch (error) { throw new Error(`${checksumError}: ${error.message}`, { cause: error }); }
+  const copiedRecords = [...packageRecords, ...extraRecords];
+  if (signing) {
+    if (eventName !== "workflow_dispatch" || sourceRef !== "refs/heads/main"
+      || signing.schemaVersion !== 1 || signing.platform !== platform || signing.commit !== commit
+      || signing.runId !== runId || signing.runAttempt !== runAttempt) {
+      throw new Error("Signing validation requires matching protected main dispatch provenance");
+    }
+    if ((platform === "windows" && (signing.method !== "authenticode" || !expectedPublisher || signing.publisher !== expectedPublisher))
+      || (platform === "linux" && (signing.method !== "gpg" || !/^[A-F0-9]{40}$/.test(signing.fingerprint || "")))) {
+      throw new Error("Expected platform signing verification evidence");
+    }
+    if (platform === "windows") {
+      if (!Array.isArray(signing.payloads) || binaryRecords.filter(file => file.role !== "built").some(binary => {
+        const packageName = packageRecords.find(file => file.name.endsWith(binary.role === "msi" ? ".msi" : "-setup.exe")).name;
+        return !signing.payloads.some(payload => payload.package === packageName && payload.name === binary.name
+          && payload.sha256 === binary.sha256 && payload.size === binary.size && payload.architecture === "arm64"
+          && payload.publisher === signing.publisher && /^[a-f0-9]{40}$/i.test(payload.certificateThumbprint || "")
+          && /^[a-f0-9]{40}$/i.test(payload.timestampCertificateThumbprint || ""));
+      })) throw new Error("Windows application bytes do not match signature-checked payload evidence");
+    }
+    if (!Array.isArray(signing.assets) || signing.assets.length !== copiedRecords.length
+      || new Set(signing.assets.map(file => file.name)).size !== copiedRecords.length
+      || copiedRecords.some(file => !signing.assets.some(asset => validFileMetadata(asset)
+        && asset.name === file.name && asset.size === file.size && asset.sha256 === file.sha256))) {
+      throw new Error("Signing evidence does not match the inspected package bytes");
+    }
+  }
+  const report = { schemaVersion: 1, purpose: signing ? "signing-validation" : "unsigned-build-feasibility", platform, architecture: "arm64",
     target: targets[platform], commit, prHeadCommit, eventName, rustc, runId, runAttempt, version,
     applicationIdentifier: "io.github.crims0n.scratchpad.dev",
-    packages: packageRecords, binaries: binaryRecords };
+    packages: packageRecords, binaries: binaryRecords, ...(signing ? { signing } : {}) };
   await mkdir(outputDir);
-  for (const [index, file] of packages.entries()) {
-    const destination = join(outputDir, packageRecords[index].name);
+  for (const [index, file] of [...packages, ...signingFiles].entries()) {
+    const destination = join(outputDir, copiedRecords[index].name);
     await copyFile(file, destination);
     const copied = await hashFile(destination);
-    if (copied.sha256 !== packageRecords[index].sha256 || copied.size !== packageRecords[index].size) {
+    if (copied.sha256 !== copiedRecords[index].sha256 || copied.size !== copiedRecords[index].size) {
       throw new Error("Artifact copy differs from the inspected package");
     }
   }
@@ -144,19 +185,25 @@ export async function verifyArm64Build({ platform, packages, binaries, outputDir
 }
 
 async function main() {
-  const options = Object.fromEntries(["platform", "built", "deb", "appimage", "msi", "nsis", "output-dir"].map(name => [name, { type: "string" }]));
+  const options = Object.fromEntries(["platform", "built", "deb", "appimage", "msi", "nsis", "output-dir", "signing-evidence"].map(name => [name, { type: "string" }]));
   options.package = { type: "string", multiple: true };
   const { values } = parseArgs({ options });
   if (process.arch !== "arm64" || process.platform !== (values.platform === "windows" ? "win32" : "linux")) {
     throw new Error("Feasibility verification must run on the matching native ARM64 host");
   }
-  const report = await verifyArm64Build({ platform: values.platform, packages: values.package,
+  const signing = values["signing-evidence"] ? JSON.parse((await readFile(values["signing-evidence"], "utf8")).replace(/^\uFEFF/, "")) : null;
+  const signingFiles = signing && values.platform === "linux"
+    ? ["SHA256SUMS", "SHA256SUMS.asc"].map(name => join(dirname(values["signing-evidence"]), name)) : [];
+  const report = await verifyArm64Build({ platform: values.platform, packages: values.package, signing, signingFiles,
+    sourceRef: process.env.GITHUB_REF,
+    expectedPublisher: process.env.WINDOWS_SIGNING_PUBLISHER,
     binaries: Object.fromEntries(["built", "deb", "appimage", "msi", "nsis"].filter(role => values[role]).map(role => [role, values[role]])),
     outputDir: values["output-dir"], commit: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
     prHeadCommit: process.env.PR_HEAD_COMMIT || null, eventName: process.env.GITHUB_EVENT_NAME,
     rustc: parseRustToolchain(execFileSync("rustc", ["-vV"], { encoding: "utf8" })), runId: process.env.GITHUB_RUN_ID,
     runAttempt: process.env.GITHUB_RUN_ATTEMPT, version: JSON.parse(await readFile("package.json", "utf8")).version });
-  const summary = `## Unsigned ${report.platform} ARM64 build feasibility\n\nChecked-out source: \`${report.commit}\`. PR head: ${report.prHeadCommit ? `\`${report.prHeadCommit}\`` : "not applicable (manual dispatch)"}. Rust ${report.rustc.version}, host \`${report.rustc.host}\`. Native ARM64 host; the compiled application and both extracted package applications have ARM64 executable headers. Development identity only. Signing, GUI launch, MCP and upgrade acceptance have not been established. Artifacts expire after seven days.\n\n| Package | SHA-256 |\n| --- | --- |\n${report.packages.map(file => `| ${file.name} | \`${file.sha256}\` |`).join("\n")}\n`;
+  const signingStatus = signing ? `Signing validation: ${signing.method}; signature-checked package hashes match this run's evidence.` : "Signing has not been established.";
+  const summary = `## ${signing ? "Signed" : "Unsigned"} ${report.platform} ARM64 development package validation\n\nChecked-out source: \`${report.commit}\`. PR head: ${report.prHeadCommit ? `\`${report.prHeadCommit}\`` : "not applicable (manual dispatch)"}. Rust ${report.rustc.version}, host \`${report.rustc.host}\`. Native ARM64 host; the compiled application and both extracted package applications have ARM64 executable headers. Development identity only. ${signingStatus} GUI launch, MCP and upgrade acceptance have not been established. Artifacts expire after seven days.\n\n| Package | SHA-256 |\n| --- | --- |\n${report.packages.map(file => `| ${file.name} | \`${file.sha256}\` |`).join("\n")}\n`;
   process.stdout.write(summary);
   if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, summary);
 }

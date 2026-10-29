@@ -4,8 +4,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, rm, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { assertArm64Binary, parseRustToolchain, readApplicationHeader, verifyArm64Build } from "../scripts/verify-arm64-build.mjs";
+import { hashFile } from "../scripts/release-verification.mjs";
 
 function elf(machine = 183, type = 2) {
   const bytes = Buffer.alloc(120);
@@ -191,3 +192,71 @@ test("file inspection rejects oversized PE offsets and reads the PIE program tab
   await writeFile(input.binaries.built, bad);
   await assert.rejects(readApplicationHeader(input.binaries.built, "windows"), /inspection limit/);
 });
+
+async function signingFixture(t, platform) {
+  const input = { ...await fixture(t, platform), eventName: "workflow_dispatch", prHeadCommit: null, sourceRef: "refs/heads/main" };
+  const signingFiles = [];
+  if (platform === "linux") {
+    for (const name of ["SHA256SUMS", "SHA256SUMS.asc"]) {
+      const file = join(dirname(input.outputDir), name);
+      await writeFile(file, `signed fixture ${name}`);
+      signingFiles.push(file);
+    }
+  }
+  const assets = await Promise.all([...input.packages, ...signingFiles].map(hashFile));
+  const payloads = platform === "windows" ? await Promise.all(["msi", "nsis"].map(async role => ({
+    ...await hashFile(input.binaries[role]), package: basename(input.packages.find(file => file.endsWith(role === "msi" ? ".msi" : "-setup.exe"))),
+    architecture: "arm64", publisher: "Fixture Publisher", certificateThumbprint: "A".repeat(40), timestampCertificateThumbprint: "B".repeat(40)
+  }))) : [];
+  return { ...input, expectedPublisher: "Fixture Publisher", signingFiles, signing: { schemaVersion: 1, platform, commit: input.commit,
+    runId: input.runId, runAttempt: input.runAttempt, method: platform === "linux" ? "gpg" : "authenticode",
+    ...(platform === "linux" ? { fingerprint: "A".repeat(40) } : { publisher: "Fixture Publisher", payloads }), assets } };
+}
+
+test("Windows payload evidence rejects missing timestamps and changed extracted application bytes", async t => {
+  const input = await signingFixture(t, "windows");
+  const payloads = input.signing.payloads.map(file => ({ ...file, timestampCertificateThumbprint: "" }));
+  await assert.rejects(verifyArm64Build({ ...input, signing: { ...input.signing, payloads } }), /payload evidence/);
+  const changed = pe();
+  changed[127] = 1;
+  await writeFile(input.binaries.nsis, changed);
+  await assert.rejects(verifyArm64Build(input), /payload evidence/);
+});
+
+test("Windows signing requires the configured expected publisher", async t => {
+  const input = await signingFixture(t, "windows");
+  await assert.rejects(verifyArm64Build({ ...input, expectedPublisher: undefined }), /platform signing verification/);
+  await assert.rejects(verifyArm64Build({ ...input, expectedPublisher: "Another Publisher" }), /platform signing verification/);
+});
+
+test("missing or misnamed Linux checksum files report the signing requirement before file hashing", async t => {
+  const input = await signingFixture(t, "linux");
+  const expected = /Signing validation must include the platform checksum\/signature files exactly/;
+  await assert.rejects(verifyArm64Build({ ...input, signingFiles: input.signingFiles.slice(0, 1) }), expected);
+  const misnamed = join(dirname(input.outputDir), "not-a-checksum");
+  await assert.rejects(verifyArm64Build({ ...input, signingFiles: [misnamed, input.signingFiles[1]] }), expected);
+  await rm(input.signingFiles[1]);
+  await assert.rejects(verifyArm64Build(input), error => expected.test(error.message) && error.message.includes("SHA256SUMS.asc"));
+});
+
+for (const platform of ["linux", "windows"]) {
+  test(`${platform} signing evidence binds checked package bytes to a main dispatch`, async t => {
+    const input = await signingFixture(t, platform);
+    for (const override of [{ sourceRef: "refs/heads/feature" },
+      { signing: { ...input.signing, runId: "999" } }, { signing: { ...input.signing, commit: "c".repeat(40) } },
+      { signing: { ...input.signing, assets: input.signing.assets.slice(1) } },
+      { signing: { ...input.signing, method: "unverified" } }]) {
+      await assert.rejects(verifyArm64Build({ ...input, ...override }));
+    }
+    const report = await verifyArm64Build(input);
+    assert.equal(report.purpose, "signing-validation");
+    assert.deepEqual(report.signing, input.signing);
+    for (const file of input.signingFiles) assert.ok((await readFile(join(input.outputDir, basename(file)))).length);
+  });
+
+  test(`${platform} changed packages cannot reuse signing evidence`, async t => {
+    const input = await signingFixture(t, platform);
+    await writeFile(input.packages[0], "bytes changed after signature checks");
+    await assert.rejects(verifyArm64Build(input), /Signing evidence does not match/);
+  });
+}

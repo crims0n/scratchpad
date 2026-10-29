@@ -1,0 +1,241 @@
+name: ARM64 signing validation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/arm64-signing.yml
+      - scripts/**
+      - src-tauri/tauri.windows-signing.conf.json
+      - site/release-signing-key.asc
+      - test/arm64-build.test.js
+      - test/linux-signing-validation.test.js
+
+permissions:
+  contents: read
+
+env:
+  WINDOWS_SIGNING_PUBLISHER: Patrick McDowell
+
+concurrency:
+  group: arm64-signing-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows-prerequisites:
+    name: Validate Windows signing prerequisites (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [windows-latest, windows-11-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Ensure x64 .NET signing runtime
+        run: ./scripts/ensure-windows-signing-runtime.ps1
+      - name: Inspect pinned Microsoft signing tools without credentials
+        env:
+          ARTIFACT_SIGNING_ENDPOINT: https://eus.codesigning.azure.net
+          ARTIFACT_SIGNING_ACCOUNT: prerequisite-validation
+          ARTIFACT_SIGNING_PROFILE: prerequisite-validation
+          AZURE_CLIENT_ID: 00000000-0000-0000-0000-000000000000
+          AZURE_TENANT_ID: 00000000-0000-0000-0000-000000000000
+        run: ./scripts/setup-windows-signing.ps1 -Description 'Prerequisite validation only'
+      - name: Test PE parsing and execute the x64 prerequisites
+        run: ./scripts/test-windows-signing-prerequisites.ps1
+      - name: Test signing trust and aggregated payload failures
+        run: ./scripts/test-windows-signing-checks.ps1
+      - name: Verify published x64 installer regression
+        if: matrix.runner == 'windows-latest'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:RUNNER_TEMP 'published-x64-regression'
+          New-Item -ItemType Directory $root | Out-Null
+          $files = @{
+            'Scratchpad_1.0.0_x64-setup.exe' = '46a8722bf4e5a2b04b2151a6547be86e51a7a6771f2b622260b14582282f93a3'
+            'Scratchpad_1.0.0_x64_en-US.msi' = 'a06801f0274d1e19db053ef42a086939d593f8dc8e80000004870e299ac04d9c'
+          }
+          foreach ($name in $files.Keys) {
+            $path = Join-Path $root $name
+            Invoke-WebRequest -Uri "https://github.com/crims0n/scratchpad/releases/download/v1.0.0/$name" -OutFile $path
+            if ((Get-FileHash -Algorithm SHA256 $path).Hash -ne $files[$name]) { throw "Published regression fixture changed: $name" }
+          }
+          $evidencePath = Join-Path $root 'regression-signatures.json'
+          $payloads = ./scripts/verify-windows-release.ps1 -Setup (Join-Path $root 'Scratchpad_1.0.0_x64-setup.exe') -Msi (Join-Path $root 'Scratchpad_1.0.0_x64_en-US.msi') -SigningEvidencePath $evidencePath -PassThru
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path -LiteralPath $payloads.msi) -or -not (Test-Path -LiteralPath $payloads.nsis)) { throw 'Verified application paths were not returned' }
+          $evidence = Get-Content -LiteralPath $evidencePath -Raw | ConvertFrom-Json
+          if ($evidence.assets.Count -ne 2 -or $evidence.payloads.Count -lt 3 -or $evidence.tools.signToolArchitecture -ne 'x64') { throw 'Incomplete signature evidence' }
+          if ($evidence.payloads | Where-Object { -not $_.certificateThumbprint -or -not $_.timestampCertificateThumbprint }) { throw 'Missing payload certificate/timestamp evidence' }
+
+  signed:
+    name: Signed ARM64 development packages (${{ matrix.os }})
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: windows-prerequisites
+    environment: release-signing
+    permissions:
+      contents: read
+      id-token: write
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: linux
+            runner: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+            bundles: appimage,deb
+            signing_args: ''
+          - os: windows
+            runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            bundles: nsis,msi
+            signing_args: --config src-tauri/tauri.windows-signing.conf.json
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Install Linux dependencies
+        if: matrix.os == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
+        with:
+          toolchain: 1.98.0
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust build artifacts
+        uses: swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Confirm native ARM64 toolchain
+        run: |
+          node -e "if (process.arch !== 'arm64') throw new Error('Expected native ARM64 Node.js'); console.log(process.platform, process.arch)"
+          node -e "const host = require('node:child_process').execFileSync('rustc', ['-vV'], {encoding:'utf8'}); console.log(host); if (!host.includes('host: ${{ matrix.target }}')) throw new Error('Expected native ARM64 Rust host')"
+          node -e "const config = require('./src-tauri/tauri.conf.json'); if (config.identifier !== 'io.github.crims0n.scratchpad.dev' || config.mainBinaryName !== 'scratchpad-dev') throw new Error('Expected isolated development identity')"
+
+      - name: Install frontend dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Cross-check application versions
+        run: npm run check:versions
+
+      - name: Import Linux signing key
+        id: signing_key
+        if: matrix.os == 'linux'
+        env:
+          GNUPGHOME: ${{ runner.temp }}/arm64-signing-gnupg
+          RELEASE_SIGNING_GPG_PRIVATE_KEY: ${{ secrets.RELEASE_SIGNING_GPG_PRIVATE_KEY }}
+          RELEASE_SIGNING_GPG_PASSPHRASE: ${{ secrets.RELEASE_SIGNING_GPG_PASSPHRASE }}
+        run: scripts/import-release-signing-key.sh site/release-signing-key.asc
+
+      - name: Ensure Windows signing runtime
+        if: matrix.os == 'windows'
+        run: ./scripts/ensure-windows-signing-runtime.ps1
+
+      - name: Set up Windows signing
+        if: matrix.os == 'windows'
+        env:
+          ARTIFACT_SIGNING_ENDPOINT: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
+          ARTIFACT_SIGNING_ACCOUNT: ${{ vars.ARTIFACT_SIGNING_ACCOUNT }}
+          ARTIFACT_SIGNING_PROFILE: ${{ vars.ARTIFACT_SIGNING_PROFILE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+        run: ./scripts/setup-windows-signing.ps1 -Description 'Scratchpad Development'
+
+      - name: Build signed development packages
+        env:
+          GNUPGHOME: ${{ runner.temp }}/arm64-signing-gnupg
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+          SIGN: ${{ matrix.os == 'linux' && '1' || '' }}
+          SIGN_KEY: ${{ steps.signing_key.outputs.fingerprint }}
+          APPIMAGETOOL_SIGN_PASSPHRASE: ${{ matrix.os == 'linux' && secrets.RELEASE_SIGNING_GPG_PASSPHRASE || '' }}
+          APPIMAGETOOL_FORCE_SIGN: ${{ matrix.os == 'linux' && '1' || '' }}
+        run: npm run tauri -- build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} ${{ matrix.signing_args }} -- --locked
+
+      - name: Sign and verify Linux checksums
+        if: matrix.os == 'linux'
+        env:
+          GNUPGHOME: ${{ runner.temp }}/arm64-signing-gnupg
+          SIGNING_KEY_FINGERPRINT: ${{ steps.signing_key.outputs.fingerprint }}
+          SIGNING_VALIDATION_EVIDENCE_PATH: ${{ runner.temp }}/arm64-signing-input/signing-evidence.json
+        run: |
+          mkdir "$RUNNER_TEMP/arm64-signing-input"
+          cp src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/appimage/*.AppImage "$RUNNER_TEMP/arm64-signing-input/"
+          cp src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/deb/*.deb "$RUNNER_TEMP/arm64-signing-input/"
+          scripts/sign-linux-release.sh site/release-signing-key.asc --assets-dir "$RUNNER_TEMP/arm64-signing-input" --architecture arm64
+
+      - name: Inspect Linux package payloads
+        if: matrix.os == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/arm64-signing-input"
+          mapfile -t appimages < <(find "$bundle" -maxdepth 1 -type f -name '*.AppImage')
+          mapfile -t debs < <(find "$bundle" -maxdepth 1 -type f -name '*.deb')
+          [[ ${#appimages[@]} -eq 1 && ${#debs[@]} -eq 1 ]] || { echo 'Expected one AppImage and one DEB'; exit 1; }
+          [[ "$(dpkg-deb --field "${debs[0]}" Architecture)" == arm64 ]] || { echo 'DEB architecture must be arm64'; exit 1; }
+          inspection="$RUNNER_TEMP/arm64-inspection"
+          mkdir -p "$inspection/deb" "$inspection/appimage"
+          dpkg-deb --extract "${debs[0]}" "$inspection/deb"
+          chmod +x "${appimages[0]}"
+          (cd "$inspection/appimage" && "${appimages[0]}" --appimage-extract)
+          node scripts/verify-arm64-build.mjs --platform linux --signing-evidence "$bundle/signing-evidence.json" \
+            --package "${appimages[0]}" --package "${debs[0]}" \
+            --built "src-tauri/target/aarch64-unknown-linux-gnu/release/scratchpad-dev" \
+            --deb "$inspection/deb/usr/bin/scratchpad-dev" \
+            --appimage "$inspection/appimage/squashfs-root/usr/bin/scratchpad-dev" \
+            --output-dir "$RUNNER_TEMP/arm64-signing-validation"
+
+      - name: Verify Windows signing and ARM64 payloads
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bundle = Join-Path $env:GITHUB_WORKSPACE 'src-tauri/target/aarch64-pc-windows-msvc/release/bundle'
+          $setups = @(Get-ChildItem (Join-Path $bundle 'nsis') -File -Filter '*-setup.exe')
+          $msis = @(Get-ChildItem (Join-Path $bundle 'msi') -File -Filter '*.msi')
+          if ($setups.Count -ne 1 -or $msis.Count -ne 1) { throw 'Expected one setup and one MSI' }
+          $evidence = Join-Path $env:RUNNER_TEMP 'windows-signing-evidence.json'
+          $payloads = ./scripts/verify-windows-release.ps1 -Setup $setups[0].FullName -Msi $msis[0].FullName -Architecture arm64 -BinaryName scratchpad-dev.exe -SigningEvidencePath $evidence -PassThru
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/verify-arm64-build.mjs --platform windows --signing-evidence $evidence `
+            --package $setups[0].FullName --package $msis[0].FullName `
+            --built 'src-tauri/target/aarch64-pc-windows-msvc/release/scratchpad-dev.exe' `
+            --msi $payloads.msi --nsis $payloads.nsis `
+            --output-dir (Join-Path $env:RUNNER_TEMP 'arm64-signing-validation')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Remove Linux signing key
+        if: always() && matrix.os == 'linux'
+        env:
+          GNUPGHOME: ${{ runner.temp }}/arm64-signing-gnupg
+        run: |
+          gpgconf --kill gpg-agent || true
+          rm -rf "$GNUPGHOME"
+
+      - name: Save signed development packages and verification evidence
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: signed-arm64-validation-${{ matrix.os }}
+          path: ${{ runner.temp }}/arm64-signing-validation
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7

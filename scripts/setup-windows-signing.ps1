@@ -14,6 +14,7 @@ param([Parameter(Mandatory)][string]$Description)
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+. (Join-Path $PSScriptRoot 'windows-signing-trust.ps1')
 
 # Microsoft.ArtifactSigning.Client on nuget.org. Update both together.
 $dlibVersion = '1.0.146'
@@ -51,10 +52,7 @@ if ($actualSha256 -ne $dlibSha256) {
 $clientDir = Join-Path $root 'client'
 Expand-Archive -Path $package -DestinationPath $clientDir -Force
 $dlib = Join-Path $clientDir 'bin\x64\Azure.CodeSigning.Dlib.dll'
-$dlibSignature = Get-AuthenticodeSignature $dlib
-if ($dlibSignature.Status -ne 'Valid' -or $dlibSignature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') {
-  throw "Artifact Signing dlib is not validly signed by Microsoft: $($dlibSignature.Status) $($dlibSignature.SignerCertificate.Subject)"
-}
+Assert-MicrosoftAuthenticode $dlib | Out-Null
 
 # The dlib architecture must match SignTool's, so use the newest x64 SignTool.
 $kitsBin = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'

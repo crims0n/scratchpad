@@ -113,6 +113,24 @@ export async function recordVerification({ platform, files, releaseId, version, 
   return { schemaVersion: 1, platform, releaseId, version, commit, runId, assets };
 }
 
+// Probe evidence has no candidate release ID. Call only after the AppImage
+// and checksum signing checks succeed, with those same final local files.
+export async function recordLinuxSigningValidation({ architecture, fingerprint, files, commit, runId, runAttempt }) {
+  const suffixes = { x64: ["_amd64.AppImage", "_amd64.deb"], arm64: ["_aarch64.AppImage", "_arm64.deb"] }[architecture];
+  if (!suffixes || !Array.isArray(files) || files.length !== 4) throw new Error("Expected Linux packages and checksum pair for one architecture");
+  const names = files.map(file => basename(file));
+  if (new Set(names).size !== 4 || !names.includes("SHA256SUMS") || !names.includes("SHA256SUMS.asc")
+    || suffixes.some(suffix => names.filter(name => name.endsWith(suffix)).length !== 1)) {
+    throw new Error("Expected Linux packages and checksum pair for one architecture");
+  }
+  if (!/^[A-F0-9]{40}$/.test(fingerprint || "") || !/^[a-f0-9]{40}$/.test(commit || "")
+    || !/^[1-9]\d*$/.test(runId || "") || !/^[1-9]\d*$/.test(runAttempt || "")) {
+    throw new Error("Linux signing evidence requires fingerprint, source commit and workflow run/attempt");
+  }
+  const assets = await Promise.all(files.map(hashFile));
+  return { schemaVersion: 1, platform: "linux", method: "gpg", architecture, fingerprint, commit, runId, runAttempt, assets };
+}
+
 export function verifyEvidence({ evidence, verified, releaseId, version, commit, runId }) {
   assertIdentity({ releaseId, version, commit, runId });
   if (!Array.isArray(evidence) || evidence.length !== platforms.length
