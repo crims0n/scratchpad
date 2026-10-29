@@ -26,7 +26,7 @@ fi
 # GPG consults its home even for --show-keys on a standalone public-key file.
 # Initialize an explicitly selected temporary home before the first GPG call.
 export GNUPGHOME=${GNUPGHOME:-$HOME/.gnupg}
-mkdir -p "$GNUPGHOME"
+(umask 077; mkdir -p "$GNUPGHOME")
 chmod 700 "$GNUPGHOME"
 
 expected=$(gpg --batch --show-keys --with-colons "$public_key" | awk -F: '$1 == "fpr" { print $10; exit }')

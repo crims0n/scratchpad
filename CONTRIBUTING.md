@@ -21,7 +21,7 @@ Keep `main` deployable and do not commit or push to it directly. Every change sh
 
 ## Development setup
 
-You need Node.js 20 or newer (CI uses Node.js 24), Rust 1.98.0 as pinned in `rust-toolchain.toml`, and the platform dependencies from the [Tauri prerequisites guide](https://v2.tauri.app/start/prerequisites/). Install GnuPG (`gpg` and `gpgv`) for the release-verification tests; they use disposable public fixtures rather than production signing credentials.
+You need Node.js 20 or newer (CI uses Node.js 24), Rust 1.98.0 as pinned in `rust-toolchain.toml`, and the platform dependencies from the [Tauri prerequisites guide](https://v2.tauri.app/start/prerequisites/). Install GnuPG (`gpg` and `gpgv`) for the release-verification tests. The isolated key-import regression additionally needs `gpgconf` and `gpg-preset-passphrase`, and generates/removes its own disposable key, agents, and socket directories. That regression skips locally if its import tools are unavailable and fails CI if they are missing; the other release-verification tests still require GnuPG. No production signing credentials are used by tests.
 
 ```bash
 git clone https://github.com/crims0n/scratchpad.git

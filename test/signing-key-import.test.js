@@ -4,22 +4,49 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 test("key import initializes a missing isolated GPG home before inspecting the public key", { skip: process.platform === "win32", timeout: 30000 }, async t => {
-  // macOS agent sockets need a short path; every key/home here is disposable.
-  const root = await mkdtemp(join(process.platform === "darwin" ? "/tmp" : tmpdir(), "scratchpad-gpg-"));
+  // Probe all three dependencies before creating key material. CI must retain
+  // coverage; local contributors get a specific skip instead of ENOENT.
+  try {
+    const probe = (command, args) => execFileSync(command, args, { stdio: "pipe", encoding: "utf8", timeout: 5000 });
+    probe("gpg", ["--version"]);
+    probe("gpgconf", ["--version"]);
+    const preset = join(probe("gpgconf", ["--list-dirs", "libexecdir"]).trim(), "gpg-preset-passphrase");
+    probe(preset, ["--version"]);
+  } catch (cause) {
+    const message = "GnuPG import regression requires gpg, gpgconf and gpg-preset-passphrase";
+    if (process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true") throw new Error(message, { cause });
+    t.skip(message);
+    return;
+  }
+  // Use a short path on every supported POSIX platform, including Linux
+  // containers without /run/user and with an arbitrarily long TMPDIR.
+  const root = await mkdtemp("/tmp/scratchpad-gpg-");
   const sourceHome = join(root, "source");
   const importHome = join(root, "fresh");
-  await mkdir(sourceHome, { mode: 0o700 });
   t.after(async () => {
-    for (const home of [sourceHome, importHome]) {
-      try { execFileSync("gpgconf", ["--homedir", home, "--kill", "gpg-agent"], { stdio: "pipe" }); } catch { /* home/agent may not exist */ }
+    const failures = [];
+    try {
+      for (const home of [sourceHome, importHome]) {
+        try { await stat(home); } catch (error) {
+          if (error.code === "ENOENT") continue;
+          failures.push(error);
+          continue;
+        }
+        for (const args of [["--kill", "gpg-agent"], ["--remove-socketdir"]]) {
+          try { execFileSync("gpgconf", ["--homedir", home, ...args], { stdio: "pipe" }); }
+          catch (error) { failures.push(error); }
+        }
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
     }
-    await rm(root, { recursive: true, force: true });
+    if (failures.length) throw new AggregateError(failures, "Disposable GnuPG agent/socket cleanup failed");
   });
+  await mkdir(sourceHome, { mode: 0o700 });
   const passphrase = "disposable-import-test";
   const gpg = args => execFileSync("gpg", ["--batch", "--no-options", "--homedir", sourceHome,
     "--pinentry-mode", "loopback", "--passphrase", passphrase, ...args], { stdio: "pipe", encoding: "utf8" });
