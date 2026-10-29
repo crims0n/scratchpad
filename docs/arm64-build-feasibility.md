@@ -26,6 +26,8 @@ Each passing job saves an `unsigned-arm64-feasibility-linux` or `unsigned-arm64-
 
 ## Remaining release work
 
+The next step is [protected ARM64 signing validation](arm64-signing-validation.md), which keeps PR prerequisite checks separate from main-only signing authority.
+
 A successful run proves that the selected toolchain can build both formats and that the inspected application payloads are ARM64. It does not establish signing, GUI startup, functional MCP, installation/upgrade acceptance, or x64-to-ARM64 data continuity. MSI administrative extraction is not a normal MSI installation test.
 
 Follow-up PRs must extend production target/asset/evidence contracts; adapt Windows signing and payload verification; gather both Linux architectures into one authenticated checksum pair; update manifest/download selection and regression tests; and record native installed-package acceptance. Keep the current stable release workflow and published catalog unchanged until those changes are ready together.

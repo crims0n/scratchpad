@@ -11,12 +11,19 @@ set -euo pipefail
 public_key=${1:?usage: sign-linux-release.sh <public-key.asc> --assets-dir DIR}
 shift
 assets_dir=""
+architecture=x64
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --assets-dir) assets_dir=${2:?--assets-dir needs a directory}; shift 2 ;;
+    --architecture) architecture=${2:?--architecture needs x64 or arm64}; shift 2 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
+case "$architecture" in
+  x64) appimage_arch=amd64; deb_arch=amd64 ;;
+  arm64) appimage_arch=aarch64; deb_arch=arm64 ;;
+  *) echo 'Architecture must be x64 or arm64' >&2; exit 2 ;;
+esac
 
 : "${assets_dir:?--assets-dir must select local release assets}"
 assets_dir=$(cd "$assets_dir" && pwd)
@@ -34,12 +41,12 @@ fail() {
 }
 
 # 1. Copy only the staged platform packages into an isolated work directory.
-cp "$assets_dir"/*_amd64.AppImage "$assets_dir"/*_amd64.deb "$work/assets/"
+cp "$assets_dir"/*_"$appimage_arch".AppImage "$assets_dir"/*_"$deb_arch".deb "$work/assets/"
 
 cd "$work/assets"
 shopt -s nullglob
-appimages=(*_amd64.AppImage)
-debs=(*_amd64.deb)
+appimages=(*_"$appimage_arch".AppImage)
+debs=(*_"$deb_arch".deb)
 shopt -u nullglob
 [[ ${#appimages[@]} -eq 1 ]] || fail "Expected one AppImage in the release, found ${#appimages[@]}."
 [[ ${#debs[@]} -eq 1 ]] || fail "Expected one .deb in the release, found ${#debs[@]}."
@@ -100,5 +107,20 @@ for file in "$appimage" "$deb" SHA256SUMS SHA256SUMS.asc; do
 done
 cd "$assets_dir"
 if [[ -n "${VERIFICATION_EVIDENCE_PATH:-}" ]]; then
+  [[ "$architecture" == x64 ]] || fail 'ARM64 candidate records require the expanded stable-release contract; use signing validation only for now.'
   node "$scripts/release-verification.mjs" linux "$appimage" "$deb" SHA256SUMS SHA256SUMS.asc
+fi
+if [[ -n "${SIGNING_VALIDATION_EVIDENCE_PATH:-}" ]]; then
+  node --input-type=module - "$scripts" "$fingerprint" "$appimage" "$deb" <<'JS'
+import { execFileSync } from 'node:child_process';
+import { writeFile } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
+const [scripts, fingerprint, ...packages] = process.argv.slice(2);
+const { hashFile } = await import(pathToFileURL(`${scripts}/release-verification.mjs`).href);
+const assets = await Promise.all([...packages, 'SHA256SUMS', 'SHA256SUMS.asc'].map(hashFile));
+const report = { schemaVersion: 1, platform: 'linux', method: 'gpg', fingerprint,
+  commit: execFileSync('git', ['-C', `${scripts}/..`, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+  runId: process.env.GITHUB_RUN_ID, runAttempt: process.env.GITHUB_RUN_ATTEMPT, assets };
+await writeFile(process.env.SIGNING_VALIDATION_EVIDENCE_PATH, `${JSON.stringify(report, null, 2)}\n`, { flag: 'wx' });
+JS
 fi

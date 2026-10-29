@@ -26,5 +26,6 @@ Start with the [release checklist](release-checklist.md). It links the required 
 - [Windows signing](windows-release-signing.md).
 - [Linux signing, key rotation, and revocation](release-signing.md).
 - [ARM64 build feasibility](arm64-build-feasibility.md): isolated unsigned package checks for future Linux and Windows ARM64 release support.
+- [ARM64 signing validation](arm64-signing-validation.md): credential-free Windows prerequisite checks and protected main-only signed development packages.
 
 Use one stable release stream. Development builds use a separate identity; the released app retains its historical `.beta` identifier for data and installation continuity, not as a channel selector.
