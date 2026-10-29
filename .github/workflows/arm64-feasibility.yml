@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/arm64-feasibility.yml
       - test/arm64-build.test.js
+      - test/check-versions.test.js
       - src/**
       - src-tauri/**
       - scripts/**
