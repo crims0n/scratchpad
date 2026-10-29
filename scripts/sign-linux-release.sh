@@ -111,16 +111,5 @@ if [[ -n "${VERIFICATION_EVIDENCE_PATH:-}" ]]; then
   node "$scripts/release-verification.mjs" linux "$appimage" "$deb" SHA256SUMS SHA256SUMS.asc
 fi
 if [[ -n "${SIGNING_VALIDATION_EVIDENCE_PATH:-}" ]]; then
-  node --input-type=module - "$scripts" "$fingerprint" "$appimage" "$deb" <<'JS'
-import { execFileSync } from 'node:child_process';
-import { writeFile } from 'node:fs/promises';
-import { pathToFileURL } from 'node:url';
-const [scripts, fingerprint, ...packages] = process.argv.slice(2);
-const { hashFile } = await import(pathToFileURL(`${scripts}/release-verification.mjs`).href);
-const assets = await Promise.all([...packages, 'SHA256SUMS', 'SHA256SUMS.asc'].map(hashFile));
-const report = { schemaVersion: 1, platform: 'linux', method: 'gpg', fingerprint,
-  commit: execFileSync('git', ['-C', `${scripts}/..`, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
-  runId: process.env.GITHUB_RUN_ID, runAttempt: process.env.GITHUB_RUN_ATTEMPT, assets };
-await writeFile(process.env.SIGNING_VALIDATION_EVIDENCE_PATH, `${JSON.stringify(report, null, 2)}\n`, { flag: 'wx' });
-JS
+  node "$scripts/record-linux-signing-validation.mjs" "$architecture" "$fingerprint" "$appimage" "$deb" SHA256SUMS SHA256SUMS.asc
 fi

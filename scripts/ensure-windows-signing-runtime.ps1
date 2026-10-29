@@ -5,6 +5,7 @@
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 . (Join-Path $PSScriptRoot 'windows-pe.ps1')
+. (Join-Path $PSScriptRoot 'windows-signing-trust.ps1')
 
 $version = [version]'8.0.33'
 $url = 'https://builds.dotnet.microsoft.com/dotnet/Runtime/8.0.33/dotnet-runtime-8.0.33-win-x64.exe'
@@ -19,7 +20,7 @@ function Find-X64Runtime {
     $runtimes = @(& $candidate --list-runtimes)
     if ($LASTEXITCODE -ne 0) { throw "Could not inspect x64 .NET runtimes: $candidate" }
     foreach ($line in $runtimes) {
-      if ($line -match '^Microsoft.NETCore.App (8\.0\.\d+) ') {
+      if ($line -match '^Microsoft\.NETCore\.App (8\.0\.\d+) ') {
         if ([version]$Matches[1] -ge $version) { return $candidate }
       }
     }
@@ -33,10 +34,7 @@ if (-not $dotnet) {
   $installer = Join-Path $env:RUNNER_TEMP 'dotnet-runtime-x64.exe'
   Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing
   if ((Get-FileHash -Algorithm SHA512 $installer).Hash -ne $sha512) { throw 'Pinned .NET runtime installer hash mismatch' }
-  $signature = Get-AuthenticodeSignature -LiteralPath $installer
-  if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') {
-    throw 'The .NET runtime installer is not validly signed by Microsoft'
-  }
+  Assert-MicrosoftAuthenticode $installer | Out-Null
   $process = Start-Process $installer -Wait -PassThru -ArgumentList @('/install', '/quiet', '/norestart')
   if ($process.ExitCode -notin 0, 3010) { throw ".NET runtime installation failed: $($process.ExitCode)" }
   $dotnet = Find-X64Runtime

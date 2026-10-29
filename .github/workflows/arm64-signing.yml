@@ -5,17 +5,17 @@ on:
   pull_request:
     paths:
       - .github/workflows/arm64-signing.yml
-      - scripts/windows-pe.ps1
-      - scripts/ensure-windows-signing-runtime.ps1
-      - scripts/setup-windows-signing.ps1
-      - scripts/test-windows-signing-prerequisites.ps1
-      - scripts/verify-windows-release.ps1
-      - scripts/sign-linux-release.sh
-      - scripts/verify-arm64-build.mjs
+      - scripts/**
+      - src-tauri/tauri.windows-signing.conf.json
+      - site/release-signing-key.asc
       - test/arm64-build.test.js
+      - test/linux-signing-validation.test.js
 
 permissions:
   contents: read
+
+env:
+  WINDOWS_SIGNING_PUBLISHER: Patrick McDowell
 
 concurrency:
   group: arm64-signing-${{ github.event.pull_request.number || github.ref }}
@@ -47,10 +47,10 @@ jobs:
         run: ./scripts/setup-windows-signing.ps1 -Description 'Prerequisite validation only'
       - name: Test PE parsing and execute the x64 prerequisites
         run: ./scripts/test-windows-signing-prerequisites.ps1
+      - name: Test signing trust and aggregated payload failures
+        run: ./scripts/test-windows-signing-checks.ps1
       - name: Verify published x64 installer regression
         if: matrix.runner == 'windows-latest'
-        env:
-          WINDOWS_SIGNING_PUBLISHER: Patrick McDowell
         run: |
           $ErrorActionPreference = 'Stop'
           $root = Join-Path $env:RUNNER_TEMP 'published-x64-regression'
@@ -207,8 +207,6 @@ jobs:
       - name: Verify Windows signing and ARM64 payloads
         if: matrix.os == 'windows'
         shell: pwsh
-        env:
-          WINDOWS_SIGNING_PUBLISHER: Patrick McDowell
         run: |
           $ErrorActionPreference = 'Stop'
           $bundle = Join-Path $env:GITHUB_WORKSPACE 'src-tauri/target/aarch64-pc-windows-msvc/release/bundle'

@@ -37,7 +37,7 @@ $failures = [System.Collections.Generic.List[string]]::new()
 $records = [System.Collections.Generic.List[object]]::new()
 $payloadPaths = [ordered]@{}
 
-function Test-ReleaseSignature([string]$File, [string]$Package, [string]$Role) {
+function Test-ReleaseSignature([string]$File, [string]$Package, [string]$Role, [AllowNull()][string]$PeArchitecture) {
   $problems = @()
 
   # SignTool checks the chain against the Windows Authenticode policy (/pa)
@@ -68,7 +68,7 @@ function Test-ReleaseSignature([string]$File, [string]$Package, [string]$Role) {
       size = (Get-Item -LiteralPath $File).Length; sha256 = (Get-FileHash -Algorithm SHA256 $File).Hash.ToLowerInvariant()
       publisher = $publisher; certificateThumbprint = $signature.SignerCertificate.Thumbprint
       timestampCertificateThumbprint = $signature.TimeStamperCertificate.Thumbprint
-      architecture = $(if ([IO.Path]::GetExtension($File) -in '.exe', '.dll') { (Get-PeImage $File).Architecture } else { $null })
+      architecture = $PeArchitecture
     })
   }
 }
@@ -86,6 +86,7 @@ function Test-InstalledFiles([string]$Directory, [string]$Package, [int]$Minimum
   if ($applications.Count -ne 1) { $failures.Add("${Package}: expected exactly one $BinaryName application") }
   else { $payloadPaths[$(if ($Package -eq $Msi) { 'msi' } else { 'nsis' })] = $applications[0].FullName }
   foreach ($file in $files) {
+    $image = $null
     try {
       $image = Get-PeImage $file.FullName
       # Only the NSIS uninstaller may use an emulated x86 wrapper. All other
@@ -98,13 +99,19 @@ function Test-InstalledFiles([string]$Directory, [string]$Package, [int]$Minimum
       if ($file.Name -eq $BinaryName -and $image.IsDll) { $failures.Add("${Package}: application is marked as a DLL") }
       Write-Host "PE $($image.Architecture) $($file.FullName)"
     } catch { $failures.Add($_.Exception.Message) }
-    Test-ReleaseSignature $file.FullName $Package 'payload'
+    try { Test-ReleaseSignature $file.FullName $Package 'payload' $image.Architecture }
+    catch { $failures.Add("$($file.FullName): $($_.Exception.Message)") }
   }
 }
 
 foreach ($file in @($Setup, $Msi)) {
   if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Artifact not found: $file" }
-  Test-ReleaseSignature $file $file 'installer'
+  $image = $null
+  if ([IO.Path]::GetExtension($file) -eq '.exe') {
+    try { $image = Get-PeImage $file } catch { $failures.Add($_.Exception.Message) }
+  }
+  try { Test-ReleaseSignature $file $file 'installer' $image.Architecture }
+  catch { $failures.Add("${file}: $($_.Exception.Message)") }
 }
 if ($failures.Count) {
   foreach ($failure in $failures) { Write-Host "::error::$failure" }

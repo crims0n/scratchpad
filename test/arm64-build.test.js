@@ -206,11 +206,11 @@ async function signingFixture(t, platform) {
   const assets = await Promise.all([...input.packages, ...signingFiles].map(hashFile));
   const payloads = platform === "windows" ? await Promise.all(["msi", "nsis"].map(async role => ({
     ...await hashFile(input.binaries[role]), package: basename(input.packages.find(file => file.endsWith(role === "msi" ? ".msi" : "-setup.exe"))),
-    architecture: "arm64", publisher: "Patrick McDowell", certificateThumbprint: "A".repeat(40), timestampCertificateThumbprint: "B".repeat(40)
+    architecture: "arm64", publisher: "Fixture Publisher", certificateThumbprint: "A".repeat(40), timestampCertificateThumbprint: "B".repeat(40)
   }))) : [];
-  return { ...input, signingFiles, signing: { schemaVersion: 1, platform, commit: input.commit,
+  return { ...input, expectedPublisher: "Fixture Publisher", signingFiles, signing: { schemaVersion: 1, platform, commit: input.commit,
     runId: input.runId, runAttempt: input.runAttempt, method: platform === "linux" ? "gpg" : "authenticode",
-    ...(platform === "linux" ? { fingerprint: "A".repeat(40) } : { publisher: "Patrick McDowell", payloads }), assets } };
+    ...(platform === "linux" ? { fingerprint: "A".repeat(40) } : { publisher: "Fixture Publisher", payloads }), assets } };
 }
 
 test("Windows payload evidence rejects missing timestamps and changed extracted application bytes", async t => {
@@ -221,6 +221,22 @@ test("Windows payload evidence rejects missing timestamps and changed extracted 
   changed[127] = 1;
   await writeFile(input.binaries.nsis, changed);
   await assert.rejects(verifyArm64Build(input), /payload evidence/);
+});
+
+test("Windows signing requires the configured expected publisher", async t => {
+  const input = await signingFixture(t, "windows");
+  await assert.rejects(verifyArm64Build({ ...input, expectedPublisher: undefined }), /platform signing verification/);
+  await assert.rejects(verifyArm64Build({ ...input, expectedPublisher: "Another Publisher" }), /platform signing verification/);
+});
+
+test("missing or misnamed Linux checksum files report the signing requirement before file hashing", async t => {
+  const input = await signingFixture(t, "linux");
+  const expected = /Signing validation must include the platform checksum\/signature files exactly/;
+  await assert.rejects(verifyArm64Build({ ...input, signingFiles: input.signingFiles.slice(0, 1) }), expected);
+  const misnamed = join(dirname(input.outputDir), "not-a-checksum");
+  await assert.rejects(verifyArm64Build({ ...input, signingFiles: [misnamed, input.signingFiles[1]] }), expected);
+  await rm(input.signingFiles[1]);
+  await assert.rejects(verifyArm64Build(input), error => expected.test(error.message) && error.message.includes("SHA256SUMS.asc"));
 });
 
 for (const platform of ["linux", "windows"]) {

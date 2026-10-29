@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+# Keep the PE layout checks aligned with assertArm64Binary in
+# scripts/verify-arm64-build.mjs (the application-only ARM64 counterpart).
 function Get-PeImage([string]$Path) {
   $stream = [IO.File]::OpenRead($Path)
   $reader = [IO.BinaryReader]::new($stream)

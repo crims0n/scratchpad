@@ -2,7 +2,7 @@
 
 import { execFileSync } from "node:child_process";
 import { copyFile, mkdir, open, readFile, writeFile, appendFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 import { pathToFileURL } from "node:url";
 import { hashFile, validFileMetadata } from "./release-verification.mjs";
@@ -45,6 +45,8 @@ export function assertArm64Binary(bytes, platform) {
       if (!interpreter) throw new Error("Expected a PIE application with an interpreter header");
     }
   } else if (platform === "windows") {
+    // Keep PE layout checks aligned with scripts/windows-pe.ps1, whose
+    // PowerShell verifier also supports x64/x86 installer wrappers and DLLs.
     if (bytes.length < 64 || bytes.subarray(0, 2).toString() !== "MZ") throw new Error("Expected an ARM64 PE32+ application");
     const offset = bytes.readUInt32LE(0x3c);
     if (offset < 64 || offset + 26 > bytes.length || bytes.readUInt32LE(offset) !== 0x4550
@@ -94,7 +96,7 @@ export function parseRustToolchain(details) {
 }
 
 export async function verifyArm64Build({ platform, packages, binaries, outputDir, commit, prHeadCommit,
-  eventName, rustc, runId, runAttempt, version, signing = null, signingFiles = [], sourceRef }) {
+  eventName, rustc, runId, runAttempt, version, signing = null, signingFiles = [], sourceRef, expectedPublisher }) {
   const roles = platform === "linux" ? ["built", "deb", "appimage"] : ["built", "msi", "nsis"];
   if (!targets[platform] || JSON.stringify(Object.keys(binaries).sort()) !== JSON.stringify(roles.sort())) {
     throw new Error("Expected the built application and both extracted package payloads");
@@ -126,14 +128,26 @@ export async function verifyArm64Build({ platform, packages, binaries, outputDir
   // Packaging can strip symbols or change ELF runtime paths. Record each
   // inspected payload's actual hash rather than assuming identical bytes.
   const packageRecords = await Promise.all(packages.map(hashFile));
-  const extraRecords = await Promise.all(signingFiles.map(hashFile));
+  const checksumError = "Signing validation must include the platform checksum/signature files exactly";
+  if (signing) {
+    const expectedExtras = platform === "linux" ? ["SHA256SUMS", "SHA256SUMS.asc"] : [];
+    if (JSON.stringify(signingFiles.map(file => basename(file)).sort()) !== JSON.stringify(expectedExtras)) {
+      throw new Error(checksumError);
+    }
+  } else if (signingFiles.length) {
+    throw new Error("Checksum files require signing verification evidence");
+  }
+  let extraRecords;
+  try { extraRecords = await Promise.all(signingFiles.map(hashFile)); }
+  catch (error) { throw new Error(`${checksumError}: ${error.message}`, { cause: error }); }
+  const copiedRecords = [...packageRecords, ...extraRecords];
   if (signing) {
     if (eventName !== "workflow_dispatch" || sourceRef !== "refs/heads/main"
       || signing.schemaVersion !== 1 || signing.platform !== platform || signing.commit !== commit
       || signing.runId !== runId || signing.runAttempt !== runAttempt) {
       throw new Error("Signing validation requires matching protected main dispatch provenance");
     }
-    if ((platform === "windows" && (signing.method !== "authenticode" || signing.publisher !== "Patrick McDowell"))
+    if ((platform === "windows" && (signing.method !== "authenticode" || !expectedPublisher || signing.publisher !== expectedPublisher))
       || (platform === "linux" && (signing.method !== "gpg" || !/^[A-F0-9]{40}$/.test(signing.fingerprint || "")))) {
       throw new Error("Expected platform signing verification evidence");
     }
@@ -146,26 +160,18 @@ export async function verifyArm64Build({ platform, packages, binaries, outputDir
           && /^[a-f0-9]{40}$/i.test(payload.timestampCertificateThumbprint || ""));
       })) throw new Error("Windows application bytes do not match signature-checked payload evidence");
     }
-    const expectedExtras = platform === "linux" ? ["SHA256SUMS", "SHA256SUMS.asc"] : [];
-    if (JSON.stringify(extraRecords.map(file => file.name).sort()) !== JSON.stringify(expectedExtras)) {
-      throw new Error("Signing validation must include the platform checksum/signature files exactly");
-    }
-    const files = [...packageRecords, ...extraRecords];
-    if (!Array.isArray(signing.assets) || signing.assets.length !== files.length
-      || new Set(signing.assets.map(file => file.name)).size !== files.length
-      || files.some(file => !signing.assets.some(asset => validFileMetadata(asset)
+    if (!Array.isArray(signing.assets) || signing.assets.length !== copiedRecords.length
+      || new Set(signing.assets.map(file => file.name)).size !== copiedRecords.length
+      || copiedRecords.some(file => !signing.assets.some(asset => validFileMetadata(asset)
         && asset.name === file.name && asset.size === file.size && asset.sha256 === file.sha256))) {
       throw new Error("Signing evidence does not match the inspected package bytes");
     }
-  } else if (signingFiles.length) {
-    throw new Error("Checksum files require signing verification evidence");
   }
   const report = { schemaVersion: 1, purpose: signing ? "signing-validation" : "unsigned-build-feasibility", platform, architecture: "arm64",
     target: targets[platform], commit, prHeadCommit, eventName, rustc, runId, runAttempt, version,
     applicationIdentifier: "io.github.crims0n.scratchpad.dev",
     packages: packageRecords, binaries: binaryRecords, ...(signing ? { signing } : {}) };
   await mkdir(outputDir);
-  const copiedRecords = [...packageRecords, ...extraRecords];
   for (const [index, file] of [...packages, ...signingFiles].entries()) {
     const destination = join(outputDir, copiedRecords[index].name);
     await copyFile(file, destination);
@@ -190,6 +196,7 @@ async function main() {
     ? ["SHA256SUMS", "SHA256SUMS.asc"].map(name => join(dirname(values["signing-evidence"]), name)) : [];
   const report = await verifyArm64Build({ platform: values.platform, packages: values.package, signing, signingFiles,
     sourceRef: process.env.GITHUB_REF,
+    expectedPublisher: process.env.WINDOWS_SIGNING_PUBLISHER,
     binaries: Object.fromEntries(["built", "deb", "appimage", "msi", "nsis"].filter(role => values[role]).map(role => [role, values[role]])),
     outputDir: values["output-dir"], commit: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
     prHeadCommit: process.env.PR_HEAD_COMMIT || null, eventName: process.env.GITHUB_EVENT_NAME,
