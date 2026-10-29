@@ -33,4 +33,4 @@ foreach ($tool in @($env:SIGNTOOL_PATH, $env:ARTIFACT_SIGNING_DLIB, $env:WINDOWS
 if ($LASTEXITCODE -ne 0) { throw 'x64 SignTool could not verify its Microsoft signature on this ARM runner' }
 & $env:WINDOWS_SIGNING_DOTNET_X64 --list-runtimes
 if ($LASTEXITCODE -ne 0) { throw 'x64 .NET runtime failed on this ARM runner' }
-Write-Host 'PE regression cases and x64 signing prerequisites passed on native Windows ARM64.'
+Write-Host 'PE regression cases and x64 signing prerequisites passed on this Windows runner.'

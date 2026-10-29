@@ -137,6 +137,15 @@ export async function verifyArm64Build({ platform, packages, binaries, outputDir
       || (platform === "linux" && (signing.method !== "gpg" || !/^[A-F0-9]{40}$/.test(signing.fingerprint || "")))) {
       throw new Error("Expected platform signing verification evidence");
     }
+    if (platform === "windows") {
+      if (!Array.isArray(signing.payloads) || binaryRecords.filter(file => file.role !== "built").some(binary => {
+        const packageName = packageRecords.find(file => file.name.endsWith(binary.role === "msi" ? ".msi" : "-setup.exe")).name;
+        return !signing.payloads.some(payload => payload.package === packageName && payload.name === binary.name
+          && payload.sha256 === binary.sha256 && payload.size === binary.size && payload.architecture === "arm64"
+          && payload.publisher === signing.publisher && /^[a-f0-9]{40}$/i.test(payload.certificateThumbprint || "")
+          && /^[a-f0-9]{40}$/i.test(payload.timestampCertificateThumbprint || ""));
+      })) throw new Error("Windows application bytes do not match signature-checked payload evidence");
+    }
     const expectedExtras = platform === "linux" ? ["SHA256SUMS", "SHA256SUMS.asc"] : [];
     if (JSON.stringify(extraRecords.map(file => file.name).sort()) !== JSON.stringify(expectedExtras)) {
       throw new Error("Signing validation must include the platform checksum/signature files exactly");

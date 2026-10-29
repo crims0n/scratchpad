@@ -204,10 +204,24 @@ async function signingFixture(t, platform) {
     }
   }
   const assets = await Promise.all([...input.packages, ...signingFiles].map(hashFile));
+  const payloads = platform === "windows" ? await Promise.all(["msi", "nsis"].map(async role => ({
+    ...await hashFile(input.binaries[role]), package: basename(input.packages.find(file => file.endsWith(role === "msi" ? ".msi" : "-setup.exe"))),
+    architecture: "arm64", publisher: "Patrick McDowell", certificateThumbprint: "A".repeat(40), timestampCertificateThumbprint: "B".repeat(40)
+  }))) : [];
   return { ...input, signingFiles, signing: { schemaVersion: 1, platform, commit: input.commit,
     runId: input.runId, runAttempt: input.runAttempt, method: platform === "linux" ? "gpg" : "authenticode",
-    ...(platform === "linux" ? { fingerprint: "A".repeat(40) } : { publisher: "Patrick McDowell" }), assets } };
+    ...(platform === "linux" ? { fingerprint: "A".repeat(40) } : { publisher: "Patrick McDowell", payloads }), assets } };
 }
+
+test("Windows payload evidence rejects missing timestamps and changed extracted application bytes", async t => {
+  const input = await signingFixture(t, "windows");
+  const payloads = input.signing.payloads.map(file => ({ ...file, timestampCertificateThumbprint: "" }));
+  await assert.rejects(verifyArm64Build({ ...input, signing: { ...input.signing, payloads } }), /payload evidence/);
+  const changed = pe();
+  changed[127] = 1;
+  await writeFile(input.binaries.nsis, changed);
+  await assert.rejects(verifyArm64Build(input), /payload evidence/);
+});
 
 for (const platform of ["linux", "windows"]) {
   test(`${platform} signing evidence binds checked package bytes to a main dispatch`, async t => {
