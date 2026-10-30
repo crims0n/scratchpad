@@ -59,13 +59,26 @@ test("key import initializes a missing isolated GPG home before inspecting the p
   const output = join(root, "output.txt");
   await assert.rejects(stat(importHome), /ENOENT/);
   const script = fileURLToPath(new URL("../scripts/import-release-signing-key.sh", import.meta.url));
-  const result = execFileSync("bash", [script, publicKey], { encoding: "utf8", stdio: "pipe", env: {
+  const options = { encoding: "utf8", stdio: "pipe", env: {
     ...process.env, GNUPGHOME: importHome, RELEASE_SIGNING_GPG_PRIVATE_KEY: secretKey,
     RELEASE_SIGNING_GPG_PASSPHRASE: passphrase, GITHUB_OUTPUT: output
-  } });
+  } };
+  const result = execFileSync("bash", [script, publicKey], options);
   assert.match(result, /Imported release-signing key/);
   assert.equal((await stat(importHome)).mode & 0o777, 0o700);
   assert.equal((await readFile(output, "utf8")).trim(), `fingerprint=${fingerprint}`);
+  // Preserve a contributor's existing configuration, even without a trailing
+  // newline, while keeping repeated CI imports idempotent.
+  await writeFile(join(importHome, "gpg.conf"), "# existing user configuration\nno-emit-version");
+  await writeFile(join(importHome, "gpg-agent.conf"), "# existing agent configuration\ndefault-cache-ttl 900");
+  execFileSync("bash", [script, publicKey], options);
+  const config = await readFile(join(importHome, "gpg.conf"), "utf8");
+  const agent = await readFile(join(importHome, "gpg-agent.conf"), "utf8");
+  execFileSync("bash", [script, publicKey], options);
+  assert.equal(await readFile(join(importHome, "gpg.conf"), "utf8"), config);
+  assert.equal(await readFile(join(importHome, "gpg-agent.conf"), "utf8"), agent);
+  assert.match(config, /^# existing user configuration\nno-emit-version\n/);
+  assert.match(agent, /^# existing agent configuration\ndefault-cache-ttl 900\n/);
   // Use the imported key without supplying a passphrase, just as the bundler does.
   const signature = execFileSync("gpg", ["--batch", "--homedir", importHome, "--local-user", fingerprint,
     "--armor", "--detach-sign"], { input: "import regression", stdio: ["pipe", "pipe", "pipe"], encoding: "utf8" });

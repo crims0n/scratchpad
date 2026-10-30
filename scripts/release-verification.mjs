@@ -2,23 +2,34 @@
 
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { lstat, mkdir, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { stableRelease } from "./check-stable-release.mjs";
 
 export const platforms = ["macos", "windows", "linux"];
+export const verificationTargets = [
+  { platform: "macos", architecture: "universal" },
+  { platform: "windows", architecture: "x64" },
+  { platform: "windows", architecture: "arm64" },
+  { platform: "linux", architecture: "x64" },
+  { platform: "linux", architecture: "arm64" },
+  { platform: "linux", architecture: "checksums" }
+];
 
-export function platformAssetNames(version, platform) {
+export function platformAssetNames(version, platform, architecture) {
   stableRelease(version);
   const suffixes = {
-    macos: ["universal.dmg", "universal.app.tar.gz"],
-    windows: ["x64-setup.exe", "x64_en-US.msi"],
-    linux: ["amd64.AppImage", "amd64.deb"]
+    macos: { universal: ["universal.dmg", "universal.app.tar.gz"] },
+    windows: { x64: ["x64-setup.exe", "x64_en-US.msi"], arm64: ["arm64-setup.exe", "arm64_en-US.msi"] },
+    linux: { x64: ["amd64.AppImage", "amd64.deb"], arm64: ["aarch64.AppImage", "arm64.deb"], checksums: [] }
   };
   if (!platforms.includes(platform)) throw new Error("Unknown release platform");
-  const names = suffixes[platform].map(suffix => `Scratchpad_${version}_${suffix}`);
-  return platform === "linux" ? names.concat("SHA256SUMS", "SHA256SUMS.asc") : names;
+  if (architecture !== undefined && !Object.hasOwn(suffixes[platform], architecture)) throw new Error("Unknown release architecture");
+  const selected = architecture === undefined ? Object.values(suffixes[platform]).flat() : suffixes[platform][architecture];
+  const names = selected.map(suffix => `Scratchpad_${version}_${suffix}`);
+  return platform === "linux" && (architecture === undefined || architecture === "checksums")
+    ? names.concat("SHA256SUMS", "SHA256SUMS.asc") : names;
 }
 
 export function expectedAssets(version) {
@@ -41,7 +52,7 @@ export function draftAssets({ release, releaseId, version, commit, complete = tr
   if (!Array.isArray(assets) || assets.some(asset => !expected.includes(asset?.name))
     || new Set(assets.map(asset => asset.name)).size !== assets.length
     || (complete && JSON.stringify(assets.map(asset => asset.name).sort()) !== JSON.stringify(expected))) {
-    throw new Error("Draft must contain exactly the six stable installers and two Linux checksum/signature files");
+    throw new Error("Draft must contain exactly the ten stable installers and two Linux checksum/signature files");
   }
   const ids = new Set();
   for (const asset of assets) {
@@ -96,21 +107,24 @@ function assertIdentity({ releaseId, version, commit, runId }) {
   }
 }
 
-function assertNames(assets, version, platform) {
-  const expected = platformAssetNames(version, platform).sort();
+function assertNames(assets, version, platform, architecture) {
+  if (!verificationTargets.some(target => target.platform === platform && target.architecture === architecture)) {
+    throw new Error("Verification evidence requires a known platform and architecture");
+  }
+  const expected = platformAssetNames(version, platform, architecture).sort();
   if (!Array.isArray(assets) || JSON.stringify(assets.map(asset => asset?.name).sort()) !== JSON.stringify(expected)) {
-    throw new Error(`Verification evidence must cover exactly the ${platform} release files`);
+    throw new Error(`Verification evidence must cover exactly the ${platform}/${architecture} release files`);
   }
 }
 
 // Call only after the platform's signature checks succeed, with those same
 // local files (after stapling on macOS). Never derive this record from GitHub
 // upload metadata: it is the independent link to signature-checked bytes.
-export async function recordVerification({ platform, files, releaseId, version, commit, runId }) {
+export async function recordVerification({ platform, architecture, files, releaseId, version, commit, runId }) {
   assertIdentity({ releaseId, version, commit, runId });
-  assertNames(files.map(file => ({ name: basename(file) })), version, platform);
+  assertNames(files.map(file => ({ name: basename(file) })), version, platform, architecture);
   const assets = await Promise.all(files.map(hashFile));
-  return { schemaVersion: 1, platform, releaseId, version, commit, runId, assets };
+  return { schemaVersion: 2, platform, architecture, releaseId, version, commit, runId, assets };
 }
 
 // Probe evidence has no candidate release ID. Call only after the AppImage
@@ -131,18 +145,27 @@ export async function recordLinuxSigningValidation({ architecture, fingerprint, 
   return { schemaVersion: 1, platform: "linux", method: "gpg", architecture, fingerprint, commit, runId, runAttempt, assets };
 }
 
-export function verifyEvidence({ evidence, verified, releaseId, version, commit, runId }) {
+export async function readVerificationEvidence(directory, targets = verificationTargets) {
+  const expected = targets.map(({ platform, architecture }) => `${platform}-${architecture}.json`).sort();
+  if (JSON.stringify((await readdir(directory)).sort()) !== JSON.stringify(expected)) {
+    throw new Error("Expected exactly the platform/architecture verification records");
+  }
+  return Promise.all(expected.map(async name => JSON.parse(await readFile(join(directory, name), "utf8"))));
+}
+
+export function verifyEvidence({ evidence, verified, releaseId, version, commit, runId, targets = verificationTargets }) {
   assertIdentity({ releaseId, version, commit, runId });
-  if (!Array.isArray(evidence) || evidence.length !== platforms.length
-    || new Set(evidence.map(record => record?.platform)).size !== platforms.length) {
-    throw new Error("Exactly one verification record per platform is required");
+  const identity = record => `${record?.platform}/${record?.architecture}`;
+  if (!Array.isArray(evidence) || evidence.length !== targets.length
+    || JSON.stringify(evidence.map(identity).sort()) !== JSON.stringify(targets.map(identity).sort())) {
+    throw new Error("Exactly one verification record per platform/architecture is required");
   }
   for (const record of evidence) {
-    if (record.schemaVersion !== 1 || record.releaseId !== releaseId || record.version !== version
+    if (record.schemaVersion !== 2 || record.releaseId !== releaseId || record.version !== version
       || record.commit !== commit || record.runId !== runId) {
       throw new Error("Verification evidence does not match this candidate and workflow run");
     }
-    assertNames(record.assets, version, record.platform);
+    assertNames(record.assets, version, record.platform, record.architecture);
     for (const asset of record.assets) {
       const downloaded = verified.find(file => file.name === asset.name);
       if (!validFileMetadata(asset)
@@ -157,7 +180,7 @@ async function main() {
   const [platform, ...files] = process.argv.slice(2);
   const output = process.env.VERIFICATION_EVIDENCE_PATH;
   if (!output) throw new Error("VERIFICATION_EVIDENCE_PATH must be set");
-  const record = await recordVerification({ platform, files, releaseId: Number(process.env.RELEASE_ID),
+  const record = await recordVerification({ platform, architecture: process.env.RELEASE_ARCHITECTURE, files, releaseId: Number(process.env.RELEASE_ID),
     version: process.env.RELEASE_VERSION, commit: process.env.GITHUB_SHA, runId: process.env.GITHUB_RUN_ID });
   await mkdir(dirname(output), { recursive: true });
   await writeFile(output, `${JSON.stringify(record, null, 2)}\n`, { flag: "wx" });

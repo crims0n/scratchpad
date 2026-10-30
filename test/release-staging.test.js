@@ -10,18 +10,18 @@ import { fileURLToPath } from "node:url";
 import { stageReleaseAssets } from "../scripts/stage-release-assets.mjs";
 import { platformAssetNames } from "../scripts/release-verification.mjs";
 
-async function staging(t, platform) {
+async function staging(t, platform, architecture = platform === "macos" ? "universal" : "x64") {
   const root = await mkdtemp(join(tmpdir(), "scratchpad-stage-"));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const names = platformAssetNames("1.0.0", platform).filter(name => !name.startsWith("SHA256SUMS"));
+  const names = platformAssetNames("1.0.0", platform, architecture).filter(name => !name.startsWith("SHA256SUMS"));
   const artifactPaths = names.map(name => join(root, name));
   for (const file of artifactPaths) await writeFile(file, `signed bytes for ${basename(file)}`);
-  return { platform, version: "1.0.0", artifactPaths, outputDir: join(root, "staged") };
+  return { platform, architecture, version: "1.0.0", artifactPaths, outputDir: join(root, "staged") };
 }
 
 test("staging preserves Windows and Linux package names and exact bytes", async t => {
-  for (const platform of ["windows", "linux"]) {
-    const input = await staging(t, platform);
+  for (const [platform, architecture] of [["windows", "x64"], ["windows", "arm64"], ["linux", "x64"], ["linux", "arm64"]]) {
+    const input = await staging(t, platform, architecture);
     const files = await stageReleaseAssets({ ...input, artifactPaths: [...input.artifactPaths, "irrelevant.sig"] });
     assert.deepEqual(files.map(file => basename(file)), input.artifactPaths.map(file => basename(file)));
     for (let index = 0; index < files.length; index++) {
@@ -63,6 +63,13 @@ test("staging rejects symbolic links to package files", { skip: process.platform
   await rm(input.artifactPaths[0]);
   await symlink(input.artifactPaths[1], input.artifactPaths[0]);
   await assert.rejects(stageReleaseAssets(input), /regular built artifact/);
+});
+
+test("an ARM64 staging job rejects a mislabeled x64 installer instead of silently ignoring it", async t => {
+  const input = await staging(t, "windows", "arm64");
+  await assert.rejects(stageReleaseAssets({ ...input,
+    artifactPaths: [...input.artifactPaths, "Scratchpad_1.0.0_x64-setup.exe"] }), /Unexpected built installer/);
+  await assert.rejects(stat(input.outputDir), /ENOENT/);
 });
 
 test("local finalizers reject the obsolete no-upload flag", { skip: process.platform === "win32" }, () => {

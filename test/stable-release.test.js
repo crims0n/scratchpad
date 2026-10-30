@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { stableRelease, assertReleaseAvailable } from "../scripts/check-stable-release.mjs";
 import { expectedAssets, downloadDraftAssets, verifyDraft } from "../scripts/verify-release-draft.mjs";
 import { prepareDraft } from "../scripts/prepare-stable-release.mjs";
-import { platformAssetNames, platforms, recordVerification } from "../scripts/release-verification.mjs";
+import { platformAssetNames, verificationTargets, recordVerification, readVerificationEvidence } from "../scripts/release-verification.mjs";
 import { uploadVerifiedDraft } from "../scripts/upload-release-draft.mjs";
 import { confirmVerifiedDraft } from "../scripts/confirm-release-draft.mjs";
 
@@ -40,6 +40,15 @@ test("existing tags and draft releases block reuse; malformed responses fail clo
 const commit = "a".repeat(40);
 const releaseId = 123;
 const runId = "456";
+
+test("the stable asset contract has ten unique installers and one Linux checksum pair", () => {
+  const names = expectedAssets("1.2.3");
+  assert.equal(names.length, 12);
+  assert.equal(new Set(names).size, 12);
+  assert.deepEqual(platformAssetNames("1.2.3", "linux", "arm64"), ["Scratchpad_1.2.3_aarch64.AppImage", "Scratchpad_1.2.3_arm64.deb"]);
+  assert.deepEqual(platformAssetNames("1.2.3", "windows", "arm64"), ["Scratchpad_1.2.3_arm64-setup.exe", "Scratchpad_1.2.3_arm64_en-US.msi"]);
+  assert.throws(() => platformAssetNames("1.2.3", "linux", "universal"));
+});
 
 function preparation({ refs = [], pages = [[]], errorAt = 0, response = {} } = {}) {
   const calls = [];
@@ -92,7 +101,7 @@ async function fixture(t) {
   t.after(() => rm(assetsDir, { recursive: true, force: true }));
   const names = expectedAssets("1.0.0");
   const contents = new Map(names.map(name => [name, Buffer.from(`final signed bytes for ${name}`)]));
-  contents.set("SHA256SUMS", Buffer.from(names.filter(name => /_amd64\.(AppImage|deb)$/.test(name))
+  contents.set("SHA256SUMS", Buffer.from(names.filter(name => /_(?:amd64\.(?:AppImage|deb)|aarch64\.AppImage|arm64\.deb)$/.test(name))
     .map(name => `${digest(contents.get(name))}  ${name}`).join("\n") + "\n"));
   contents.set("SHA256SUMS.asc", await readFile(new URL("./fixtures/release-verification/SHA256SUMS.asc", import.meta.url)));
   const assets = [];
@@ -103,16 +112,16 @@ async function fixture(t) {
   }
   const release = { id: releaseId, tag_name: "v1.0.0", name: "Scratchpad v1.0.0", target_commitish: commit, draft: true, prerelease: false, assets };
   const version = "1.0.0";
-  const evidence = await Promise.all(platforms.map(platform => recordVerification({ platform,
-    files: platformAssetNames(version, platform).map(name => join(assetsDir, name)), releaseId, version, commit, runId })));
+  const evidence = await Promise.all(verificationTargets.map(({ platform, architecture }) => recordVerification({ platform, architecture,
+    files: platformAssetNames(version, platform, architecture).map(name => join(assetsDir, name)), releaseId, version, commit, runId })));
   return { release, releaseId, assetsDir, version, commit, runId, evidence, publicKey };
 }
 
-test("complete draft verification hashes all eight final files and recognizes the stable installers", async t => {
+test("complete draft verification hashes all twelve final files and recognizes the stable installers", async t => {
   const input = await fixture(t);
   const report = await verifyDraft(input);
   assert.equal(report.tag, "v1.0.0");
-  assert.equal(report.assets.length, 8);
+  assert.equal(report.assets.length, 12);
   assert.ok(report.assets.every(asset => /^[a-f0-9]{64}$/.test(asset.sha256)));
   assert.equal(input.release.draft, true);
 });
@@ -129,6 +138,44 @@ test("downloads use exactly the selected draft's asset IDs, then verify those by
   assert.deepEqual(ids, input.release.assets.map(asset => asset.id));
   assert.equal((await verifyDraft({ ...input, assetsDir })).releaseId, releaseId);
   await assert.rejects(downloadDraftAssets({ ...input, assetsDir, download: () => assert.fail("must not reuse a download directory") }), /EEXIST/);
+});
+
+test("Linux aggregation checks both architecture records and exact package bytes before signing", async t => {
+  const input = await fixture(t);
+  const assets = join(input.assetsDir, "linux");
+  const records = join(input.assetsDir, "records");
+  await mkdir(assets);
+  await mkdir(records);
+  const targets = verificationTargets.filter(target => target.platform === "linux" && target.architecture !== "checksums");
+  for (const target of targets) {
+    for (const name of platformAssetNames(input.version, target.platform, target.architecture)) {
+      await copyFile(join(input.assetsDir, name), join(assets, name));
+    }
+    await writeFile(join(records, `linux-${target.architecture}.json`), JSON.stringify(input.evidence.find(record =>
+      record.platform === target.platform && record.architecture === target.architecture)));
+  }
+  const script = fileURLToPath(new URL("../scripts/verify-linux-handoff.mjs", import.meta.url));
+  const options = { stdio: "pipe", env: { ...process.env, RELEASE_ID: String(releaseId), RELEASE_VERSION: input.version,
+    GITHUB_SHA: commit, GITHUB_RUN_ID: runId, RELEASE_ASSETS_DIR: assets, VERIFICATION_EVIDENCE_DIR: records } };
+  const check = () => execFileSync(process.execPath, [script], options);
+  check();
+  const arm = platformAssetNames(input.version, "linux", "arm64")[0];
+  await writeFile(join(assets, arm), "substituted package");
+  assert.throws(check, /signature-checked bytes/);
+  await copyFile(join(input.assetsDir, arm), join(assets, arm));
+  await writeFile(join(assets, "SHA256SUMS"), "competing manifest");
+  assert.throws(check, /exactly four/);
+  await rm(join(assets, "SHA256SUMS"));
+  const recordPath = join(records, "linux-arm64.json");
+  const original = await readFile(recordPath, "utf8");
+  await writeFile(recordPath, JSON.stringify({ ...JSON.parse(original), runId: "999" }));
+  assert.throws(check, /candidate and workflow run/);
+  await writeFile(recordPath, original);
+  await writeFile(join(records, "extra.json"), original);
+  await assert.rejects(readVerificationEvidence(records, targets), /exactly the platform/);
+  await rm(join(records, "extra.json"));
+  await rm(recordPath);
+  assert.throws(check, /exactly the platform/);
 });
 
 test("wrong release IDs, duplicate asset IDs and unsafe names are rejected before downloading", async t => {
@@ -182,7 +229,7 @@ test("draft verification requires uploaded assets, valid digests, and exact Linu
   const wrong = Buffer.from(`${"0".repeat(64)}  Scratchpad_1.0.0_amd64.AppImage\n`);
   await writeFile(join(input.assetsDir, manifest.name), wrong);
   Object.assign(manifest, { size: wrong.length, digest: `sha256:${digest(wrong)}` });
-  Object.assign(input.evidence.find(record => record.platform === "linux").assets.find(asset => asset.name === manifest.name),
+  Object.assign(input.evidence.find(record => record.platform === "linux" && record.architecture === "checksums").assets.find(asset => asset.name === manifest.name),
     { size: wrong.length, sha256: digest(wrong) });
   await assert.rejects(verifyDraft(input), /Signed Linux manifest/);
 });
@@ -206,9 +253,9 @@ test("verification records must cover all platforms from this candidate and run"
     await assert.rejects(verifyDraft({ ...input, evidence }), /one verification record per platform/);
   }
   for (const override of [{ releaseId: releaseId + 1 }, { commit: "b".repeat(40) }, { version: "1.0.1" },
-    { runId: "999" }, { schemaVersion: 2 }, { assets: input.evidence[0].assets.slice(1) }]) {
+    { runId: "999" }, { schemaVersion: 1 }, { architecture: "arm64" }, { assets: input.evidence[0].assets.slice(1) }]) {
     const evidence = [{ ...input.evidence[0], ...override }, ...input.evidence.slice(1)];
-    await assert.rejects(verifyDraft({ ...input, evidence }), /Verification evidence/);
+    await assert.rejects(verifyDraft({ ...input, evidence }), /Verification evidence|one verification record per platform/);
   }
 });
 
@@ -218,7 +265,7 @@ test("a recorded Linux signature must still cryptographically verify with the pu
   const bytes = Buffer.from("not a GPG signature");
   await writeFile(join(input.assetsDir, name), bytes);
   Object.assign(input.release.assets.find(asset => asset.name === name), { size: bytes.length, digest: `sha256:${digest(bytes)}` });
-  Object.assign(input.evidence.find(record => record.platform === "linux").assets.find(asset => asset.name === name),
+  Object.assign(input.evidence.find(record => record.platform === "linux" && record.architecture === "checksums").assets.find(asset => asset.name === name),
     { size: bytes.length, sha256: digest(bytes) });
   await assert.rejects(verifyDraft(input), /checksum signature did not verify/);
 });
@@ -232,10 +279,10 @@ test("a valid signature from an untrusted key is rejected", async t => {
 test("platform records reject incomplete files and missing candidate identity", async t => {
   const input = await fixture(t);
   const platform = "windows";
-  const files = platformAssetNames(input.version, platform).map(name => join(input.assetsDir, name));
+  const files = platformAssetNames(input.version, platform, "x64").map(name => join(input.assetsDir, name));
   for (const override of [{ files: files.slice(1) }, { files: [files[0], files[0]] }, { platform: "other" },
     { releaseId: 0 }, { runId: undefined }, { commit: "main" }]) {
-    await assert.rejects(recordVerification({ ...input, platform, files, ...override }));
+    await assert.rejects(recordVerification({ ...input, platform, architecture: "x64", files, ...override }));
   }
 });
 
@@ -243,9 +290,9 @@ test("the platform recording command writes candidate provenance and refuses an 
   const input = await fixture(t);
   const output = join(input.assetsDir, "evidence", "windows.json");
   const args = [fileURLToPath(new URL("../scripts/release-verification.mjs", import.meta.url)), "windows",
-    ...platformAssetNames(input.version, "windows").map(name => join(input.assetsDir, name))];
+    ...platformAssetNames(input.version, "windows", "x64").map(name => join(input.assetsDir, name))];
   const options = { env: { ...process.env, VERIFICATION_EVIDENCE_PATH: output, RELEASE_ID: String(releaseId),
-    RELEASE_VERSION: input.version, GITHUB_SHA: commit, GITHUB_RUN_ID: runId }, stdio: "pipe" };
+    RELEASE_VERSION: input.version, RELEASE_ARCHITECTURE: "x64", GITHUB_SHA: commit, GITHUB_RUN_ID: runId }, stdio: "pipe" };
   execFileSync(process.execPath, args, options);
   assert.deepEqual(JSON.parse(await readFile(output, "utf8")), input.evidence.find(record => record.platform === "windows"));
   assert.throws(() => execFileSync(process.execPath, args, options), /EEXIST/);
@@ -285,12 +332,12 @@ async function uploadFixture(t, initialAssets = []) {
     sleep: async () => {} }, remote, calls, bytes };
 }
 
-test("the uploader verifies signed handoffs, uploads eight files, and snapshots downloads by asset ID", async t => {
+test("the uploader verifies signed handoffs, uploads twelve files, and snapshots downloads by asset ID", async t => {
   const { input, remote, calls } = await uploadFixture(t);
   const result = await uploadVerifiedDraft(input);
-  assert.equal(result.assets.length, 8);
+  assert.equal(result.assets.length, 12);
   assert.equal(remote.draft, true);
-  assert.equal(calls.filter(([op]) => op === "upload").length, 8);
+  assert.equal(calls.filter(([op]) => op === "upload").length, 12);
   assert.equal(calls.find(([op, name]) => op === "upload" && name.endsWith(".dmg"))[2], "application/x-apple-diskimage");
   for (const name of ["SHA256SUMS", "SHA256SUMS.asc"]) {
     assert.equal(calls.find(([op, file]) => op === "upload" && file === name)[2], "text/plain");
@@ -299,7 +346,7 @@ test("the uploader verifies signed handoffs, uploads eight files, and snapshots 
   assert.deepEqual(calls.filter(([op]) => op === "download").map(([, id]) => id), remote.assets.map(asset => asset.id));
   const release = JSON.parse(await readFile(join(input.snapshotDir, "release.json"), "utf8"));
   assert.deepEqual(release, remote);
-  assert.equal((await verifyDraft({ ...input, release, assetsDir: join(input.snapshotDir, "assets") })).assets.length, 8);
+  assert.equal((await verifyDraft({ ...input, release, assetsDir: join(input.snapshotDir, "assets") })).assets.length, 12);
 });
 
 test("invalid files, signing evidence, and Linux signatures are rejected before contacting GitHub", async t => {
@@ -314,7 +361,7 @@ test("invalid files, signing evidence, and Linux signatures are rejected before 
   await assert.rejects(uploadVerifiedDraft(input), /signature-checked bytes/);
   await writeFile(file, original);
   await writeFile(join(input.assetsDir, "unexpected.exe"), "extra");
-  await assert.rejects(uploadVerifiedDraft(input), /exactly the eight/);
+  await assert.rejects(uploadVerifiedDraft(input), /exactly the twelve/);
   assert.deepEqual(calls, []);
 });
 
@@ -337,7 +384,7 @@ test("a partial-upload retry keeps matching files and replaces only stale expect
   remote.assets = [matching, stale];
   await uploadVerifiedDraft(input);
   assert.deepEqual(calls.filter(([op]) => op === "delete"), [["delete", stale.id]]);
-  assert.equal(calls.filter(([op]) => op === "upload").length, 7);
+  assert.equal(calls.filter(([op]) => op === "upload").length, 11);
   assert.equal(remote.assets.find(asset => asset.name === matching.name).id, matching.id);
 });
 
@@ -384,7 +431,7 @@ test("upload failures leave a recoverable draft, and a new attempt resumes witho
   assert.equal(calls.some(([op]) => op === "download"), false);
   input.github.uploadAsset = upload;
   await uploadVerifiedDraft({ ...input, snapshotDir: `${input.snapshotDir}-retry` });
-  assert.equal(calls.filter(([op]) => op === "upload").length, 8);
+  assert.equal(calls.filter(([op]) => op === "upload").length, 12);
 });
 
 test("the uploader rechecks draft identity before replacing any file", async t => {
@@ -405,7 +452,7 @@ test("GitHub digest availability is bounded and a mismatching upload stops befor
   const upload = input.github.uploadAsset;
   input.github.uploadAsset = async (...args) => ({ ...await upload(...args), digest: null });
   await uploadVerifiedDraft(input);
-  assert.equal(calls.filter(([op]) => op === "asset").length, 8);
+  assert.equal(calls.filter(([op]) => op === "asset").length, 12);
 
   const bad = await uploadFixture(t);
   const badUpload = bad.input.github.uploadAsset;
@@ -443,7 +490,7 @@ test("changed final metadata, downloaded bytes, or publication state cannot prod
     if (mode === "metadata") {
       const release = input.github.release;
       input.github.release = () => {
-        if (remote.assets.length === 8) remote.assets[0].digest = `sha256:${"0".repeat(64)}`;
+        if (remote.assets.length === 12) remote.assets[0].digest = `sha256:${"0".repeat(64)}`;
         return release();
       };
     } else if (mode === "download") {
@@ -489,7 +536,7 @@ test("final confirmation reads the live draft after snapshot verification and al
       return { ...input.release, body: "edited release notes", assets: [...input.release.assets].reverse() };
     } } });
   assert.equal(reads, 1);
-  assert.equal(result.assets.length, 8);
+  assert.equal(result.assets.length, 12);
 });
 
 test("final confirmation rejects drift in the live draft even when the downloaded snapshot still verifies", async t => {
@@ -504,7 +551,7 @@ test("final confirmation rejects drift in the live draft even when the downloade
     await assert.rejects(confirmVerifiedDraft({ ...input, repository: "crims0n/scratchpad", verification,
       github: { release: async () => ({ ...input.release, ...change }) } }));
   }
-  assert.equal((await verifyDraft(input)).assets.length, 8);
+  assert.equal((await verifyDraft(input)).assets.length, 12);
 });
 
 test("final confirmation requires a valid verified result from the selected candidate and workflow run", async t => {
@@ -540,7 +587,7 @@ test("the confirmation command reads the prepared draft by ID and reports live c
     GITHUB_REPOSITORY: "crims0n/scratchpad", RELEASE_ID: String(releaseId), RELEASE_VERSION: input.version,
     GITHUB_SHA: commit, GITHUB_RUN_ID: runId, VERIFIED_DRAFT: JSON.stringify(verification), GITHUB_STEP_SUMMARY: summary } };
   assert.match(execFileSync(process.execPath, [script], options), /Confirmed current stable draft/);
-  assert.match(await readFile(summary, "utf8"), /Checked GitHub at .*all eight current asset IDs/);
+  assert.match(await readFile(summary, "utf8"), /Checked GitHub at .*all twelve current asset IDs/);
   await rm(summary);
   await writeFile(releaseFile, JSON.stringify({ ...input.release, draft: false }));
   assert.throws(() => execFileSync(process.execPath, [script], options), /unpublished stable/);

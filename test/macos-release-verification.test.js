@@ -68,7 +68,7 @@ test("macOS finalization hands off stapled bytes and evidence only after verific
         encoding: "utf8", env: { ...process.env, PATH: `${root}${delimiter}${process.env.PATH}`, RUNNER_TEMP: root,
           MACOS_SIGNING_IDENTITY: "test", MACOS_SIGNING_TEAM_ID: "TESTTEAM00", APPLE_API_KEY: "test",
           APPLE_API_ISSUER: "test", APPLE_API_KEY_PATH: "test", TEST_VERIFY_EXIT: fail ? "1" : "0",
-          VERIFICATION_EVIDENCE_PATH: evidence, RELEASE_ID: "123", RELEASE_VERSION: "1.0.0",
+          VERIFICATION_EVIDENCE_PATH: evidence, RELEASE_ARCHITECTURE: "universal", RELEASE_ID: "123", RELEASE_VERSION: "1.0.0",
           GITHUB_SHA: "a".repeat(40), GITHUB_RUN_ID: "456" }
       });
       assert.ifError(result.error);

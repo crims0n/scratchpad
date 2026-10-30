@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { buildReleaseManifest } from "../scripts/generate-release-manifest.mjs";
+import { expectedAssets } from "../scripts/release-verification.mjs";
 
 const release = {
   tag_name: "scratchpad-beta-v0.4.0",
@@ -59,6 +60,22 @@ test("release manifests include beta installers, metadata, and trusted checksums
   );
   assert.equal(manifest.release.assets[0].sha256, "a".repeat(64));
   assert.equal(manifest.generatedAt, "2026-08-28T12:00:00Z");
+});
+
+test("the catalog recognizes all ten stable installers with explicit architectures and unchanged legacy aliases", () => {
+  const assets = expectedAssets("1.1.0").map(name => ({ name, size: 123, digest: `sha256:${"a".repeat(64)}`,
+    browser_download_url: `https://github.com/crims0n/scratchpad/releases/download/v1.1.0/${name}` }));
+  const manifest = buildReleaseManifest([{ ...release, tag_name: "v1.1.0", prerelease: false, assets }]);
+  assert.equal(manifest.release.assets.length, 10);
+  for (const platform of ["linux", "windows"]) for (const architecture of ["x64", "arm64"]) {
+    const pair = manifest.release.assets.filter(asset => asset.platform === platform && asset.architecture === architecture);
+    assert.equal(pair.length, 2);
+    assert.equal(pair.filter(asset => asset.primary).length, 1);
+  }
+  assert.equal(manifest.channels.stable.version, "1.1.0");
+  assert.equal(manifest.channels.beta.version, "1.1.0");
+  assert.equal(manifest.channels.beta.prerelease, true);
+  assert.ok(manifest.release.assets.every(asset => asset.sha256 === "a".repeat(64)));
 });
 
 test("fork and renamed repository catalogs use the supplied identity and reject upstream package URLs", () => {

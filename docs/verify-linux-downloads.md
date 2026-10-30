@@ -4,8 +4,10 @@ Signed Linux releases from v0.8.2 onward on [GitHub Releases](https://github.com
 
 - `Scratchpad…_amd64.AppImage` with an embedded GPG signature;
 - `Scratchpad…_amd64.deb`;
-- `SHA256SUMS`, the SHA-256 checksums of both packages; and
+- `SHA256SUMS`, the SHA-256 checksums of all Linux packages in that release; and
 - `SHA256SUMS.asc`, a detached GPG signature of `SHA256SUMS`.
+
+Releases that add native ARM64 also include `_aarch64.AppImage` and `_arm64.deb` in the same signed checksum manifest. Use the package matching your CPU and the files from that exact release; published v1.0.0 has only x64 Linux packages.
 
 Linux does not require these signatures to run Scratchpad. They let you confirm that a download was built by the Scratchpad release workflow and has not been modified.
 

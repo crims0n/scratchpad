@@ -229,6 +229,7 @@ jobs:
           GNUPGHOME: ${{ runner.temp }}/arm64-signing-gnupg
         run: |
           gpgconf --kill gpg-agent || true
+          gpgconf --remove-socketdir || true
           rm -rf "$GNUPGHOME"
 
       - name: Save signed development packages and verification evidence

@@ -1,6 +1,6 @@
 # ARM64 signing validation
 
-The **ARM64 signing validation** workflow is the next step after [build feasibility](arm64-build-feasibility.md) for [#132](https://github.com/crims0n/scratchpad/issues/132). It prepares a protected signing experiment before expanding the normal Stable Release asset/evidence matrix.
+The **ARM64 signing validation** workflow is the next step after [build feasibility](arm64-build-feasibility.md) for [#132](https://github.com/crims0n/scratchpad/issues/132). It validates development-package signing separately from the [Stable Release pipeline](arm64-stable-release.md).
 
 ## PR checks
 
@@ -27,6 +27,6 @@ The two passing jobs save `signed-arm64-validation-linux` and `signed-arm64-vali
 
 ## Remaining integration
 
-A successful protected run must be recorded before claiming ARM64 signing works. PR prerequisite checks alone establish no Azure/GPG signing result. This run covers only the ARM64 Linux pair; the eventual Stable Release integration must gather **both Linux architectures into one final authenticated checksum pair**, introduce architecture-specific candidate records/canonical names, extend exact upload/download verification and catalog recognition, and complete native GUI/MCP/install/upgrade acceptance before publication. Existing stable packaging and the public download catalog keep their current package set until that work is reviewed.
+The [protected run on the #137 merge](https://github.com/crims0n/scratchpad/actions/runs/40980234668) passed both platforms on commit `fedbb79b03cd00d28d8432827938a6985f638ddd`; its recorded evidence is in [#132](https://github.com/crims0n/scratchpad/issues/132). PR prerequisite checks alone establish no Azure/GPG signing result. This probe covers only the ARM64 Linux pair. Stable Release now has a separate combined-checksum job and architecture-specific candidate contracts; a future signed production draft, download-selection support, and native GUI/MCP/install/upgrade acceptance remain required before ARM64 publication.
 
 References: [Microsoft Artifact Signing prerequisites](https://learn.microsoft.com/en-us/azure/artifact-signing/how-to-signing-integrations), [.NET architecture paths on Windows ARM](https://learn.microsoft.com/en-us/dotnet/core/install/windows#arm-based-windows-pcs).

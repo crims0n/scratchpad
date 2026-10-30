@@ -10,10 +10,10 @@ export const releasePublicKey = fileURLToPath(new URL("../site/release-signing-k
 
 export async function verifyLinuxAssets({ assetsDir, verified, publicKey }) {
   const checksums = (await readFile(join(assetsDir, "SHA256SUMS"), "utf8")).trim().split(/\r?\n/);
-  const linux = verified.filter(asset => /_amd64\.(AppImage|deb)$/.test(asset.name));
-  if (linux.length !== 2 || checksums.length !== 2
+  const linux = verified.filter(asset => /_(?:amd64\.(?:AppImage|deb)|aarch64\.AppImage|arm64\.deb)$/.test(asset.name));
+  if (linux.length !== 4 || new Set(linux.map(asset => asset.name)).size !== 4 || checksums.length !== 4
     || linux.some(asset => !checksums.includes(`${asset.sha256}  ${asset.name}`))) {
-    throw new Error("Signed Linux manifest must cover the final AppImage and Debian package exactly");
+    throw new Error("Signed Linux manifest must cover the final AppImage and Debian packages for both architectures exactly");
   }
   await verifyLinuxSignature({ assetsDir, publicKey });
 }

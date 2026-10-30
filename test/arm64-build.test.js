@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, rm, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { assertArm64Binary, parseRustToolchain, readApplicationHeader, verifyArm64Build } from "../scripts/verify-arm64-build.mjs";
+import { assertApplicationBinary, assertArm64Binary, parseRustToolchain, readApplicationHeader, verifyArm64Build } from "../scripts/verify-arm64-build.mjs";
 import { hashFile } from "../scripts/release-verification.mjs";
 
 function elf(machine = 183, type = 2) {
@@ -42,6 +42,16 @@ test("ARM64 application checks distinguish native payloads from x64 and x86", ()
   assert.throws(() => assertArm64Binary(pe(0x14c), "windows"), /PE32/);
   assert.throws(() => assertArm64Binary(pe(), "linux"), /ELF64/);
   assert.throws(() => assertArm64Binary(elf(), "windows"), /PE32/);
+});
+
+test("stable payload checks require the selected architecture for both x64 and ARM64", () => {
+  for (const [architecture, machine, peMachine] of [["x64", 62, 0x8664], ["arm64", 183, 0xaa64]]) {
+    for (const type of [2, 3]) assert.doesNotThrow(() => assertApplicationBinary(elf(machine, type), "linux", architecture));
+    assert.doesNotThrow(() => assertApplicationBinary(pe(peMachine), "windows", architecture));
+    assert.throws(() => assertApplicationBinary(elf(machine === 62 ? 183 : 62), "linux", architecture));
+    assert.throws(() => assertApplicationBinary(pe(peMachine === 0x8664 ? 0xaa64 : 0x8664), "windows", architecture));
+  }
+  assert.throws(() => assertApplicationBinary(elf(), "linux", "unknown"));
 });
 
 test("truncated, malformed and wrong-width headers cannot establish ARM64", () => {

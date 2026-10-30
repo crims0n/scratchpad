@@ -22,10 +22,16 @@ function elfProgramHeadersEnd(bytes) {
 }
 
 export function assertArm64Binary(bytes, platform) {
+  return assertApplicationBinary(bytes, platform, "arm64");
+}
+
+export function assertApplicationBinary(bytes, platform, architecture) {
+  if (!["x64", "arm64"].includes(architecture)) throw new Error("Unknown application architecture");
+  const label = architecture === "arm64" ? "ARM64" : "x64";
   if (platform === "linux") {
     if (bytes.length < 64 || bytes.subarray(0, 4).toString("hex") !== "7f454c46"
-      || bytes[4] !== 2 || bytes[5] !== 1 || bytes.readUInt16LE(18) !== 183) {
-      throw new Error("Expected a little-endian ARM64 ELF64 application");
+      || bytes[4] !== 2 || bytes[5] !== 1 || bytes.readUInt16LE(18) !== (architecture === "arm64" ? 183 : 62)) {
+      throw new Error(`Expected a little-endian ${label} ELF64 application`);
     }
     const type = bytes.readUInt16LE(16);
     if (![2, 3].includes(type) || bytes.readBigUInt64LE(24) === 0n) {
@@ -47,11 +53,11 @@ export function assertArm64Binary(bytes, platform) {
   } else if (platform === "windows") {
     // Keep PE layout checks aligned with scripts/windows-pe.ps1, whose
     // PowerShell verifier also supports x64/x86 installer wrappers and DLLs.
-    if (bytes.length < 64 || bytes.subarray(0, 2).toString() !== "MZ") throw new Error("Expected an ARM64 PE32+ application");
+    if (bytes.length < 64 || bytes.subarray(0, 2).toString() !== "MZ") throw new Error(`Expected an ${label} PE32+ application`);
     const offset = bytes.readUInt32LE(0x3c);
     if (offset < 64 || offset + 26 > bytes.length || bytes.readUInt32LE(offset) !== 0x4550
-      || bytes.readUInt16LE(offset + 4) !== 0xaa64 || bytes.readUInt16LE(offset + 24) !== 0x20b) {
-      throw new Error("Expected an ARM64 PE32+ application");
+      || bytes.readUInt16LE(offset + 4) !== (architecture === "arm64" ? 0xaa64 : 0x8664) || bytes.readUInt16LE(offset + 24) !== 0x20b) {
+      throw new Error(`Expected an ${label} PE32+ application`);
     }
     const flags = bytes.readUInt16LE(offset + 22);
     if (!(flags & 0x0002) || (flags & 0x2000)) throw new Error("Expected a PE executable image, not an object or DLL");

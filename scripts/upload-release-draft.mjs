@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { execFileSync } from "node:child_process";
-import { mkdir, open, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, open, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { assertMainBranch } from "./check-stable-release.mjs";
-import { assertDraftUnchanged, assertReleaseRepository, draftAssets, downloadDraftAssets, expectedAssets, hashFile, verifyEvidence } from "./release-verification.mjs";
+import { assertDraftUnchanged, assertReleaseRepository, draftAssets, downloadDraftAssets, expectedAssets, hashFile, readVerificationEvidence, verifyEvidence } from "./release-verification.mjs";
 import { releasePublicKey, verifyLinuxAssets } from "./release-signature.mjs";
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -34,7 +34,7 @@ export async function uploadVerifiedDraft({ repository, releaseId, version, comm
   assertReleaseRepository(repository);
   const names = expectedAssets(version).sort();
   if (JSON.stringify((await readdir(assetsDir)).sort()) !== JSON.stringify(names)) {
-    throw new Error("Workflow artifacts must contain exactly the eight release files");
+    throw new Error("Workflow artifacts must contain exactly the twelve release files");
   }
   const verified = await Promise.all(names.map(name => hashFile(join(assetsDir, name))));
   verifyEvidence({ evidence, verified, releaseId, version, commit, runId });
@@ -99,9 +99,7 @@ async function main() {
     return output.trim() ? JSON.parse(output) : undefined;
   };
   const evidenceDir = process.env.VERIFICATION_EVIDENCE_DIR;
-  const records = await readdir(evidenceDir);
-  if (records.length !== 3 || records.some(name => !name.endsWith(".json"))) throw new Error("Expected three platform verification records");
-  const evidence = await Promise.all(records.map(async name => JSON.parse(await readFile(join(evidenceDir, name), "utf8"))));
+  const evidence = await readVerificationEvidence(evidenceDir);
   const result = await uploadVerifiedDraft({ repository, releaseId, version: process.env.RELEASE_VERSION,
     commit: process.env.GITHUB_SHA, runId: process.env.GITHUB_RUN_ID, evidence, assetsDir: process.env.RELEASE_ASSETS_DIR,
     snapshotDir: process.env.RELEASE_SNAPSHOT_DIR, github: {

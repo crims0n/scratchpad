@@ -14,7 +14,11 @@ const ASSET_RULES = [
   { pattern: /_x64-setup\.exe$/i, platform: "windows", format: "EXE installer", architecture: "x64", primary: true, order: 0 },
   { pattern: /_x64_en-US\.msi$/i, platform: "windows", format: "MSI installer", architecture: "x64", primary: false, order: 1 },
   { pattern: /_amd64\.AppImage$/i, platform: "linux", format: "AppImage", architecture: "x64", primary: true, order: 0 },
-  { pattern: /_amd64\.deb$/i, platform: "linux", format: "Debian package", architecture: "x64", primary: false, order: 1 }
+  { pattern: /_amd64\.deb$/i, platform: "linux", format: "Debian package", architecture: "x64", primary: false, order: 1 },
+  { pattern: /_arm64-setup\.exe$/i, platform: "windows", format: "EXE installer", architecture: "arm64", primary: true, order: 2 },
+  { pattern: /_arm64_en-US\.msi$/i, platform: "windows", format: "MSI installer", architecture: "arm64", primary: false, order: 3 },
+  { pattern: /_aarch64\.AppImage$/i, platform: "linux", format: "AppImage", architecture: "arm64", primary: true, order: 2 },
+  { pattern: /_arm64\.deb$/i, platform: "linux", format: "Debian package", architecture: "arm64", primary: false, order: 3 }
 ];
 
 const PLATFORM_ORDER = { macos: 0, windows: 1, linux: 2 };
