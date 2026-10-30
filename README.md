@@ -249,7 +249,7 @@ Opaque hex, RGB, HSL, named, and `color(srgb …)` values are measured against t
 - Node.js 20 or newer
 - Rust 1.98.0 (also declared in `rust-toolchain.toml`)
 - The dependencies in the [Tauri prerequisites guide](https://tauri.app/start/prerequisites/)
-- GnuPG (`gpg` and `gpgv`) for the release-verification tests in `npm run check`; tests use only a disposable public test key and signature
+- GnuPG (`gpg` and `gpgv`) for the release-verification tests in `npm run check`. The isolated key-import regression also needs `gpgconf` and `gpg-preset-passphrase`; it generates and removes its own disposable test key. It skips locally when those import tools are unavailable; CI requires them. Production signing credentials are never used by the tests.
 
 ### Run locally
 

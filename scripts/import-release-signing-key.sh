@@ -23,15 +23,18 @@ if [[ -z "${RELEASE_SIGNING_GPG_PRIVATE_KEY:-}" || -z "${RELEASE_SIGNING_GPG_PAS
   exit 1
 fi
 
+# GPG consults its home even for --show-keys on a standalone public-key file.
+# Initialize an explicitly selected temporary home before the first GPG call.
+export GNUPGHOME=${GNUPGHOME:-$HOME/.gnupg}
+(umask 077; mkdir -p "$GNUPGHOME")
+chmod 700 "$GNUPGHOME"
+
 expected=$(gpg --batch --show-keys --with-colons "$public_key" | awk -F: '$1 == "fpr" { print $10; exit }')
 if [[ ! "$expected" =~ ^[0-9A-F]{40}$ ]]; then
   echo "::error::Could not read a v4 fingerprint from $public_key."
   exit 1
 fi
 
-export GNUPGHOME=${GNUPGHOME:-$HOME/.gnupg}
-mkdir -p "$GNUPGHOME"
-chmod 700 "$GNUPGHOME"
 # Loopback lets gpg accept a passphrase from callers; presetting below means
 # appimagetool's own gpg invocation never needs to ask.
 cat >> "$GNUPGHOME/gpg-agent.conf" <<'CONF'
