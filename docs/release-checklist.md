@@ -2,7 +2,7 @@
 
 The first stable release, **v1.0.0**, is published; its evidence is recorded in [#34](https://github.com/crims0n/scratchpad/issues/34). For subsequent releases, substitute the new candidate version/tag in the examples below. Never rebuild or reuse a published version. Build each candidate as a draft and complete review and installed-package acceptance before publication; this checklist does not itself establish those results.
 
-The current **v1.1.0 signed draft** adds native Linux and Windows ARM64 packages. Its source/run/draft identity, verified signing evidence and general installation/launch report are recorded in the [v1.1.0 candidate acceptance record](releases/1.1.0.md). Per-platform evidence, functional/MCP/uninstall, upgrade, visual catalog and publication checks remain open there.
+**v1.1.0 is published**, adding native Linux and Windows ARM64 packages. The [v1.1.0 release record](releases/1.1.0.md) links its signed/public-download and live-feed evidence and the maintainer's publication sign-off accepting documented gaps. Per-platform evidence, functional/MCP/uninstall, upgrade, visual catalog and installed-client update checks remain open there.
 
 ## Build the draft
 
