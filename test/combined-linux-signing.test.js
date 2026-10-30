@@ -7,14 +7,16 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { hashFile, platformAssetNames, readVerificationEvidence } from "../scripts/release-verification.mjs";
+import { verifyAppImageSignature, appImageSigningData } from "../scripts/appimage-signature.mjs";
+import { appImageFixture } from "./helpers/appimage-fixture.js";
 import { verifyLinuxAssets } from "../scripts/release-signature.mjs";
 
-test("native Linux handoffs produce one authenticated four-package checksum pair", { skip: process.platform !== "linux", timeout: 30000 }, async t => {
+test("Linux handoffs authenticate embedded AppImages and one four-package checksum pair", { skip: process.platform === "win32", timeout: 30000 }, async t => {
   try {
-    for (const tool of ["gpg", "gpgconf", "gpgv", "llvm-objcopy", "cc"]) execFileSync(tool, ["--version"], { stdio: "pipe" });
+    for (const tool of ["gpg", "gpgconf", "gpgv", "sha256sum"]) execFileSync(tool, ["--version"], { stdio: "pipe" });
   } catch (cause) {
-    if (process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true") throw new Error("Linux signing regression requires GnuPG, LLVM and cc", { cause });
-    t.skip("Linux signing regression requires GnuPG, LLVM and cc");
+    if (process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true") throw new Error("Linux signing regression requires GnuPG and sha256sum", { cause });
+    t.skip("Linux signing regression requires GnuPG and sha256sum");
     return;
   }
   const root = await mkdtemp("/tmp/sp-combined-");
@@ -32,32 +34,52 @@ test("native Linux handoffs produce one authenticated four-package checksum pair
   const fingerprint = /^fpr:::::::::([A-F0-9]{40}):/m.exec(gpg(["--list-secret-keys", "--with-colons"]))[1];
   const publicKey = join(root, "public.asc");
   await writeFile(publicKey, gpg(["--armor", "--export", fingerprint]));
-  const input = join(root, "input");
-  await writeFile(input, "synthetic AppImage signature-section fixture");
-  gpg(["--armor", "--detach-sign", input]);
-  const binary = join(root, "application");
-  execFileSync("cc", ["-x", "c", "-", "-o", binary], { input: "int main(void) { return 0; }", stdio: ["pipe", "pipe", "pipe"] });
   const assets = join(root, "assets");
   const records = join(root, "records");
   const aggregate = join(root, "aggregate");
   for (const directory of [assets, records, aggregate]) await mkdir(directory);
   const scripts = fileURLToPath(new URL("../scripts/", import.meta.url));
   const env = { ...process.env, GNUPGHOME: home, RUNNER_TEMP: root, SIGNING_KEY_FINGERPRINT: fingerprint,
-    RELEASE_ID: "123", RELEASE_VERSION: "1.0.0", GITHUB_SHA: "a".repeat(40), GITHUB_RUN_ID: "456", OBJCOPY: "llvm-objcopy" };
+    RELEASE_ID: "123", RELEASE_VERSION: "1.0.0", GITHUB_SHA: "a".repeat(40), GITHUB_RUN_ID: "456" };
   const targets = ["x64", "arm64"].map(architecture => ({ platform: "linux", architecture }));
   for (const { architecture } of targets) {
     const [appimage, deb] = platformAssetNames("1.0.0", "linux", architecture);
-    // Synthetic ELF containers exercise LLVM's handling of both machine types.
-    // Actual package architecture/installability is established by native jobs.
-    const bytes = await readFile(binary);
-    bytes.writeUInt16LE(architecture === "arm64" ? 183 : 62, 18);
-    const source = join(root, architecture);
-    await writeFile(source, bytes);
-    execFileSync("llvm-objcopy", ["--add-section", `.sha256_sig=${input}.asc`, source, join(assets, appimage)], { stdio: "pipe" });
+    const fixture = appImageFixture(architecture, `synthetic ${architecture} payload`);
+    const digestPath = join(root, `${architecture}-digest`);
+    await writeFile(digestPath, fixture.digest);
+    gpg(["--armor", "--detach-sign", digestPath]);
+    const signature = await readFile(`${digestPath}.asc`);
+    signature.copy(fixture.bytes, fixture.signatureOffset);
+    (await readFile(publicKey)).copy(fixture.bytes, fixture.keyOffset);
+    const appimagePath = join(assets, appimage);
+    await writeFile(appimagePath, fixture.bytes);
+    assert.equal((await appImageSigningData(appimagePath)).digest, fixture.digest);
+    await verifyAppImageSignature(appimagePath, publicKey);
+    const modified = Buffer.from(fixture.bytes);
+    modified[fixture.payloadOffset] ^= 1;
+    await writeFile(appimagePath, modified);
+    await assert.rejects(verifyAppImageSignature(appimagePath, publicKey), /did not verify/);
+    await writeFile(appimagePath, fixture.bytes);
     await writeFile(join(assets, deb), `synthetic ${architecture} Debian package`);
     execFileSync("bash", [join(scripts, "sign-linux-release.sh"), publicKey, "--assets-dir", assets,
       "--architecture", architecture, "--packages-only"], { stdio: "pipe", env: { ...env, RELEASE_ARCHITECTURE: architecture,
       VERIFICATION_EVIDENCE_PATH: join(records, `linux-${architecture}.json`) } });
+  }
+  // A real signature from the trusted key, copied from another image, must
+  // fail rather than passing merely because its issuer fingerprint matches.
+  const [first, second] = targets.map(target => join(assets, platformAssetNames("1.0.0", "linux", target.architecture)[0]));
+  const firstBytes = await readFile(first);
+  const secondBytes = await readFile(second);
+  const copied = Buffer.from(secondBytes);
+  firstBytes.copy(copied, 512, 512, 4608);
+  await writeFile(second, copied);
+  await assert.rejects(verifyAppImageSignature(second, publicKey), /did not verify/);
+  await writeFile(second, secondBytes);
+  await assert.rejects(verifyAppImageSignature(first, fileURLToPath(new URL("../site/release-signing-key.asc", import.meta.url))), /did not verify/);
+  for (const args of [["--architecture", "x64"], ["--architecture", "all", "--packages-only"]]) {
+    assert.throws(() => execFileSync("bash", [join(scripts, "sign-linux-release.sh"), publicKey,
+      "--assets-dir", assets, ...args], { stdio: "pipe", env: { ...env, VERIFICATION_EVIDENCE_PATH: join(root, "invalid.json") } }),
+      /requires both architectures|requires one stable architecture/);
   }
   assert.equal((await readdir(assets)).length, 4, "build jobs must not create competing checksum files");
   const handoffEnv = { ...env, RELEASE_ASSETS_DIR: assets, VERIFICATION_EVIDENCE_DIR: records };

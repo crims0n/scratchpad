@@ -6,11 +6,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { platformAssetNames } from "./release-verification.mjs";
+
 export const releasePublicKey = fileURLToPath(new URL("../site/release-signing-key.asc", import.meta.url));
 
 export async function verifyLinuxAssets({ assetsDir, verified, publicKey }) {
   const checksums = (await readFile(join(assetsDir, "SHA256SUMS"), "utf8")).trim().split(/\r?\n/);
-  const linux = verified.filter(asset => /_(?:amd64\.(?:AppImage|deb)|aarch64\.AppImage|arm64\.deb)$/.test(asset.name));
+  const sample = verified.find(asset => /^Scratchpad_[^_]+_/.test(asset.name));
+  const version = /^Scratchpad_([^_]+)_/.exec(sample?.name || "")?.[1];
+  const names = platformAssetNames(version, "linux").filter(name => !name.startsWith("SHA256SUMS"));
+  const linux = verified.filter(asset => names.includes(asset.name));
   if (linux.length !== 4 || new Set(linux.map(asset => asset.name)).size !== 4 || checksums.length !== 4
     || linux.some(asset => !checksums.includes(`${asset.sha256}  ${asset.name}`))) {
     throw new Error("Signed Linux manifest must cover the final AppImage and Debian packages for both architectures exactly");

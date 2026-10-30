@@ -26,7 +26,7 @@ jobs:
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils llvm
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
 
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -211,9 +211,7 @@ jobs:
 
       - name: Confirm native release toolchain
         if: matrix.release_platform != 'macos'
-        run: |
-          node -e "if (process.arch !== '${{ matrix.architecture }}') throw new Error('Expected native release Node.js architecture')"
-          node -e "const host = require('node:child_process').execFileSync('rustc', ['-vV'], {encoding:'utf8'}); if (!host.includes('host: ${{ matrix.target }}')) throw new Error('Expected native release Rust host')"
+        run: node scripts/check-native-toolchain.mjs ${{ matrix.architecture }} ${{ matrix.target }}
 
       - name: Import Linux release-signing key
         id: signing_key
@@ -317,25 +315,9 @@ jobs:
 
       - name: Inspect native Linux package payloads
         if: matrix.release_platform == 'linux'
-        shell: bash
         run: |
-          set -euo pipefail
-          bundle="$RUNNER_TEMP/release-assets"
-          mapfile -t appimages < <(find "$bundle" -maxdepth 1 -type f -name '*.AppImage')
-          mapfile -t debs < <(find "$bundle" -maxdepth 1 -type f -name '*.deb')
-          [[ ${#appimages[@]} -eq 1 && ${#debs[@]} -eq 1 ]] || { echo 'Expected one AppImage and DEB'; exit 1; }
-          expected_deb=amd64
-          if [[ "$RELEASE_ARCHITECTURE" == arm64 ]]; then expected_deb=arm64; fi
-          [[ "$(dpkg-deb --field "${debs[0]}" Architecture)" == "$expected_deb" ]] || { echo 'Wrong DEB architecture'; exit 1; }
-          inspection="$RUNNER_TEMP/release-inspection"
-          mkdir -p "$inspection/deb" "$inspection/appimage"
-          dpkg-deb --extract "${debs[0]}" "$inspection/deb"
-          chmod +x "${appimages[0]}"
-          (cd "$inspection/appimage" && "${appimages[0]}" --appimage-extract)
-          node scripts/verify-linux-release.mjs "$RELEASE_ARCHITECTURE" \
-            "src-tauri/target/${{ matrix.target }}/release/scratchpad" \
-            "$inspection/deb/usr/bin/scratchpad" \
-            "$inspection/appimage/squashfs-root/usr/bin/scratchpad"
+          bash scripts/inspect-linux-packages.sh "$RELEASE_ARCHITECTURE" "$RUNNER_TEMP/release-assets" \
+            "src-tauri/target/${{ matrix.target }}/release/scratchpad" scratchpad "$RUNNER_TEMP/release-inspection"
 
       - name: Verify Linux embedded signatures and record native package hashes
         if: matrix.release_platform == 'linux'
@@ -391,10 +373,6 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-      - name: Install multi-architecture ELF inspection tool
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y llvm
       - name: Download both Linux package pairs from this run
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -426,7 +404,6 @@ jobs:
           GNUPGHOME: ${{ runner.temp }}/release-signing-gnupg
           SIGNING_KEY_FINGERPRINT: ${{ steps.signing_key.outputs.fingerprint }}
           VERIFICATION_EVIDENCE_PATH: ${{ runner.temp }}/checksum-verification/linux-checksums.json
-          OBJCOPY: llvm-objcopy
         run: scripts/sign-linux-release.sh site/release-signing-key.asc --assets-dir "$RUNNER_TEMP/release-assets" --architecture all
       - name: Remove release-signing key and runtime sockets
         if: always()

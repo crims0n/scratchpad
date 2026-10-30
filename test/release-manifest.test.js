@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { buildReleaseManifest } from "../scripts/generate-release-manifest.mjs";
+import { selectPrimaryAsset } from "../site/release-ui.js";
 import { expectedAssets } from "../scripts/release-verification.mjs";
 
 const release = {
@@ -70,7 +71,11 @@ test("the catalog recognizes all ten stable installers with explicit architectur
   for (const platform of ["linux", "windows"]) for (const architecture of ["x64", "arm64"]) {
     const pair = manifest.release.assets.filter(asset => asset.platform === platform && asset.architecture === architecture);
     assert.equal(pair.length, 2);
-    assert.equal(pair.filter(asset => asset.primary).length, 1);
+    assert.equal(pair.filter(asset => asset.primary).length, architecture === "x64" ? 1 : 0);
+  }
+  for (const platform of ["linux", "windows"]) {
+    assert.equal(manifest.release.assets.filter(asset => asset.platform === platform && asset.primary).length, 1);
+    assert.equal(selectPrimaryAsset([...manifest.release.assets].reverse(), platform).architecture, "x64");
   }
   assert.equal(manifest.channels.stable.version, "1.1.0");
   assert.equal(manifest.channels.beta.version, "1.1.0");

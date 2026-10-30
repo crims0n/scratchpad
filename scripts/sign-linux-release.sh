@@ -28,6 +28,18 @@ case "$architecture" in
   *) echo 'Architecture must be x64, arm64 or all' >&2; exit 2 ;;
 esac
 
+# Reject invalid evidence/mode combinations before reading keys or touching
+# package/checksum files. Probe signing intentionally supports one pair.
+if [[ "$packages_only" == true ]]; then
+  [[ "$architecture" != all && -n "${VERIFICATION_EVIDENCE_PATH:-}" && -z "${SIGNING_VALIDATION_EVIDENCE_PATH:-}" ]] \
+    || { echo 'Package-only mode requires one stable architecture record' >&2; exit 2; }
+elif [[ -n "${VERIFICATION_EVIDENCE_PATH:-}" && "$architecture" != all ]]; then
+  echo 'Stable checksum evidence requires both architectures' >&2; exit 2
+fi
+if [[ -n "${SIGNING_VALIDATION_EVIDENCE_PATH:-}" && "$architecture" == all ]]; then
+  echo 'Probe evidence requires one architecture' >&2; exit 2
+fi
+
 : "${assets_dir:?--assets-dir must select local release assets}"
 assets_dir=$(cd "$assets_dir" && pwd)
 
@@ -67,24 +79,15 @@ gpg --batch --dearmor < "$public_key" > "$work/verify/release-signing.gpg"
 key_fingerprints=$(gpg --batch --show-keys --with-colons "$public_key" | awk -F: '$1 == "fpr" { print $10 }')
 grep -qx "$fingerprint" <<< "$key_fingerprints" || fail "Imported key $fingerprint is not the published key."
 
-# 2. Require an embedded signature packet identifying the published key.
-# The authenticated checksum manifest below binds the complete final bytes.
+# 2. Authenticate each embedded signature over appimagetool's normalized
+# digest, using only the published public key. Never execute the AppImage.
 for appimage in "${appimages[@]}"; do
-  "${OBJCOPY:-objcopy}" --dump-section .sha256_sig="$work/verify/appimage.sig.raw" "$appimage" "$work/verify/appimage.discard" 2>/dev/null \
-    || fail "$appimage has no .sha256_sig section."
-  tr -d '\000' < "$work/verify/appimage.sig.raw" > "$work/verify/appimage.sig.asc"
-  grep -q "BEGIN PGP SIGNATURE" "$work/verify/appimage.sig.asc" || fail "$appimage is not signed (empty .sha256_sig)."
-  issuer=$(gpg --batch --list-packets "$work/verify/appimage.sig.asc" 2>/dev/null \
-    | sed -n 's/.*issuer fpr v4 \([0-9A-F]\{40\}\).*/\1/p' | head -n 1)
-  grep -qx "$issuer" <<< "$key_fingerprints" || fail "$appimage was signed by ${issuer:-an unknown key}, not the published key."
-  echo "AppImage embedded signature issued by $issuer"
-
+  node "$scripts/appimage-signature.mjs" "$appimage" "$public_key"
 done
 
 # Build jobs inspect native package payloads before recording these hashes.
 # They leave checksum creation to the single aggregation job.
 if [[ "$packages_only" == true ]]; then
-  [[ "$architecture" != all ]] || fail 'Package-only verification requires one architecture.'
   for file in "${packages[@]}"; do
     cmp -s "$file" "$assets_dir/$file" || fail "Package changed during verification: $file"
   done
@@ -99,23 +102,29 @@ rm -f SHA256SUMS.asc
 gpg --batch --local-user "$fingerprint" --armor --detach-sign --output SHA256SUMS.asc SHA256SUMS
 
 # 4. Verify the way users will, then prove tampering is detected.
-gpgv --keyring "$work/verify/release-signing.gpg" SHA256SUMS.asc SHA256SUMS
+gpgv --homedir "$work/verify" --keyring "$work/verify/release-signing.gpg" SHA256SUMS.asc SHA256SUMS
 sha256sum --check --strict SHA256SUMS
 
 cp SHA256SUMS "$work/verify/SHA256SUMS.modified"
 echo "0000000000000000000000000000000000000000000000000000000000000000  extra.bin" >> "$work/verify/SHA256SUMS.modified"
-if gpgv --keyring "$work/verify/release-signing.gpg" SHA256SUMS.asc "$work/verify/SHA256SUMS.modified" 2>/dev/null; then
+if gpgv --homedir "$work/verify" --keyring "$work/verify/release-signing.gpg" SHA256SUMS.asc "$work/verify/SHA256SUMS.modified" 2>/dev/null; then
   fail "A modified SHA256SUMS still verified."
 fi
 
 mkdir "$work/verify/tampered"
 for file in "${packages[@]}"; do
   cp "$file" "$work/verify/tampered/"
-  size=$(stat -c %s "$file")
-  printf '\x00' | dd of="$work/verify/tampered/$file" bs=1 seek=$((size / 2)) conv=notrunc status=none
-  if cmp -s "$file" "$work/verify/tampered/$file"; then
-    printf '\x01' | dd of="$work/verify/tampered/$file" bs=1 seek=$((size / 2)) conv=notrunc status=none
-  fi
+  node --input-type=module - "$work/verify/tampered/$file" <<'NODE'
+import { openSync, fstatSync, readSync, writeSync, closeSync } from "node:fs";
+const file = openSync(process.argv[2], "r+");
+try {
+  const position = Math.floor(fstatSync(file).size / 2);
+  const byte = Buffer.alloc(1);
+  if (readSync(file, byte, 0, 1, position) !== 1) throw new Error("Empty tamper fixture");
+  byte[0] ^= 1;
+  writeSync(file, byte, 0, 1, position);
+} finally { closeSync(file); }
+NODE
 done
 cp SHA256SUMS "$work/verify/tampered/"
 if (cd "$work/verify/tampered" && sha256sum --check --strict --quiet SHA256SUMS 2>/dev/null); then
@@ -131,10 +140,8 @@ for file in "${packages[@]}" SHA256SUMS SHA256SUMS.asc; do
 done
 cd "$assets_dir"
 if [[ -n "${VERIFICATION_EVIDENCE_PATH:-}" ]]; then
-  [[ "$architecture" == all ]] || fail 'Stable checksum evidence requires both architectures.'
   node "$scripts/release-verification.mjs" linux SHA256SUMS SHA256SUMS.asc
 fi
 if [[ -n "${SIGNING_VALIDATION_EVIDENCE_PATH:-}" ]]; then
-  [[ "$architecture" != all ]] || fail 'Probe evidence requires one architecture.'
   node "$scripts/record-linux-signing-validation.mjs" "$architecture" "$fingerprint" "${packages[@]}" SHA256SUMS SHA256SUMS.asc
 fi

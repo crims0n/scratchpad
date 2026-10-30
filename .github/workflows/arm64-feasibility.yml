@@ -75,9 +75,9 @@ jobs:
           workspaces: ./src-tauri -> target
 
       - name: Confirm native ARM64 toolchain
+        shell: bash
         run: |
-          node -e "if (process.arch !== 'arm64') throw new Error('Expected native ARM64 Node.js'); console.log(process.platform, process.arch)"
-          node -e "const host = require('node:child_process').execFileSync('rustc', ['-vV'], {encoding:'utf8'}); console.log(host); if (!host.includes('host: ${{ matrix.target }}')) throw new Error('Expected native ARM64 Rust host')"
+          node scripts/check-native-toolchain.mjs arm64 ${{ matrix.target }}
           node -e "const config = require('./src-tauri/tauri.conf.json'); if (config.identifier !== 'io.github.crims0n.scratchpad.dev' || config.mainBinaryName !== 'scratchpad-dev') throw new Error('Expected isolated development identity')"
 
       - name: Install frontend dependencies
@@ -102,12 +102,9 @@ jobs:
           mapfile -t appimages < <(find "$bundle/appimage" -maxdepth 1 -type f -name '*.AppImage')
           mapfile -t debs < <(find "$bundle/deb" -maxdepth 1 -type f -name '*.deb')
           [[ ${#appimages[@]} -eq 1 && ${#debs[@]} -eq 1 ]] || { echo 'Expected one AppImage and one DEB'; exit 1; }
-          [[ "$(dpkg-deb --field "${debs[0]}" Architecture)" == arm64 ]] || { echo 'DEB architecture must be arm64'; exit 1; }
           inspection="$RUNNER_TEMP/arm64-inspection"
-          mkdir -p "$inspection/deb" "$inspection/appimage"
-          dpkg-deb --extract "${debs[0]}" "$inspection/deb"
-          chmod +x "${appimages[0]}"
-          (cd "$inspection/appimage" && "${appimages[0]}" --appimage-extract)
+          bash scripts/inspect-linux-packages.sh arm64 "$bundle" \
+            src-tauri/target/aarch64-unknown-linux-gnu/release/scratchpad-dev scratchpad-dev "$inspection"
           node scripts/verify-arm64-build.mjs --platform linux \
             --package "${appimages[0]}" --package "${debs[0]}" \
             --built "src-tauri/target/aarch64-unknown-linux-gnu/release/scratchpad-dev" \

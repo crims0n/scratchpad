@@ -32,7 +32,7 @@ Record each result with the run URL in the release-preparation PR or tracking is
 | --- | --- | --- |
 | macOS | Expected Developer ID team `B62UYUQ6C3`; app and DMG notarized and stapled; Gatekeeper acceptance; hardened runtime without entitlements; native and Rosetta MCP launch checks; stapled DMG bytes match the independent signing record and final upload digest | One universal `.dmg` and `.app.tar.gz` |
 | Windows | Expected publisher `Patrick McDowell`; SHA-256 signatures and trusted timestamps on both installers and their installed executables/DLLs | x64 and ARM64 `-setup.exe` / `.msi` pairs |
-| Linux | Published GPG key fingerprint matches; AppImage embedded signature issuer matches; signed checksums verify with only the public key; modified checksums and packages are rejected | `_amd64.AppImage`, `_amd64.deb`, `_aarch64.AppImage`, `_arm64.deb`, and one combined `SHA256SUMS` / `SHA256SUMS.asc` |
+| Linux | Published GPG key fingerprint matches; AppImage embedded signatures cryptographically verify with only the published key; all bundled ELF files match the selected architecture; signed checksums verify with only the public key; modified checksums and packages are rejected | `_amd64.AppImage`, `_amd64.deb`, `_aarch64.AppImage`, `_arm64.deb`, and one combined `SHA256SUMS` / `SHA256SUMS.asc` |
 
 Read the platform signing guides for detailed checks: [macOS](macos-release-signing.md), [Windows](windows-release-signing.md), and [Linux](release-signing.md).
 
