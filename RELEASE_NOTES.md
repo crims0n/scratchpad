@@ -10,16 +10,24 @@
 
 Choose the package for your operating system and processor. Windows/Linux **ARM64** packages require an ARM64 system; **x64 (Intel / AMD)** packages target x64 systems. See [Download selection](https://github.com/crims0n/scratchpad/blob/main/docs/download-selection.md) for browser detection limits and manual selection.
 
-Before upgrading from v1.0.0, back up local notes and workspace collections, resolve any failed-save or recovery message, and quit Scratchpad and its MCP clients. Keep the same processor architecture and installer format for a routine upgrade. AppImage users should replace their chosen file and update launchers and MCP commands if its path changes.
+Before upgrading, back up local notes and workspace collections, resolve any failed-save or recovery message, and quit Scratchpad and its MCP clients. AppImage users should replace their chosen file and update launchers and MCP commands if its path changes.
 
 The production app/data identity and executable names are retained. Check notes, folders/order, pins, trash, preferences, workspace reconnection and MCP access after installation and restart. Collection backups do not include preferences or MCP configuration; preserve those separately. Do not delete app data or use an app cleaner during an upgrade.
 
-The first native ARM64 packages have no earlier native stable package to upgrade from. Switching an emulated x64 installation to ARM64, or changing installer formats, requires separate acceptance testing; do not assume these paths preserve an existing installation. The [v1.1.0 candidate record](https://github.com/crims0n/scratchpad/blob/main/docs/releases/1.1.0.md) tracks the required results before publication. Beta users should also follow [Upgrading from beta to 1.0](https://github.com/crims0n/scratchpad/blob/main/docs/transition-to-1.0.md).
+The first native ARM64 packages have no earlier native stable package to upgrade from. Switching an emulated x64 installation to ARM64, or changing installer formats, is a separate migration; do not assume these paths preserve an existing installation.
+
+## Upgrading directly from Beta
+
+The [Beta-to-stable upgrade guide](https://github.com/crims0n/scratchpad/blob/main/docs/transition-to-1.0.md) also applies when upgrading directly to v1.1.0. Keep the same processor architecture and installer format for this transition.
+
+- On macOS, install `Scratchpad.app` and check your data before removing the old `Scratchpad Beta.app` bundle. Keep its associated app data and update MCP clients to the new app path.
+- Windows MSI retains the Beta upgrade family. The EXE installer detects the old per-user Beta installation and removes it with app-data deletion disabled; close Beta and its MCP clients first. A locked executable or failed removal stops the transition.
+- The Debian package replaces `scratchpad-beta`. AppImage users should replace their chosen file and update launchers and MCP commands containing the old filename.
 
 ## Verification and limitations
 
-Verify Linux downloads with `SHA256SUMS`, `SHA256SUMS.asc` and the published release-signing key, following [Verifying Linux downloads](https://github.com/crims0n/scratchpad/blob/main/docs/verify-linux-downloads.md). The manifest covers both architectures; use the entry for your exact filename. Launching an AppImage does not automatically validate its signature, and a directly downloaded Debian package requires explicit verification.
+The Linux checksum manifest covers both architectures; use the entry for your exact filename.
 
-Windows signatures identify Patrick McDowell as the publisher; SmartScreen may still warn while download reputation builds. Signing and automated payload checks do not establish native installed-package acceptance. The candidate remains unpublished until its package, upgrade and MCP checks are recorded.
+Windows signatures identify Patrick McDowell as the publisher; SmartScreen may still warn while download reputation builds.
 
-Notes, workspace files, backups, trash and recovery copies are unencrypted. Do not run multiple instances against the same collection or workspace file. Keep important backups outside the app data directory. Update checks remain optional, off by default, and installation is manual.
+Notes, workspace files, backups, trash and recovery copies are unencrypted. Do not run multiple instances against the same collection or workspace file. Keep important backups outside the app data directory. Folding remains limited to 100,000 characters and 10,000 lines. Encryption, remote sync, dedicated PDF export and in-app update installation are not included; native printing can save to PDF where the operating system supports it. Update checks remain optional, off by default, and installation is manual.

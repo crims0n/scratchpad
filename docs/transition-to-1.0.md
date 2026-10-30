@@ -1,12 +1,14 @@
 # Upgrading from beta to 1.0
 
-This is the upgrade procedure prepared for the 1.0 candidate. Until 1.0 is
-published, downloads continue to point to v0.8.2. Installed-package verification remains tracked in
+The first stable release, v1.0.0, is published. This Beta-to-stable procedure also
+applies to a direct upgrade to v1.1.0 using the same processor architecture and
+installer format. Use the intended release's version and filename in the
+examples below. Historical 1.0 acceptance is recorded in
 [#33](https://github.com/crims0n/scratchpad/issues/33) and
-[#35](https://github.com/crims0n/scratchpad/issues/35); the configuration changes
-and automated checks alone do not establish that every platform upgrade works.
+[#35](https://github.com/crims0n/scratchpad/issues/35); final v1.1.0 packages need
+their own Beta-upgrade acceptance in [#132](https://github.com/crims0n/scratchpad/issues/132).
 
-Scratchpad 1.0 will remove the visible Beta name and use one release track.
+Scratchpad 1.0 removed the visible Beta name and established one release track.
 It keeps the published application identifier,
 `io.github.crims0n.scratchpad.beta`, for continuity of local storage, native
 recovery and safety copies, workspace preferences, and MCP discovery. The
@@ -24,8 +26,8 @@ import is required solely because of the display-name change.
    additional protection, not a reason to delete or reset app data.
 3. Resolve any recovery-required or failed-save message before proceeding.
    Quit Scratchpad and stop MCP clients that launch its executable. Do not run
-   beta and 1.0 against the same data at the same time.
-4. Download the candidate for your platform. Review the signing checks in the
+   Beta and stable against the same data at the same time.
+4. Download the intended release for your platform and processor. Review the signing checks in the
    [release checklist](release-checklist.md#review-signing-results), and
    [verify Linux downloads](verify-linux-downloads.md) before installing them.
 
@@ -37,7 +39,7 @@ import is required solely because of the display-name change.
   check your data before removing the old application bundle. Do not use an
   app cleaner or remove its associated data. Update MCP clients to use
   `/Applications/Scratchpad.app/Contents/MacOS/scratchpad` when installed there.
-- **Windows, MSI:** upgrade using the MSI installer. The 1.0 configuration
+- **Windows, MSI:** upgrade using the MSI installer. The production configuration
   explicitly retains the upgrade code generated for the published beta, so
   the product-name change does not create a different MSI upgrade family.
   Verify the installed path before updating your MCP client.
@@ -114,20 +116,21 @@ results, and any defect links. Include:
 - MSI replacing the previous product, NSIS retaining data during the
   installer-controlled transition, Debian replacing `scratchpad-beta`, and removal of stale
   launchers without deleting user data.
-- NSIS interactive confirmation and cancellation, plus the complete 1.0
+- NSIS interactive confirmation and cancellation, plus the complete selected
   installer on a clean supported Windows system. CI tests the production hook
   against the actual signed v0.8.2 NSIS installer with disposable profile data:
   clean install, invalid records, missing uninstaller, locked executable,
   uninstall failure/incomplete removal, successful data retention, cleanup of
   the old uninstaller, and repeat installation. That does not replace acceptance
-  of the final 1.0 package or its interactive UI.
+  of the final selected package or its interactive UI.
 - An installed v0.8.2 client discovering the published stable release; the new
   client reporting no update to the same or an older version.
 
-Stable packaging and publication are tracked separately in
-[#34](https://github.com/crims0n/scratchpad/issues/34). Complete the broader
-[#35 acceptance checklist](https://github.com/crims0n/scratchpad/issues/35)
-before signing off for publication.
+Historical 1.0 packaging/publication and broader acceptance are recorded in
+[#34](https://github.com/crims0n/scratchpad/issues/34) and
+[#35](https://github.com/crims0n/scratchpad/issues/35). For v1.1.0, record fresh
+results in [#132](https://github.com/crims0n/scratchpad/issues/132) and the
+[candidate acceptance record](releases/1.1.0.md) before publication sign-off.
 
 ## Persistent packaging values
 
@@ -149,7 +152,7 @@ retain [`wix.upgradeCode`](https://v2.tauri.app/reference/config/#wixconfig), an
 Debian [`conflicts` / `replaces`](https://v2.tauri.app/reference/config/#debconfig).
 The beta workflow and beta configuration have been retired. **Stable Release**
 (`release.yml`) applies the production override and required platform signing
-configuration, then leaves `v1.0.0` as a draft for review. After 1.0, `main`
+configuration, then leaves the selected version as a draft for review. After 1.0, `main`
 remains the development line, changes use short-lived PR branches, and there is
 one stable release workflow. There is no ongoing beta release channel; the
 old identifier and manifest alias serve existing users' data and discovery only.
