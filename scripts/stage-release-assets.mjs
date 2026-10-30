@@ -7,8 +7,8 @@ import { hashFile, platformAssetNames } from "./release-verification.mjs";
 
 // Tauri-action reports the .app directory before creating its .tar.gz archive.
 // Normalize that archive's release name here, without a release-upload token.
-export async function stageReleaseAssets({ platform, version, artifactPaths, outputDir }) {
-  const names = platformAssetNames(version, platform).filter(name => !name.startsWith("SHA256SUMS"));
+export async function stageReleaseAssets({ platform, architecture, version, artifactPaths, outputDir }) {
+  const names = platformAssetNames(version, platform, architecture).filter(name => !name.startsWith("SHA256SUMS"));
   if (!Array.isArray(artifactPaths) || artifactPaths.some(path => typeof path !== "string" || !path)) {
     throw new Error("Tauri must return an array of artifact paths");
   }
@@ -20,6 +20,7 @@ export async function stageReleaseAssets({ platform, version, artifactPaths, out
       name = names.find(name => name.endsWith(".app.tar.gz"));
     }
     if (sources.has(name)) sources.get(name).add(resolve(source));
+    else if (/\.(AppImage|deb|exe|msi|dmg|app\.tar\.gz)$/i.test(name)) throw new Error(`Unexpected built installer: ${name}`);
   }
   const selected = [];
   for (const name of names) {
@@ -43,6 +44,7 @@ export async function stageReleaseAssets({ platform, version, artifactPaths, out
 
 async function main() {
   const files = await stageReleaseAssets({ platform: process.env.RELEASE_PLATFORM, version: process.env.RELEASE_VERSION,
+    architecture: process.env.RELEASE_ARCHITECTURE,
     artifactPaths: JSON.parse(process.env.ARTIFACT_PATHS || "null"), outputDir: process.env.RELEASE_ASSETS_DIR });
   if (process.env.GITHUB_OUTPUT) await appendFile(process.env.GITHUB_OUTPUT, `asset_paths=${JSON.stringify(files)}\n`);
 }

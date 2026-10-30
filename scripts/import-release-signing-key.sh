@@ -37,11 +37,16 @@ fi
 
 # Loopback lets gpg accept a passphrase from callers; presetting below means
 # appimagetool's own gpg invocation never needs to ask.
-cat >> "$GNUPGHOME/gpg-agent.conf" <<'CONF'
-allow-loopback-pinentry
-allow-preset-passphrase
-CONF
-echo "pinentry-mode loopback" >> "$GNUPGHOME/gpg.conf"
+ensure_option() {
+  local file=$1 option=$2
+  touch "$file"
+  # Preserve existing configuration; adding a separator also handles a file
+  # whose final line has no newline. Repeated imports do not add duplicates.
+  if ! grep -Fxq "$option" "$file"; then printf '\n%s\n' "$option" >> "$file"; fi
+}
+ensure_option "$GNUPGHOME/gpg-agent.conf" allow-loopback-pinentry
+ensure_option "$GNUPGHOME/gpg-agent.conf" allow-preset-passphrase
+ensure_option "$GNUPGHOME/gpg.conf" 'pinentry-mode loopback'
 gpgconf --kill gpg-agent
 
 printf '%s\n' "$RELEASE_SIGNING_GPG_PRIVATE_KEY" | gpg --batch --import

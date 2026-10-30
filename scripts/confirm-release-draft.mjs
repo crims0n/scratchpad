@@ -31,7 +31,7 @@ async function main() {
       release: () => JSON.parse(execFileSync("gh", ["api", `repos/${repository}/releases/${releaseId}`],
         { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }))
     } });
-  const summary = `## Confirmed current stable draft v${result.version}\n\nChecked GitHub at ${new Date().toISOString()}. Release ID: ${result.releaseId}. Source: \`${result.commit}\`. The candidate is still an unpublished stable draft, and all eight current asset IDs, sizes and SHA-256 digests match the downloaded snapshot verified by this workflow run. It is ready for installed-package acceptance.\n`;
+  const summary = `## Confirmed current stable draft v${result.version}\n\nChecked GitHub at ${new Date().toISOString()}. Release ID: ${result.releaseId}. Source: \`${result.commit}\`. The candidate is still an unpublished stable draft, and all twelve current asset IDs, sizes and SHA-256 digests match the downloaded snapshot verified by this workflow run. It is ready for installed-package acceptance.\n`;
   process.stdout.write(summary);
   if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, summary);
 }

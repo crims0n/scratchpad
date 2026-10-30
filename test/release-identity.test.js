@@ -42,7 +42,7 @@ test("the renamed Debian package replaces the previously published beta", async 
 test("every stable build selects the production identity without a beta override", async () => {
   const workflow = await readFile(new URL("../.github/workflows/release.yml", import.meta.url), "utf8");
   const entries = [...workflow.matchAll(/- platform: (\S+)\r?\n\s+args: >-\r?\n((?:[ \t]+--.*\r?\n)+)/g)];
-  assert.equal(entries.length, 3);
+  assert.equal(entries.length, 5);
   for (const [, platform, args] of entries) {
     const configs = [...args.matchAll(/--config (\S+)/g)].map(match => match[1]);
     assert.equal(configs[0], "src-tauri/tauri.release.conf.json", platform);
@@ -53,7 +53,7 @@ test("every stable build selects the production identity without a beta override
   assert.match(workflow, /scripts\/check-stable-release.mjs/);
   assert.match(workflow, /scripts\/prepare-stable-release.mjs/);
   assert.match(workflow, /scripts\/verify-release-draft.mjs/);
-  assert.match(workflow, /needs: \[validate, prepare, build\]/);
+  assert.match(workflow, /needs: \[validate, prepare, build, linux-checksums\]/);
 });
 
 test("repository write access is confined to dependency-free draft preparation, upload and confirmation jobs", async () => {
@@ -79,9 +79,9 @@ test("repository write access is confined to dependency-free draft preparation, 
   }
   assert.match(build, /environment: release-signing/);
   assert.match(build, /id-token: write/);
-  assert.equal((workflow.match(/persist-credentials: false/g) || []).length, 6);
+  assert.equal((workflow.match(/persist-credentials: false/g) || []).length, 7);
   assert.equal((workflow.match(/npm ci --ignore-scripts/g) || []).length, 3);
-  assert.equal((build.match(/-- --locked/g) || []).length, 3);
+  assert.equal((build.match(/-- --locked/g) || []).length, 5);
   assert.doesNotMatch(workflow, /steps\.tauri\.outputs\.releaseId|needs\.build\.outputs\.release_id|gh release download/);
   assert.doesNotMatch(build, /releaseId:|tagName:|releaseName:|releaseDraft:|releaseCommitish:|releaseBody:|generateReleaseNotes:/);
 });
@@ -94,9 +94,9 @@ test("signed files and independent evidence stay within this run and verificatio
   const confirm = workflow.split("  confirm-draft:\n")[1];
   assert.match(build, /node scripts\/stage-release-assets.mjs/);
   assert.match(build, /ARTIFACT_PATHS: \$\{\{ steps.stage_assets.outputs.asset_paths \}\}/);
-  assert.match(build, /name: signed-release-\$\{\{ matrix.platform \}\}/);
-  assert.match(build, /name: release-verification-\$\{\{ matrix.platform \}\}/);
-  assert.match(upload, /needs: \[validate, prepare, build\]/);
+  assert.match(build, /name: signed-release-\$\{\{ matrix.release_platform \}\}-\$\{\{ matrix.architecture \}\}/);
+  assert.match(build, /name: release-verification-\$\{\{ matrix.release_platform \}\}-\$\{\{ matrix.architecture \}\}/);
+  assert.match(upload, /needs: \[validate, prepare, build, linux-checksums\]/);
   assert.match(upload, /pattern: signed-release-\*/);
   assert.match(upload, /node scripts\/upload-release-draft.mjs/);
   assert.match(verify, /needs: \[validate, prepare, upload-draft\]/);
@@ -108,7 +108,7 @@ test("signed files and independent evidence stay within this run and verificatio
   assert.match(confirm, /needs: \[validate, prepare, verify-draft\]/);
   assert.match(confirm, /VERIFIED_DRAFT: \$\{\{ needs.verify-draft.outputs.verified_draft \}\}/);
   assert.match(confirm, /node scripts\/confirm-release-draft.mjs/);
-  assert.equal((workflow.match(/digest-mismatch: error/g) || []).length, 4);
+  assert.equal((workflow.match(/digest-mismatch: error/g) || []).length, 6);
   assert.doesNotMatch(workflow, /run-id:|github-token:|repository:/);
 });
 
