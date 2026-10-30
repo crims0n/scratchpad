@@ -23,7 +23,7 @@ The [product website](https://crims0n.github.io/scratchpad/) lists published dow
 
 Start with the [release checklist](release-checklist.md). It links the required source review, installed-package acceptance, and publication records. A passing source test or signing job does not establish that every native installation/upgrade scenario has passed.
 
-The [v1.1.0 candidate acceptance record](releases/1.1.0.md) tracks the next signed production candidate and the native ARM64 checks required before publication.
+The [v1.1.0 candidate acceptance record](releases/1.1.0.md) records the verified signed draft and reported installation/launch testing. Per-platform evidence, functional/MCP/uninstall checks, upgrades, visual catalog verification and publication checks remain open.
 
 - [macOS signing and notarization](macos-release-signing.md).
 - [Windows signing](windows-release-signing.md).
