@@ -155,6 +155,8 @@ The workflow does not publish automatically. No write-authorized release job ins
 
 The [Pages workflow](../.github/workflows/pages.yml) stages `site/` plus `images/`, generates a manifest from published GitHub releases, and deploys static assets. The website and current desktop updater prefer a published stable release; the beta fallback/legacy alias serves pre-1.0 clients. Drafts are never advertised. The [transition guide](transition-to-1.0.md) explains the retained identifier and discovery compatibility.
 
+The website matches its selected OS/CPU to that manifest. Reliable 64-bit Client Hints can suggest x64/ARM64; missing hints require an explicit choice, and macOS uses Universal. User choices override asynchronous detection. Unavailable architectures never fall back to another CPU's installer. The full catalog preserves each architecture's formats, URLs and checksums. See [download selection](download-selection.md).
+
 ## Validation boundaries
 
 `npm run check` covers version consistency, JavaScript syntax, unit tests, and JSDOM integration tests using stubbed native calls. Rust tests cover native logic/IPC, SQLite, export verification, and loopback MCP behavior. CI adds Windows workspace/installer-transition checks and macOS quit formatting, Clippy, and native tests.

@@ -43,6 +43,27 @@
             <span class="release-badge" id="release-badge">Latest release</span>
             <time id="release-date"></time>
           </div>
+          <div class="download-choices" id="download-choices" hidden>
+            <label for="download-platform">Operating system
+              <select id="download-platform">
+                <option value="unknown">Choose operating system</option>
+                <option value="macos">macOS</option>
+                <option value="windows">Windows</option>
+                <option value="linux">Linux</option>
+              </select>
+            </label>
+            <label for="download-architecture">Processor type
+              <select id="download-architecture" aria-describedby="processor-help-label">
+                <option value="unknown">Choose processor type</option>
+              </select>
+            </label>
+            <details class="processor-help" id="processor-help">
+              <summary id="processor-help-label">Which processor type do I need?</summary>
+              <p><strong>x64</strong> is for 64-bit Intel and AMD processors. <strong>ARM64</strong> is for 64-bit ARM processors, including Snapdragon PCs and ARM Linux computers.</p>
+              <p>On Windows, check Settings → System → About → System type. On Linux, run <code>uname -m</code>: <code>x86_64</code> means x64; <code>aarch64</code> or <code>arm64</code> means ARM64. The macOS Universal package supports both Apple Silicon and Intel.</p>
+              <p>Only packages published in the displayed release can be downloaded. A detected processor type is a suggestion; you can change it.</p>
+            </details>
+          </div>
           <a class="primary-download" id="primary-download" href="https://github.com/crims0n/scratchpad/releases">View GitHub Releases</a>
           <span class="primary-detail" id="primary-detail">Downloads for macOS, Windows, and Linux</span>
           <p class="platform-hint" id="platform-hint">Detecting your platform…</p>
@@ -145,7 +166,7 @@
       <div class="catalog-copy">
         <span class="section-kicker">Every package</span>
         <h2 id="catalog-title">Downloads and checksums</h2>
-        <p>Choose an alternate installer or verify your download against its SHA-256 digest.</p>
+        <p>Choose the operating system, processor type and installer format for your computer. Each package has its own SHA-256 digest.</p>
         <p class="release-notes" id="release-notes">Loading the newest release notes…</p>
         <div class="signing-key" id="verify-linux">
           <h3>Verify Linux packages</h3>
