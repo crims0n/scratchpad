@@ -10,6 +10,7 @@ import { promisify } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 import { buildReleaseManifest } from "../scripts/generate-release-manifest.mjs";
+import { expectedAssets } from "../scripts/release-verification.mjs";
 import { assertLiveManifest, fetchLiveManifest, releaseFeedUrl, verifyPagesRelease } from "../scripts/verify-pages-release.mjs";
 
 const fixture = JSON.parse(await readFile(new URL("fixtures/release-transition.json", import.meta.url), "utf8"));
@@ -38,6 +39,21 @@ test("live verification tolerates JSON key order and generation time, not releas
   const live = Object.fromEntries(Object.entries(clone()).reverse());
   live.generatedAt = "2026-11-01T00:00:00Z";
   assertLiveManifest(expected, live);
+});
+
+test("live verification covers every ARM64 installer URL and hash in the expanded catalog", () => {
+  const catalog = buildReleaseManifest([{ tag_name: "v1.1.0", draft: false, prerelease: false,
+    published_at: "2026-10-30T00:00:00Z", assets: expectedAssets("1.1.0").map(name => ({ name,
+      browser_download_url: `https://github.com/${repository}/releases/download/v1.1.0/${name}`,
+      size: 1000, digest: `sha256:${"a".repeat(64)}` })) }]);
+  assertLiveManifest(catalog, structuredClone(catalog));
+  const arm = catalog.release.assets.filter(asset => asset.architecture === "arm64");
+  assert.equal(arm.length, 4);
+  for (const asset of arm) for (const field of ["url", "sha256"]) {
+    const live = structuredClone(catalog);
+    live.release.assets.find(item => item.name === asset.name)[field] += "changed";
+    assert.throws(() => assertLiveManifest(catalog, live), error => error.message.includes(asset.name) && error.message.includes(`.${field}`));
+  }
 });
 
 test("same-tag mismatch diagnostics identify the exact field and affected installer", () => {

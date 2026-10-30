@@ -8,6 +8,8 @@ Scratchpad is a lightweight, open-source, local-first desktop editor for notes, 
 
 [Visit the Scratchpad website](https://crims0n.github.io/scratchpad/) for an OS-aware download and SHA-256 checksums.
 
+Use the download panel to choose your operating system and processor type: x64 for 64-bit Intel/AMD, ARM64 for 64-bit ARM, or Universal for Apple Silicon/Intel Macs. If the browser cannot identify a supported processor, choose it explicitly. Only packages in the displayed published release are offered; see [download selection](docs/download-selection.md) for details.
+
 **On this page:**
 [Install](#install) · [First steps](#first-steps) · [Features](#features) · [Storage and privacy](#storage-and-privacy) · [Agent access (MCP)](#agent-access-mcp) ·
 [Delete and recover notes](#delete-and-recover-notes) · [Keyboard shortcuts](#keyboard-shortcuts) · [Markdown editing](#markdown-editing) · [Themes](#themes) ·

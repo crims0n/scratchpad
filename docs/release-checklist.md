@@ -45,7 +45,7 @@ Read the platform signing guides for detailed checks: [macOS](macos-release-sign
 
 Record OS, hardware/architecture, installer format, source commit and package hashes for each result. On ARM64, verify supported upgrade/package-switching paths with backed-up data and document any cross-architecture or installer-format limitation; x64 emulation and extraction alone do not establish native GUI/MCP acceptance.
 
-Before the first ARM64 publication, complete the download-selection and native acceptance work tracked in [#132](https://github.com/crims0n/scratchpad/issues/132). See [the ARM64 stable pipeline](arm64-stable-release.md) for the complete matrix and evidence flow.
+Before the first ARM64 publication, complete native acceptance and verify [download selection](download-selection.md) against the real candidate: Windows/Linux x64 and ARM64, macOS Universal, manual platform/processor changes, unknown/denied hints, and unavailable-architecture behavior. Require the rendered catalog and canonical feed to contain every final installer URL/hash. Track the results in [#132](https://github.com/crims0n/scratchpad/issues/132). See [the ARM64 stable pipeline](arm64-stable-release.md) for the complete matrix and evidence flow.
 
 Only publish the draft after recording these acceptance results and reviewing the release notes and complete asset list. Publishing updates the website's release manifest; draft builds do not replace the public downloads.
 

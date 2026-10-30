@@ -189,6 +189,50 @@ h1 span {
   font-size: 0.7rem;
 }
 
+.download-choices:not([hidden]) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.download-choices label {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.download-choices select {
+  display: block;
+  width: 100%;
+  min-height: 42px;
+  margin-top: 5px;
+  padding: 6px;
+  border: 1px solid var(--border-bright);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+}
+
+.download-choices select:focus-visible {
+  outline: 2px solid var(--purple-light);
+  outline-offset: 2px;
+}
+
+.processor-help {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.processor-help summary {
+  padding: 2px 0;
+  font-size: inherit;
+}
+
+.processor-help p { margin: 8px 0 0; }
+
 .primary-download {
   min-height: 50px;
   display: flex;
@@ -406,6 +450,14 @@ summary {
   font-size: 0.7rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.architecture-group { padding: 8px 6px 0; border-left: 2px solid transparent; }
+.architecture-group.is-selected { border-left-color: var(--purple-light); }
+.architecture-title { margin: 0 0 8px; font-size: 0.78rem; color: var(--text); }
+
+@media (max-width: 420px) {
+  .download-choices:not([hidden]) { grid-template-columns: minmax(0, 1fr); }
 }
 
 .download-card {

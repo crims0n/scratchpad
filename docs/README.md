@@ -8,9 +8,10 @@
 - [MCP agent access](mcp.md): installed-client configuration, permissions, tools, revisions, retries, and privacy.
 - [Upgrading from beta to 1.0](transition-to-1.0.md): data continuity, installer differences, workspace reconnection, and MCP paths.
 - [Verifying Linux downloads](verify-linux-downloads.md): public key, signed checksums, and verification commands.
+- [Choosing a download](download-selection.md): OS/processor selection, detection limits, unavailable packages, and per-package checksums.
 - [Release notes](../RELEASE_NOTES.md) and [security policy](../SECURITY.md).
 
-The [product website](https://crims0n.github.io/scratchpad/) lists published downloads. A draft 1.0 candidate does not replace the public release catalog.
+The [product website](https://crims0n.github.io/scratchpad/) lists published downloads. Draft candidates do not replace the public release catalog.
 
 ## Contributing
 

@@ -75,7 +75,7 @@ test("the catalog recognizes all ten stable installers with explicit architectur
   }
   for (const platform of ["linux", "windows"]) {
     assert.equal(manifest.release.assets.filter(asset => asset.platform === platform && asset.primary).length, 1);
-    assert.equal(selectPrimaryAsset([...manifest.release.assets].reverse(), platform).architecture, "x64");
+    assert.equal(selectPrimaryAsset([...manifest.release.assets].reverse(), platform, "x64").architecture, "x64");
   }
   assert.equal(manifest.channels.stable.version, "1.1.0");
   assert.equal(manifest.channels.beta.version, "1.1.0");
