@@ -29,6 +29,10 @@ test("platform detection recognizes desktop operating systems", () => {
   assert.equal(detectPlatform({ userAgentDataPlatform: "Chrome OS", platform: "Linux x86_64" }), "unknown");
   assert.equal(detectPlatform({ userAgentDataPlatform: "Windows", userAgent: "Macintosh" }), "windows");
   assert.equal(detectPlatform({ userAgentDataPlatform: "Linux", mobile: true }), "unknown");
+  assert.equal(detectPlatform({ userAgentDataPlatform: "Windows", platform: "Win32",
+    userAgent: "Mozilla/5.0 Windows NT 10.0; Microsoft Outlook" }), "windows");
+  assert.equal(detectPlatform({ userAgentDataPlatform: "Windows", platform: "Win32",
+    userAgent: "Windows browser; Macintosh compatibility", maxTouchPoints: 10 }), "windows");
 });
 
 test("architecture detection uses supported 64-bit Client Hints and never frozen UA strings", async () => {
@@ -71,6 +75,15 @@ test("download helpers group platforms and format sizes", () => {
   assert.deepEqual(groupAssets(assets).map(({ platform }) => platform), ["macos", "windows", "linux"]);
   assert.equal(formatBytes(10_485_760), "10.0 MB");
   assert.equal(formatBytes(0), "Size unavailable");
+});
+
+test("unrecognized and unspecified architectures retain every card in an Other group", () => {
+  const extra = [{ platform: "linux", architecture: "riscv64", name: "future package" },
+    { platform: "linux", name: "unspecified package" }];
+  const linux = groupAssets([...assets, ...extra]).find(group => group.platform === "linux");
+  assert.deepEqual(linux.architectures.map(group => group.architecture), ["x64", "unknown"]);
+  assert.deepEqual(linux.architectures[1].assets, extra);
+  assert.equal(linux.architectures.flatMap(group => group.assets).length, 3);
 });
 
 test("manifest validation requires a usable release and assets", () => {

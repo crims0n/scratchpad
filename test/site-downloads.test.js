@@ -30,6 +30,11 @@ function page(t, { manifest = complete, platform = "Windows", architecture = "ar
   return { ready, byId, choose, document };
 }
 
+async function catalogVisible(p) {
+  for (let i = 0; i < 10 && p.byId("download-choices").hidden; i++) await Promise.resolve();
+  assert.equal(p.byId("download-choices").hidden, false);
+}
+
 test("the real download page selects ARM64 and preserves every package URL and checksum", async t => {
   const p = page(t);
   await p.ready;
@@ -90,7 +95,7 @@ test("a late architecture response cannot overwrite the user's explicit processo
   for (const changedPlatform of [false, true]) {
     let resolveHints;
     const p = page(t, { hints: () => new Promise(resolve => { resolveHints = resolve; }) });
-    for (let i = 0; i < 5 && !resolveHints; i++) await Promise.resolve();
+    await catalogVisible(p);
     assert.ok(resolveHints);
     if (changedPlatform) p.choose("download-platform", "linux");
     p.choose("download-architecture", "x64");
@@ -100,6 +105,76 @@ test("a late architecture response cannot overwrite the user's explicit processo
     assert.equal(p.byId("download-architecture").value, "x64");
     assert.match(p.byId("primary-download").href, changedPlatform ? /_amd64\.AppImage$/ : /_x64-setup\.exe$/);
   }
+});
+
+test("unfamiliar architectures stay visible with their download URL and checksum", async t => {
+  const manifest = structuredClone(complete);
+  const asset = { platform: "linux", architecture: "riscv64", name: "future.AppImage", format: "AppImage",
+    url: "https://github.com/crims0n/scratchpad/releases/download/v1.1.0/future.AppImage", size: 123, sha256: "e".repeat(64) };
+  manifest.release.assets = [asset];
+  const p = page(t, { manifest, platform: "Linux", architecture: "riscv" });
+  await p.ready;
+  assert.match(p.byId("platform-downloads").textContent, /Other architectures.*riscv64/s);
+  assert.equal(p.document.querySelector(".download-card a").href, asset.url);
+  assert.equal(p.document.querySelector(".checksum").textContent, asset.sha256);
+  assert.equal(p.document.querySelectorAll(".architecture-group.is-selected").length, 0);
+  assert.equal(p.byId("primary-download").hasAttribute("download"), false);
+});
+
+test("detection runs during a slow catalog fetch and renders the completed CPU result directly", async t => {
+  let resolveFetch;
+  let requestedHints = false;
+  const p = page(t, { hints: async () => {
+    requestedHints = true;
+    return { platform: "Windows", architecture: "arm", bitness: "64" };
+  }, fetchImpl: () => {
+    assert.equal(requestedHints, true, "architecture lookup must start before waiting for the catalog");
+    return new Promise(resolve => { resolveFetch = resolve; });
+  } });
+  for (let i = 0; i < 5; i++) await Promise.resolve();
+  resolveFetch({ ok: true, json: async () => complete });
+  await p.ready;
+  assert.equal(p.byId("download-architecture").value, "arm64");
+  assert.match(p.byId("primary-download").href, /_arm64-setup/);
+});
+
+test("pending automatic detection announces only its final download result", async t => {
+  let resolveHints;
+  const p = page(t, { hints: () => new Promise(resolve => { resolveHints = resolve; }) });
+  const updates = [];
+  const status = p.byId("download-status");
+  const observer = new p.document.defaultView.MutationObserver(records => {
+    updates.push(...records.map(() => status.textContent));
+  });
+  observer.observe(status, { childList: true });
+  t.after(() => observer.disconnect());
+  await catalogVisible(p);
+  assert.match(p.byId("primary-detail").textContent, /checking processor/);
+  assert.equal(status.textContent, "Loading release downloads.");
+  resolveHints({ platform: "Windows", architecture: "arm", bitness: "64" });
+  await p.ready;
+  await Promise.resolve();
+  assert.equal(updates.length, 1);
+  assert.match(updates[0], /ARM64/);
+});
+
+test("the detection deadline expires during a slow fetch without adding a second wait", async t => {
+  let resolveFetch;
+  const p = page(t, { hints: () => new Promise(() => {}), fetchImpl: () => new Promise(resolve => { resolveFetch = resolve; }) });
+  await new Promise(resolve => setTimeout(resolve, 25));
+  resolveFetch({ ok: true, json: async () => complete });
+  await catalogVisible(p);
+  assert.match(p.byId("primary-detail").textContent, /choose x64 or ARM64/);
+  assert.doesNotMatch(p.byId("primary-detail").textContent, /checking/);
+  await p.ready;
+});
+
+test("focus follows the control reference even if an anchor target changes", async t => {
+  const p = page(t, { hints: async () => ({ platform: "Windows" }) });
+  await p.ready;
+  p.byId("primary-download").setAttribute("href", "#renamed-anchor");
+  p.byId("primary-download").click();
+  assert.equal(p.document.activeElement, p.byId("download-architecture"));
 });
 
 test("macOS Universal needs no CPU guess, while mobile and unsupported platforms require an OS choice", async t => {

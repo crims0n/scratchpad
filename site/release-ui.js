@@ -7,10 +7,14 @@ export const PLATFORM_NAMES = {
 };
 
 export const ARCHITECTURE_NAMES = {
-  x64: "x64 (Intel / AMD, 64-bit)",
+  x64: "x64 (Intel / AMD)",
   arm64: "ARM64",
-  universal: "Universal (Apple Silicon + Intel)"
+  universal: "Universal"
 };
+
+export function defaultArchitecture(platform) {
+  return platform === "macos" ? "universal" : "unknown";
+}
 
 export function normalizeArchitecture(value) {
   const architecture = typeof value === "string" ? value.toLowerCase() : "";
@@ -19,10 +23,13 @@ export function normalizeArchitecture(value) {
 
 export function detectPlatform({ userAgentDataPlatform = "", platform = "", userAgent = "", mobile = false, maxTouchPoints = 0 } = {}) {
   const hint = `${userAgentDataPlatform} ${platform} ${userAgent}`.toLowerCase();
-  if (mobile || /iphone|ipad|ipod|android|cros/.test(hint) || (/mac/.test(hint) && maxTouchPoints > 1)) return "unknown";
+  if (mobile || /\b(iphone|ipad|ipod|android|cros)\b/.test(hint)) return "unknown";
   // An explicit unsupported Client Hints platform must not be overridden by
   // its compatibility UA tokens (e.g. ChromeOS reporting Linux x86_64).
   if (userAgentDataPlatform) return ({ macos: "macos", windows: "windows", linux: "linux" })[userAgentDataPlatform.toLowerCase()] || "unknown";
+  // iPadOS can use a desktop Mac identity, but a touchscreen Windows browser
+  // mentioning a Mac must not override an explicit Client Hints platform.
+  if (platform === "MacIntel" && maxTouchPoints > 1) return "unknown";
   if (/mac/.test(hint)) return "macos";
   if (/win/.test(hint)) return "windows";
   if (/linux|x11/.test(hint)) return "linux";
@@ -30,7 +37,8 @@ export function detectPlatform({ userAgentDataPlatform = "", platform = "", user
 }
 
 export async function detectArchitecture(navigator, platform, { timeoutMs = 1000 } = {}) {
-  if (platform === "macos") return "universal";
+  const architecture = defaultArchitecture(platform);
+  if (architecture !== "unknown") return architecture;
   if (!["windows", "linux"].includes(platform) || typeof navigator.userAgentData?.getHighEntropyValues !== "function") return "unknown";
   let timer;
   try {
@@ -49,7 +57,8 @@ export async function detectArchitecture(navigator, platform, { timeoutMs = 1000
 }
 
 export function selectPrimaryAsset(assets, platform, architecture = "unknown") {
-  const selected = platform === "macos" ? "universal" : normalizeArchitecture(architecture);
+  const defaultChoice = defaultArchitecture(platform);
+  const selected = defaultChoice === "unknown" ? normalizeArchitecture(architecture) : defaultChoice;
   if (selected === "unknown") return null;
   const matching = assets.filter(asset => asset.platform === platform && normalizeArchitecture(asset.architecture) === selected);
   const preferredFormat = { macos: "DMG", windows: "EXE installer", linux: "AppImage" }[platform];
@@ -57,13 +66,18 @@ export function selectPrimaryAsset(assets, platform, architecture = "unknown") {
 }
 
 export function groupAssets(assets) {
-  return ["macos", "windows", "linux"].map((platform) => ({
-    platform,
-    assets: assets.filter((asset) => asset.platform === platform),
-    architectures: ["universal", "x64", "arm64"].map(architecture => ({
-      architecture, assets: assets.filter(asset => asset.platform === platform && normalizeArchitecture(asset.architecture) === architecture)
-    })).filter(group => group.assets.length)
-  })).filter((group) => group.assets.length > 0);
+  const platforms = new Map(Object.keys(PLATFORM_NAMES).map(platform => [platform, new Map()]));
+  for (const asset of assets) {
+    const groups = platforms.get(asset.platform);
+    if (!groups) continue;
+    const architecture = normalizeArchitecture(asset.architecture);
+    if (!groups.has(architecture)) groups.set(architecture, []);
+    groups.get(architecture).push(asset);
+  }
+  return [...platforms].flatMap(([platform, groups]) => groups.size ? [{ platform,
+    architectures: ["universal", "x64", "arm64", "unknown"].flatMap(architecture =>
+      groups.has(architecture) ? [{ architecture, assets: groups.get(architecture) }] : [])
+  }] : []);
 }
 
 export function formatBytes(bytes) {
