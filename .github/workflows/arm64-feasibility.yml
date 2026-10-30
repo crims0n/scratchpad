@@ -17,6 +17,7 @@ on:
       - .npmrc
       - RELEASE_NOTES.md
       - LICENSE
+      - APP_STORE_EXCEPTION.md
       - THIRD_PARTY_NOTICES.md
 
 permissions:
