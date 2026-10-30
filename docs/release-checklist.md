@@ -2,6 +2,8 @@
 
 The first stable release, **v1.0.0**, is published; its evidence is recorded in [#34](https://github.com/crims0n/scratchpad/issues/34). For subsequent releases, substitute the new candidate version/tag in the examples below. Never rebuild or reuse a published version. Build each candidate as a draft and complete review and installed-package acceptance before publication; this checklist does not itself establish those results.
 
+The next planned candidate is **v1.1.0**, adding native Linux and Windows ARM64 packages. Record its source/run/draft identity, signed artifacts and outstanding native checks in the [v1.1.0 candidate acceptance record](releases/1.1.0.md).
+
 ## Build the draft
 
 1. Confirm the release-preparation PR is merged, `main` CI passes, and all version checks pass (`npm run check`).
