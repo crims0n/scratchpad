@@ -6,8 +6,10 @@ installer format. Use the intended release's version and filename in the
 examples below. Historical 1.0 acceptance is recorded in
 [#33](https://github.com/crims0n/scratchpad/issues/33) and
 [#35](https://github.com/crims0n/scratchpad/issues/35); the maintainer confirmed
-that final v1.1.0 Beta-upgrade acceptance passed in
-[#132](https://github.com/crims0n/scratchpad/issues/132).
+that all remaining v1.1.0 manual checks passed in
+[#132](https://github.com/crims0n/scratchpad/issues/132). That overall report does
+not supply individual migration procedures or test records; see the
+[release acceptance record](releases/1.1.0.md#upgrade-and-package-switching).
 
 Scratchpad 1.0 removed the visible Beta name and established one release track.
 It keeps the published application identifier,
@@ -56,8 +58,10 @@ import is required solely because of the display-name change.
   with its original installer before retrying, retaining all application data.
   Keep backups until notes, preferences, and workspace connections have been
   checked. Update MCP clients to the new installed `scratchpad.exe` path. Keep
-  the same installer format for this transition; switching between MSI and EXE
-  is not an acceptance-tested path.
+  the same installer format for the procedure documented here. The maintainer
+  reports that the remaining v1.1.0 checks passed, including format switching,
+  but no EXE/MSI switching procedure or individual result is recorded. This
+  guide does not establish support for switching installer formats.
 - **Linux, Debian package:** install the new `.deb` through the system package
   manager, for example `sudo apt install ./Scratchpad_1.0.0_amd64.deb` from its
   download directory. The new `scratchpad` package declares that it conflicts
@@ -132,7 +136,10 @@ Historical 1.0 packaging/publication and broader acceptance are recorded in
 [#35](https://github.com/crims0n/scratchpad/issues/35). The maintainer confirmed
 that all remaining v1.1.0 manual checks passed; the final sign-off is recorded in
 [#132](https://github.com/crims0n/scratchpad/issues/132) and the
-[release acceptance record](releases/1.1.0.md).
+[release acceptance record](releases/1.1.0.md). Individual OS/hardware,
+execution-mode, migration-step and interactive NSIS confirm/cancel/retry records
+were not supplied with that report. The recording requirements above remain
+applicable to future release candidates.
 
 ## Persistent packaging values
 
