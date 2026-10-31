@@ -61,4 +61,8 @@ When behavior or labels change, review the matching README sections, [welcome no
 
 All changes to `main`, including small fixes and documentation updates, must go through a pull request. A linked issue is not required when the change is small and its purpose is clear from the pull request.
 
-By submitting a contribution, you agree that it may be distributed under the project's GPL-3.0-or-later license.
+## Licensing of contributions
+
+By submitting a contribution, you certify that you have the right to submit it and agree that it may be distributed under the project's GPL-3.0-or-later license together with the additional permission in [APP_STORE_EXCEPTION.md](APP_STORE_EXCEPTION.md), which allows distribution through app stores such as the Mac App Store. You keep the copyright in your contribution.
+
+Do not submit code copied from other projects unless its license allows distribution under these terms; mention its origin and license in the pull request.

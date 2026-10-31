@@ -318,4 +318,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow. Please repo
 
 ## License
 
-Scratchpad is free software licensed under [GPL-3.0-or-later](LICENSE). The bundled CodeMirror editor and Marked parser are provided under the MIT License; Highlight.js and jsdiff are provided under the BSD 3-Clause License. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Scratchpad is free software licensed under [GPL-3.0-or-later](LICENSE), with an [additional permission](APP_STORE_EXCEPTION.md) for distribution through app stores. The bundled CodeMirror editor and Marked parser are provided under the MIT License; Highlight.js and jsdiff are provided under the BSD 3-Clause License. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

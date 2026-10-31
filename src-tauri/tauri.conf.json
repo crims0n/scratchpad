@@ -27,6 +27,7 @@
     "targets": "all",
     "resources": {
       "../LICENSE": "LICENSE",
+      "../APP_STORE_EXCEPTION.md": "APP_STORE_EXCEPTION.md",
       "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md"
     },
     "icon": [

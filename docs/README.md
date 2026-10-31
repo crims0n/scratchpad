@@ -17,7 +17,7 @@ The [product website](https://crims0n.github.io/scratchpad/) lists published dow
 
 - [Contributing](../CONTRIBUTING.md): prerequisites, isolated development profile, branch/PR workflow, and validation.
 - [Architecture and data flow](architecture.md): runtime diagrams, source ownership, storage and recovery, MCP, quit handling, and release handoff.
-- [Third-party notices](../THIRD_PARTY_NOTICES.md) and [license](../LICENSE).
+- [Third-party notices](../THIRD_PARTY_NOTICES.md), [license](../LICENSE), and [app store exception](../APP_STORE_EXCEPTION.md).
 
 ## Maintaining releases
 
