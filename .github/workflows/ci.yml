@@ -143,10 +143,11 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Verify offline CodeMirror bundle
+      # Tests load src/vendor directly, so it must match the pinned packages.
+      - name: Verify vendored frontend libraries
         run: |
-          npm run vendor:codemirror
-          git diff --exit-code -- src/vendor/codemirror.js src/vendor/codemirror.LICENSE.txt
+          npm run vendor
+          git diff --exit-code -- src/vendor
 
       - name: Validate frontend
         run: npm run check
