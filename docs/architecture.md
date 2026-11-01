@@ -91,7 +91,7 @@ sequenceDiagram
     end
 ```
 
-With no main window, AppKit is allowed to terminate immediately. If a live request receives no acknowledgement for 30 seconds, a parented native alert offers Keep Open, Quit Without Saving, or Cancel; timeout alone never discards data. Request IDs reject stale acknowledgements after cancellation. Native cancellation/failure releases the frontend's exact close transition. A normal close already in progress leaves the native watchdog armed. Installation of the macOS hook logs failure and allows startup if it cannot safely install.
+With no main window, AppKit is allowed to terminate immediately. If a live request receives no acknowledgement for 30 seconds, a parented native alert offers Keep Open, Quit Without Saving, or Cancel; timeout alone never discards data. Request IDs reject stale acknowledgements after cancellation. Native cancellation/failure releases the frontend's exact close transition. When the flush fails, the frontend declines the quit first and only then asks `confirm_discard_unsaved`; choosing **Discard Changes** destroys the main window, which exits the app. Window close and collection switching ask the same question after a failed flush, so a persistent save failure never leaves Force Quit as the only exit. A normal close already in progress leaves the native watchdog armed. Installation of the macOS hook logs failure and allows startup if it cannot safely install.
 
 Force Quit, crashes, power loss, and another process's writes remain outside these save/close guarantees. Actual system restart/logout/shutdown and final signed-package behavior still require native acceptance.
 
