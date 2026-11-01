@@ -36,7 +36,7 @@ Scratchpad is a local-first place for notes, snippets, and Markdown. No account 
 - **Back Up Collection…** and **Restore Collection…** act on the collection shown in the menu, whether local or in a workspace file. Restore replaces, rather than merges, notes, folders, and trash after confirmation, and retains a verified safety backup. Preferences, themes, and MCP configuration are not included. Copy important backups outside the app data directory.
 
 ## Keep your work safe
-- If **Save failed** appears, keep Scratchpad open and preserve your text before retrying. Switching, closing, or quitting is canceled when the outgoing save fails. Both panes stop accepting edits while an operation finishes.
+- If **Save failed** appears, keep Scratchpad open and preserve your text before retrying. Switching, closing, or quitting is canceled when the outgoing save fails; a prompt then lets you keep editing or explicitly discard the unsaved changes. Both panes stop accepting edits while an operation finishes.
 - Finish any folder rename before leaving. An invalid name cancels Close, Quit, or a collection switch; correct the name or press **Escape** to cancel the rename, then try again.
 - If **Local data recovery** appears, use **Export preserved data…** before replacing anything. This raw recovery export is for manual repair, not a normal collection backup. **Retry reading** retries without discarding the source; do not delete app data while recovery is pending.
 - Notes, workspace files, trash, backups, and recovery copies are unencrypted. Use one Scratchpad editor instance per collection or workspace; separate editor instances do not coordinate edits. Autosave cannot protect against force-quitting or power loss.

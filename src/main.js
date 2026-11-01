@@ -1574,6 +1574,17 @@ function setSaveFailedState() {
   saveStatus.classList.add("unsaved");
 }
 
+// Asked only after a flush has failed, so a save that keeps failing cannot
+// trap the user. Anything but an explicit discard choice keeps the edits.
+async function confirmDiscardUnsavedChanges(action) {
+  try {
+    return await invoke("confirm_discard_unsaved", { action }) === true;
+  } catch (error) {
+    console.error("Could not ask whether to discard unsaved changes", error);
+    return false;
+  }
+}
+
 function clearPendingSaveTimers() {
   noteSaveDebounceTimers.forEach(timer => clearTimeout(timer));
   noteSaveDebounceTimers.clear();
@@ -1620,9 +1631,11 @@ async function registerCloseHandler() {
       const saved = await flushPendingSaves();
       if (!saved) {
         setSaveFailedState();
-        endCollectionTransition(transition);
-        showNotification("Could not save the latest changes; close cancelled");
-        return;
+        if (!await confirmDiscardUnsavedChanges("close")) {
+          endCollectionTransition(transition);
+          showNotification("Could not save the latest changes; close cancelled");
+          return;
+        }
       }
 
       isClosing = true;
@@ -1664,7 +1677,7 @@ async function registerCloseHandler() {
         }
         nativeQuitRequestId = id;
         nativeQuitTransition = transition;
-        let approved = false;
+        let approved = false, offerDiscard = false;
         try {
           await dbSaveQueue;
           if (nativeQuitRequestId !== id) return;
@@ -1673,6 +1686,12 @@ async function registerCloseHandler() {
           if (!saved) {
             setSaveFailedState();
             showNotification("Could not save the latest changes; quit cancelled");
+            // Keep this transition through the discard choice below. Declining
+            // the quit only stops the watchdog; detaching first stops the
+            // cancellation event it triggers from releasing the lock early.
+            offerDiscard = true;
+            nativeQuitRequestId = null;
+            nativeQuitTransition = null;
           }
           const accepted = await invoke("complete_native_quit", { requestId: id, saved });
           approved = saved && accepted; // Expired requests cannot quit later.
@@ -1686,6 +1705,22 @@ async function registerCloseHandler() {
             nativeQuitTransition = null;
             endCollectionTransition(transition);
           }
+        }
+        // The quit was already declined, so the native watchdog cannot prompt
+        // over this choice. Destroying the main window exits the app.
+        if (offerDiscard) {
+          if (await confirmDiscardUnsavedChanges("quit")) {
+            isClosing = true;
+            try {
+              await appWindow.destroy();
+              return;
+            } catch (error) {
+              isClosing = false;
+              console.error("Failed to quit Scratchpad without saving", error);
+              showNotification("Could not quit Scratchpad");
+            }
+          }
+          endCollectionTransition(transition);
         }
       });
       window.addEventListener("pagehide", () => { unlistenQuit(); unlistenCancel(); }, { once: true });
@@ -3741,7 +3776,7 @@ async function connectDatabaseImpl() {
   }
 
   const localSaved = await flushPendingSaves();
-  if (!localSaved) {
+  if (!localSaved && !await confirmDiscardUnsavedChanges("open-workspace")) {
     showNotification("Could not save local notes; workspace not opened");
     return;
   }
@@ -3843,7 +3878,7 @@ async function connectDatabaseImpl() {
 async function disconnectDatabaseImpl() {
   if (!activeDbPath) return false;
   const workspaceSaved = await flushPendingSaves();
-  if (!workspaceSaved) {
+  if (!workspaceSaved && !await confirmDiscardUnsavedChanges("return-local")) {
     showNotification("Could not save workspace; disconnect cancelled");
     return;
   }

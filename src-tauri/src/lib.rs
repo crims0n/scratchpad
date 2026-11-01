@@ -999,6 +999,49 @@ fn complete_native_quit<R: tauri::Runtime>(
     }
 }
 
+const DISCARD_CHANGES: &str = "Discard Changes";
+
+// Asked only after a flush has failed. A save that keeps failing (a removed
+// drive, a read-only file, a full disk) must not leave Force Quit as the only
+// way out, and only an explicit choice discards edits.
+#[tauri::command]
+fn confirm_discard_unsaved(window: tauri::WebviewWindow, action: String) -> Result<bool, String> {
+    if window.label() != "main" {
+        return Err("Only the main editor can discard its unsaved changes".into());
+    }
+    let action = discard_action_description(&action)?;
+    let choice = rfd::MessageDialog::new()
+        // A window parent selects NSAlert on macOS rather than a blocking
+        // system notification; see macos_quit::timeout.
+        .set_parent(&window)
+        .set_level(rfd::MessageLevel::Warning)
+        .set_title("Your latest changes could not be saved")
+        .set_description(format!("Scratchpad could not save your latest edits. Keep editing to copy your work somewhere safe or fix the problem, such as reconnecting a drive or freeing disk space. Or discard the unsaved changes and {action}."))
+        .set_buttons(rfd::MessageButtons::YesNoCancelCustom(
+            "Keep Editing".into(),
+            DISCARD_CHANGES.into(),
+            "Cancel".into(),
+        ))
+        .show();
+    Ok(chose_discard(&choice))
+}
+
+fn discard_action_description(action: &str) -> Result<&'static str, String> {
+    match action {
+        "close" => Ok("close Scratchpad"),
+        "quit" => Ok("quit Scratchpad"),
+        "open-workspace" => Ok("open another workspace"),
+        "return-local" => Ok("return to local notes"),
+        _ => Err(format!("Unknown discard action `{action}`")),
+    }
+}
+
+fn chose_discard(choice: &rfd::MessageDialogResult) -> bool {
+    // Some rfd backends report the second custom button as No.
+    matches!(choice, rfd::MessageDialogResult::Custom(label) if label == DISCARD_CHANGES)
+        || *choice == rfd::MessageDialogResult::No
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run(context: tauri::Context<tauri::Wry>) {
     let builder = tauri::Builder::default()
@@ -1047,6 +1090,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
         )
         .invoke_handler(tauri::generate_handler![
             complete_native_quit,
+            confirm_discard_unsaved,
             updates::get_update_info,
             updates::check_for_updates,
             updates::open_update_release,
@@ -1095,6 +1139,30 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
 mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn only_an_explicit_discard_choice_discards_unsaved_changes() {
+        use rfd::MessageDialogResult::{Cancel, Custom, No, Ok, Yes};
+        assert!(chose_discard(&Custom(DISCARD_CHANGES.into())));
+        assert!(chose_discard(&No));
+        for kept in [
+            Custom("Keep Editing".into()),
+            Custom("Cancel".into()),
+            Yes,
+            Cancel,
+            Ok,
+        ] {
+            assert!(!chose_discard(&kept), "{kept:?} must keep the edits");
+        }
+    }
+
+    #[test]
+    fn discard_prompts_accept_only_known_actions() {
+        for action in ["close", "quit", "open-workspace", "return-local"] {
+            assert!(discard_action_description(action).is_ok());
+        }
+        assert!(discard_action_description("delete-everything").is_err());
+    }
 
     fn temporary_db_path(test_name: &str) -> PathBuf {
         let unique = SystemTime::now()
