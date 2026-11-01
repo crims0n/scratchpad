@@ -9,6 +9,8 @@ use tauri::{
     AppHandle, Emitter, Runtime,
 };
 
+#[cfg(all(feature = "appstore", target_os = "macos"))]
+mod appstore_files;
 mod backup;
 mod file_export;
 #[cfg(target_os = "macos")]

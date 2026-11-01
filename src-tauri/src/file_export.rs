@@ -83,6 +83,24 @@ pub(crate) fn export_note(path: &Path, content: &str) -> Result<(), String> {
     })
 }
 
+// App Sandbox denies both a staging file beside the destination and opening
+// its folder to sync it, so this flavor stages in a Foundation-provided
+// directory on the same volume. Replacing the destination stays atomic.
+#[cfg(all(feature = "appstore", target_os = "macos"))]
+fn export_with(
+    path: &Path,
+    content: &str,
+    stage: impl FnOnce(&Path, &str) -> Result<(), String>,
+) -> Result<(), String> {
+    let directory = crate::appstore_files::item_replacement_directory(path)?;
+    let temporary = directory.join(format!(".scratchpad-export-{}.tmp", uuid::Uuid::new_v4()));
+    let result = stage(&temporary, content)
+        .and_then(|()| fs::rename(&temporary, path).map_err(|error| error.to_string()));
+    let _ = fs::remove_dir_all(&directory);
+    result
+}
+
+#[cfg(not(all(feature = "appstore", target_os = "macos")))]
 fn export_with(
     path: &Path,
     content: &str,
@@ -104,6 +122,8 @@ fn export_with(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(all(feature = "appstore", target_os = "macos"))]
+    use std::path::PathBuf;
 
     #[cfg(unix)]
     #[test]
@@ -184,6 +204,48 @@ mod tests {
                 "Résumé 日本語\nnew content"
             );
         }
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(all(feature = "appstore", target_os = "macos"))]
+    #[test]
+    fn app_store_exports_stage_away_from_the_destination_folder_and_clean_up() {
+        use std::os::unix::fs::MetadataExt;
+        let directory = std::env::temp_dir().join(format!(
+            "scratchpad-appstore-export-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir(&directory).unwrap();
+        let target = directory.join("note.md");
+        let device = fs::metadata(&directory).unwrap().dev();
+        let staged = std::cell::RefCell::new(PathBuf::new());
+        let stage = |temporary: &Path, content: &str| {
+            *staged.borrow_mut() = temporary.to_path_buf();
+            write_new_verified(temporary, content)?;
+            assert_ne!(temporary.parent(), Some(directory.as_path()));
+            assert_eq!(fs::metadata(temporary).unwrap().dev(), device);
+            assert!(!fs::read_dir(&directory).unwrap().any(|entry| {
+                let name = entry.unwrap().file_name();
+                name.to_string_lossy().ends_with(".tmp")
+            }));
+            Ok(())
+        };
+
+        export_with(&target, "first", stage).unwrap();
+        assert_eq!(fs::read_to_string(&target).unwrap(), "first");
+        assert!(!staged.borrow().parent().unwrap().exists());
+
+        export_with(&target, "second", stage).unwrap();
+        assert_eq!(fs::read_to_string(&target).unwrap(), "second");
+
+        let failed = export_with(&target, "third", |temporary, _| {
+            *staged.borrow_mut() = temporary.to_path_buf();
+            fs::write(temporary, "partial").unwrap();
+            Err("stage failed".into())
+        });
+        assert_eq!(failed, Err("stage failed".into()));
+        assert_eq!(fs::read_to_string(&target).unwrap(), "second");
+        assert!(!staged.borrow().parent().unwrap().exists());
         fs::remove_dir_all(directory).unwrap();
     }
 
