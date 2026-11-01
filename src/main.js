@@ -1686,7 +1686,12 @@ async function registerCloseHandler() {
           if (!saved) {
             setSaveFailedState();
             showNotification("Could not save the latest changes; quit cancelled");
+            // Keep this transition through the discard choice below. Declining
+            // the quit only stops the watchdog; detaching first stops the
+            // cancellation event it triggers from releasing the lock early.
             offerDiscard = true;
+            nativeQuitRequestId = null;
+            nativeQuitTransition = null;
           }
           const accepted = await invoke("complete_native_quit", { requestId: id, saved });
           approved = saved && accepted; // Expired requests cannot quit later.
@@ -1703,15 +1708,19 @@ async function registerCloseHandler() {
         }
         // The quit was already declined, so the native watchdog cannot prompt
         // over this choice. Destroying the main window exits the app.
-        if (offerDiscard && await confirmDiscardUnsavedChanges("quit")) {
-          isClosing = true;
-          try {
-            await appWindow.destroy();
-          } catch (error) {
-            isClosing = false;
-            console.error("Failed to quit Scratchpad without saving", error);
-            showNotification("Could not quit Scratchpad");
+        if (offerDiscard) {
+          if (await confirmDiscardUnsavedChanges("quit")) {
+            isClosing = true;
+            try {
+              await appWindow.destroy();
+              return;
+            } catch (error) {
+              isClosing = false;
+              console.error("Failed to quit Scratchpad without saving", error);
+              showNotification("Could not quit Scratchpad");
+            }
           }
+          endCollectionTransition(transition);
         }
       });
       window.addEventListener("pagehide", () => { unlistenQuit(); unlistenCancel(); }, { once: true });

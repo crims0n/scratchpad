@@ -6,7 +6,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bootApp, getAppElement } from "./helpers/app-harness.js";
+import { bootApp, getAppElement, settle } from "./helpers/app-harness.js";
 
 let instance = 15200;
 const notes = [{ id: "note", title: "Note", content: "original", updatedAt: 1, isTitleLocked: true }];
@@ -15,6 +15,7 @@ async function boot({ discard, fail = true }) {
   let closeHandler, destroyed = 0;
   const app = await bootApp({ instance: instance++, handlers: {
     load_workspace_preference: () => "/tmp/save-failure-discard.db",
+    start_mcp_server: () => ({ command: "/scratchpad", args: ["--mcp-stdio"] }),
     load_db_notes: () => notes,
     save_workspace_db: () => { if (fail) throw new Error("read-only file system"); },
     complete_native_quit: () => true,
@@ -71,6 +72,37 @@ test("a failed native quit is declined before discarding is offered", async () =
   assert.deepEqual(prompts(discarded.app), [{ action: "quit" }]);
   assert.equal(discarded.destroyed(), 1);
   discarded.app.dom.window.close();
+});
+
+test("collection writes stay locked while the quit discard choice is pending", async () => {
+  let choose;
+  const { app, destroyed } = await boot({ discard: new Promise(resolve => { choose = resolve; }) });
+  app.click("agent-access-toggle-btn");
+  await settle();
+  app.click("mcp-permission-create_note");
+  await settle();
+  const collectionId = app.invocations.findLast(call => call.command === "update_mcp_snapshot").args.collectionId;
+  const quitting = app.emit("scratchpad-native-quit", "pending-choice");
+  while (!prompts(app).length) await settle(5);
+
+  // Declining the quit makes the native side emit its cancellation; it must
+  // not release the lock while the developer is still choosing.
+  await app.emit("scratchpad-native-quit-cancelled", "pending-choice");
+  await app.emit("mcp-write-request", { ticket: "during-choice", operation: "create_note",
+    arguments: { collectionId, requestId: "during-choice", title: "Must not be added" } });
+  const write = app.invocations.findLast(call => call.command === "complete_mcp_write" && call.args.ticket === "during-choice");
+  assert.equal(write.args.result.ok, false);
+  assert.equal(document.getElementById("app").inert, true);
+  assert.equal(getAppElement("editor").readOnly, true);
+  assert.ok(!app.sidebarTitles().includes("Must not be added"));
+
+  choose(false);
+  await quitting;
+  assert.equal(destroyed(), 0);
+  assert.equal(document.getElementById("app").inert, false);
+  assert.equal(getAppElement("editor").readOnly, false);
+  assert.equal(getAppElement("editor").value, "unsaved edit");
+  app.dom.window.close();
 });
 
 test("returning to local notes after a failed workspace save requires a discard choice", async () => {
