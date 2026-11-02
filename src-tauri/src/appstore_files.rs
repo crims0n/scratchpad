@@ -165,15 +165,29 @@ fn create_workspace_bookmark(workspace: &Path) -> Result<Vec<u8>, String> {
     })
 }
 
+fn encode_bookmark(data: &[u8]) -> String {
+    data.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn decode_bookmark(text: &str) -> Option<Vec<u8>> {
+    (0..text.len())
+        .step_by(2)
+        .map(|start| u8::from_str_radix(text.get(start..start + 2)?, 16).ok())
+        .collect()
+}
+
 // A path alone cannot regain sandbox access after a relaunch. The bookmark
 // lives beside the preferences, so the shared preferences format is unchanged.
+// It is the only way back to the workspace, so it is replaced atomically.
 pub(crate) fn save_workspace_bookmark(
     bookmark: &Path,
     workspace: Option<&Path>,
 ) -> Result<(), String> {
     match workspace {
-        Some(workspace) => fs::write(bookmark, create_workspace_bookmark(workspace)?)
-            .map_err(|error| error.to_string()),
+        Some(workspace) => crate::file_export::export(
+            bookmark,
+            &encode_bookmark(&create_workspace_bookmark(workspace)?),
+        ),
         None => match fs::remove_file(bookmark) {
             Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error.to_string()),
             _ => Ok(()),
@@ -185,7 +199,7 @@ pub(crate) fn save_workspace_bookmark(
 // the process, or None so the caller falls back to its saved path. Access is
 // never released, matching the sidecar presenters that depend on it.
 pub(crate) fn restore_workspace_bookmark(bookmark: &Path) -> Option<PathBuf> {
-    let data = fs::read(bookmark).ok()?;
+    let data = decode_bookmark(&fs::read_to_string(bookmark).ok()?)?;
     let (path, stale) = autoreleasepool(|_| {
         let mut stale = Bool::NO;
         // SAFETY: `stale` outlives the call, and resolving only reads the data.
@@ -205,8 +219,8 @@ pub(crate) fn restore_workspace_bookmark(bookmark: &Path) -> Option<PathBuf> {
         Some((PathBuf::from(url.path()?.to_string()), stale.as_bool()))
     })?;
     if stale {
-        // Access is already restored, so a failed refresh can wait for the
-        // next launch to try again.
+        // Access is already restored, and a failed refresh keeps the previous
+        // bookmark, so the next launch can try again.
         let _ = save_workspace_bookmark(bookmark, Some(&path));
     }
     Some(path)
@@ -215,6 +229,44 @@ pub(crate) fn restore_workspace_bookmark(bookmark: &Path) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Run by the test below in a child process with a one-block file size limit.
+    #[test]
+    #[ignore = "helper for failed_bookmark_refresh_keeps_the_previous_bookmark"]
+    fn restore_bookmark_with_a_file_size_limit() {
+        let bookmark = std::env::var_os("SCRATCHPAD_TEST_BOOKMARK").unwrap();
+        assert!(restore_workspace_bookmark(Path::new(&bookmark)).is_some());
+    }
+
+    #[test]
+    fn failed_bookmark_refresh_keeps_the_previous_bookmark() {
+        let directory = crate::test_support::TestDirectory::new("bookmark-refresh");
+        let bookmark = directory.join("workspace.bookmark");
+        let workspace = directory.join("workspace.db");
+        fs::write(&workspace, "workspace").unwrap();
+        let workspace = fs::canonicalize(workspace).unwrap();
+        save_workspace_bookmark(&bookmark, Some(&workspace)).unwrap();
+        let moved = workspace.with_file_name("moved.db");
+        fs::rename(&workspace, &moved).unwrap();
+        let saved = fs::read(&bookmark).unwrap();
+        assert!(saved.len() > 512);
+
+        // Ignoring SIGXFSZ turns the limit into an ordinary failed write.
+        let status = std::process::Command::new("/bin/sh")
+            .args([
+                "-c",
+                "trap '' XFSZ; ulimit -f 1; exec \"$0\" --ignored --exact \
+                 appstore_files::tests::restore_bookmark_with_a_file_size_limit",
+            ])
+            .arg(std::env::current_exe().unwrap())
+            .env("SCRATCHPAD_TEST_BOOKMARK", &bookmark)
+            .status()
+            .unwrap();
+        assert!(status.success());
+
+        assert_eq!(fs::read(&bookmark).unwrap(), saved);
+        assert_eq!(restore_workspace_bookmark(&bookmark), Some(moved));
+    }
 
     #[test]
     fn workspace_bookmarks_follow_a_moved_file_and_are_removed_with_the_workspace() {
