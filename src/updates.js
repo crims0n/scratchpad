@@ -29,6 +29,8 @@ export function createUpdateChecker({ invoke, storage, onChange = () => {}, now 
   let disposed = false;
   const snapshot = () => ({ ...state, indicator: Boolean(state.release && state.release.version !== state.skippedVersion) });
   const emit = () => { if (!disposed) onChange(snapshot()); };
+  // Builds updated by a store report that they have no update check to run.
+  const unavailable = () => state.info?.updateChecks === false;
 
   function save(next) {
     try {
@@ -45,7 +47,7 @@ export function createUpdateChecker({ invoke, storage, onChange = () => {}, now 
   function schedule(launch = false) {
     clearTimer(timer);
     timer = null;
-    if (disposed || !state.automatic || pending) return;
+    if (disposed || !state.automatic || pending || unavailable()) return;
     // A future timestamp can result from a clock correction; cap it at one day.
     const remaining = state.lastCheck === null ? 0 : Math.min(UPDATE_INTERVAL_MS, Math.max(0, state.lastCheck + UPDATE_INTERVAL_MS - now()));
     timer = setTimer(() => { timer = null; void check(false); }, Math.max(launch ? UPDATE_LAUNCH_DELAY_MS : 0, remaining));
@@ -58,7 +60,7 @@ export function createUpdateChecker({ invoke, storage, onChange = () => {}, now 
   }
 
   function check(manual = true) {
-    if (disposed || (!manual && !state.automatic)) return Promise.resolve();
+    if (disposed || unavailable() || (!manual && !state.automatic)) return Promise.resolve();
     manualRequested ||= manual;
     if (pending) { emit(); return pending; }
     clearTimer(timer);
@@ -75,6 +77,7 @@ export function createUpdateChecker({ invoke, storage, onChange = () => {}, now 
       try {
         if (!state.info) await loadInfo();
         if (disposed || (requestGeneration !== generation && !manualRequested)) return;
+        if (unavailable()) { state.status = "idle"; return; }
         const release = await invoke("check_for_updates");
         if (disposed || (requestGeneration !== generation && !manualRequested)) return;
         state.release = release && (manualRequested || release.version !== state.skippedVersion) ? release : null;
@@ -136,6 +139,7 @@ export function createUpdateUi({ document, invoke, storage, closeAbout }) {
   const checker = createUpdateChecker({ invoke, storage,
     onChange(state) {
       if (state.info) byId("about-version").textContent = state.info.installedVersion;
+      byId("update-heading").closest("section").hidden = state.info?.updateChecks === false;
       byId("update-last-check").textContent = state.lastCheck ? new Date(state.lastCheck).toLocaleString() : "Never";
       byId("update-automatic").checked = state.automatic;
       byId("update-preference-error").textContent = state.preferenceError;
