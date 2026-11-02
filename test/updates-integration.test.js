@@ -60,3 +60,21 @@ test("About exposes release notes before downloading, skip, later, offline retry
   app.dom.window.dispatchEvent(new app.dom.window.Event("pagehide"));
   app.dom.window.close();
 });
+
+test("a build without update checks keeps its version and hides the update UI", async () => {
+  const app = await bootApp({ instance: 7301, handlers: {
+    get_update_info: () => ({ installedVersion: "9.8.7", updateChecks: false }),
+    check_for_updates: () => { throw new Error("must not be called"); }
+  }, storage: { scratchpad_update_preferences: JSON.stringify({ automatic: true }) } });
+  await app.settle();
+  app.click("actions-btn");
+  app.click("about-menu-btn");
+  const el = (id) => document.getElementById(id);
+  assert.equal(el("about-version").textContent, "9.8.7");
+  assert.equal(el("update-heading").closest("section").hidden, true);
+  el("update-check-btn").click();
+  await app.settle();
+  assert.equal(app.invocations.some(({ command }) => command === "check_for_updates"), false);
+  assert.equal(el("update-menu-indicator").hidden, true);
+  app.dom.window.close();
+});

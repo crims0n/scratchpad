@@ -161,6 +161,24 @@ test("opting out during local initialization prevents the network request from s
   checker.dispose();
 });
 
+test("a check started before the build reports no update checks never reaches the network", async () => {
+  let resolveInfo;
+  const info = new Promise((resolve) => { resolveInfo = resolve; });
+  let checks = 0;
+  const checker = createUpdateChecker({
+    storage: { getItem: () => '{"automatic":true}', setItem: () => {} },
+    invoke: async (command) => { if (command === "get_update_info") return info; checks++; return release; }
+  });
+  const pending = checker.check(true);
+  resolveInfo({ installedVersion: "1.1.0", updateChecks: false });
+  await pending;
+  await checker.ready;
+  await checker.check(true);
+  assert.equal(checks, 0);
+  assert.equal(checker.snapshot().status, "idle");
+  checker.dispose();
+});
+
 test("a failed timestamp write still throttles the session after storage recovers", async () => {
   const app = await setup({ preferences: { automatic: true } });
   const save = app.storage.setItem;

@@ -22,6 +22,10 @@ mod note_print;
 mod recovery;
 #[cfg(test)]
 mod test_support;
+#[cfg(not(feature = "appstore"))]
+mod updates;
+#[cfg(feature = "appstore")]
+#[path = "updates_appstore.rs"]
 mod updates;
 mod workspace;
 pub use mcp::run_mcp_stdio;
@@ -1109,7 +1113,9 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             complete_native_quit,
             confirm_discard_unsaved,
             updates::get_update_info,
+            #[cfg(not(feature = "appstore"))]
             updates::check_for_updates,
+            #[cfg(not(feature = "appstore"))]
             updates::open_update_release,
             load_workspace_preference,
             set_last_workspace,
