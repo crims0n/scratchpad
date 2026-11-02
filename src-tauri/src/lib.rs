@@ -28,6 +28,8 @@ pub use mcp::run_mcp_stdio;
 use workspace::Workspaces;
 
 const PREFERENCES_FILE_NAME: &str = "scratchpad-preferences.json";
+#[cfg(all(feature = "appstore", target_os = "macos"))]
+const WORKSPACE_BOOKMARK_FILE_NAME: &str = "workspace.bookmark";
 
 #[cfg(target_os = "macos")]
 const NATIVE_ABOUT_MENU_ID: &str = "scratchpad-native-about";
@@ -146,6 +148,14 @@ fn load_workspace_preference(
             .set_buttons(rfd::MessageButtons::YesNo)
             .show() == rfd::MessageDialogResult::Yes
     })?;
+    #[cfg(all(feature = "appstore", target_os = "macos"))]
+    let saved = {
+        let bookmark = preferences_path(&app)?.with_file_name(WORKSPACE_BOOKMARK_FILE_NAME);
+        saved.map(|saved| {
+            appstore_files::restore_workspace_bookmark(&bookmark)
+                .map_or(saved, |path| path.to_string_lossy().into_owned())
+        })
+    };
     restore_workspace_access(&workspaces, saved)
 }
 
@@ -191,6 +201,11 @@ fn remember_workspace(
     let db_path = workspaces
         .set_current(db_path)?
         .map(|path| path.to_string_lossy().into_owned());
+    #[cfg(all(feature = "appstore", target_os = "macos"))]
+    appstore_files::save_workspace_bookmark(
+        &preferences.with_file_name(WORKSPACE_BOOKMARK_FILE_NAME),
+        db_path.as_deref().map(Path::new),
+    )?;
     write_preferences(
         preferences,
         &AppPreferences {
