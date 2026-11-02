@@ -27,6 +27,13 @@ fn open_connection(
     } else {
         (flags, None)
     };
+    #[cfg(all(feature = "appstore", target_os = "macos"))]
+    if let Err(error) = crate::appstore_files::allow_sqlite_sidecars(path) {
+        if let Some(file) = created.as_ref() {
+            remove_empty_created_file(path, file);
+        }
+        return Err(error);
+    }
     let result =
         rusqlite::Connection::open_with_flags(path, flags).map_err(|error| error.to_string());
     #[cfg(unix)]
@@ -187,6 +194,48 @@ mod tests {
 
     fn directory() -> crate::test_support::TestDirectory {
         crate::test_support::TestDirectory::new("grants")
+    }
+
+    #[cfg(all(feature = "appstore", target_os = "macos"))]
+    #[test]
+    fn app_store_sidecar_access_keeps_the_workspace_format_and_journal_mode() {
+        let directory = directory();
+        for (name, journal_mode) in [("delete.db", "delete"), ("wal.sqlite", "wal")] {
+            let path = directory.join(name);
+            let plain = rusqlite::Connection::open(&path).unwrap();
+            let mode: String = plain
+                .query_row(&format!("PRAGMA journal_mode={journal_mode}"), [], |row| {
+                    row.get(0)
+                })
+                .unwrap();
+            assert_eq!(mode, journal_mode);
+            plain
+                .execute_batch("CREATE TABLE notes(title TEXT); PRAGMA user_version=7;")
+                .unwrap();
+            drop(plain);
+
+            let workspaces = Workspaces::default();
+            let path = workspaces.authorize(&path, false).unwrap();
+            for title in ["first", "second"] {
+                workspaces
+                    .open(path.to_str().unwrap())
+                    .unwrap()
+                    .execute("INSERT INTO notes VALUES (?1)", [title])
+                    .unwrap();
+            }
+
+            let plain = rusqlite::Connection::open(&path).unwrap();
+            let mode: String = plain
+                .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+                .unwrap();
+            let version: i64 = plain
+                .query_row("PRAGMA user_version", [], |row| row.get(0))
+                .unwrap();
+            let notes: i64 = plain
+                .query_row("SELECT count(*) FROM notes", [], |row| row.get(0))
+                .unwrap();
+            assert_eq!((mode.as_str(), version, notes), (journal_mode, 7, 2));
+        }
     }
 
     #[cfg(unix)]
