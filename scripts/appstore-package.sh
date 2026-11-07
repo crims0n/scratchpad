@@ -95,6 +95,8 @@ echo "Imported \"$app_identity\" and \"$installer_identity\""
 # The provisioning profile must be for this app and team, and unexpired.
 profile="$work/embedded.provisionprofile"
 decode "$profile" "$APPSTORE_PROVISION_PROFILE" APPSTORE_PROVISION_PROFILE
+# Embedded in the app, which every user must be able to read. It is not secret.
+chmod 644 "$profile"
 security cms -D -i "$profile" > "$work/profile.plist" 2> /dev/null \
   || fail "APPSTORE_PROVISION_PROFILE is not a provisioning profile."
 profile_value() { plutil -extract "$1" raw -o - "$work/profile.plist" 2> /dev/null || true; }
@@ -150,6 +152,10 @@ signed() { plutil -extract "$1" raw -o - "$work/signed-entitlements.plist" 2> /d
 [[ "$(signed com\\.apple\\.application-identifier)" == "$application_identifier" ]] \
   || fail "The app is not signed with application identifier $application_identifier."
 cmp -s "$profile" "$app/Contents/embedded.provisionprofile" || fail "The provisioning profile is not embedded."
+# Installed files belong to root, so App Store Connect rejects any that other
+# users cannot read (error 90255).
+unreadable=$(find "$app" ! -perm -o+r -print)
+[[ -z "$unreadable" ]] || fail "These files are not readable by every user: ${unreadable//$'\n'/, }"
 [[ "$(info CFBundleIdentifier)" == "$bundle_id" ]] || fail "CFBundleIdentifier is not $bundle_id."
 [[ "$(info CFBundleShortVersionString)" == "$version" ]] || fail "CFBundleShortVersionString is not $version."
 [[ "$(info CFBundleVersion)" == "$BUILD_NUMBER" ]] || fail "CFBundleVersion is not $BUILD_NUMBER."
