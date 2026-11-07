@@ -28,6 +28,7 @@ The [v1.1.0 release record](releases/1.1.0.md) records publication, verified sig
 - [macOS signing and notarization](macos-release-signing.md).
 - [Windows signing](windows-release-signing.md).
 - [Linux signing, key rotation, and revocation](release-signing.md).
+- [Mac App Store release](appstore-release.md).
 - [ARM64 build feasibility](arm64-build-feasibility.md): isolated unsigned package checks for future Linux and Windows ARM64 release support.
 - [ARM64 signing validation](arm64-signing-validation.md): credential-free Windows prerequisite checks and protected main-only signed development packages.
 
