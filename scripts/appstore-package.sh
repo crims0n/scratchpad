@@ -99,8 +99,13 @@ security cms -D -i "$profile" > "$work/profile.plist" 2> /dev/null \
   || fail "APPSTORE_PROVISION_PROFILE is not a provisioning profile."
 profile_value() { plutil -extract "$1" raw -o - "$work/profile.plist" 2> /dev/null || true; }
 application_identifier="$TEAM_ID.$bundle_id"
-[[ "$(profile_value Entitlements.com\\.apple\\.application-identifier)" == "$application_identifier" ]] \
-  || fail "The provisioning profile is not for $application_identifier."
+profile_platform=$(profile_value Platform.0)
+# "App Store Connect" profiles are for iOS; the Mac one is "Mac App Store Connect".
+[[ "$profile_platform" == OSX ]] \
+  || fail "The provisioning profile is for ${profile_platform:-an unknown platform}, not macOS. Create a Mac App Store Connect profile."
+profile_identifier=$(profile_value Entitlements.com\\.apple\\.application-identifier)
+[[ "$profile_identifier" == "$application_identifier" ]] \
+  || fail "The provisioning profile is for ${profile_identifier:-no application identifier}, not $application_identifier."
 [[ "$(profile_value TeamIdentifier.0)" == "$TEAM_ID" ]] || fail "The provisioning profile is not for team $TEAM_ID."
 expires=$(profile_value ExpirationDate)
 [[ -n "$expires" && "$(date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$expires" +%s)" -gt "$(date -u +%s)" ]] \
