@@ -631,6 +631,44 @@ footer {
   font-size: 0.7rem;
 }
 
+.policy {
+  max-width: 760px;
+  padding: 40px 0 72px;
+}
+
+.policy h1 {
+  margin: 0 0 4px;
+  font-size: clamp(2rem, 5vw, 2.8rem);
+  letter-spacing: -0.03em;
+}
+
+.policy h2 {
+  margin: 36px 0 8px;
+  font-size: 1.15rem;
+}
+
+.policy p,
+.policy li {
+  color: var(--muted);
+}
+
+.policy strong {
+  color: var(--text);
+}
+
+.policy li + li {
+  margin-top: 10px;
+}
+
+.policy a {
+  color: var(--purple-light);
+}
+
+.policy-date {
+  margin-top: 0;
+  font-size: 0.85rem;
+}
+
 .visually-hidden {
   position: absolute !important;
   width: 1px;
